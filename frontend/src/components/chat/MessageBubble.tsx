@@ -204,6 +204,8 @@ interface Props {
     status: 'confirmed' | 'dismissed',
   ) => void
   onRetry?: () => void
+  /** Resend a queued message whose send failed (its `pending` is 'failed'). */
+  onRetryQueued?: (messageId: string) => void
   onOpenAiSettings?: () => void
   onPreviewCheckpoint?: (checkpointId: string) => Promise<PreviewResult>
   onRestoreCheckpoint?: (checkpointId: string, mode?: RestoreMode) => Promise<unknown>
@@ -681,6 +683,21 @@ function PendingChip() {
   )
 }
 
+/** A queued message the server never confirmed — and no finished transcript has named
+ *  since. Says so, with Retry, instead of "Still queued" forever (live report 2026-11-18). */
+function FailedSendChip({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div className="msg-pending-chip msg-pending-chip--failed" role="status" aria-live="polite">
+      <span>Not delivered — Lucius never read this</span>
+      {onRetry && (
+        <button className="msg-retry-btn" onClick={onRetry}>
+          <RotateCcw size={12} aria-hidden="true" /> Retry
+        </button>
+      )}
+    </div>
+  )
+}
+
 const FILE_LABELS: Record<string, string> = {
   'transactions.json': 'transactions',
   'accounts.json': 'accounts',
@@ -946,6 +963,7 @@ export function MessageBubble({
   onResolvePendingToolUse,
   onRespondToChange,
   onRetry,
+  onRetryQueued,
   onOpenAiSettings,
   onPreviewCheckpoint,
   onRestoreCheckpoint,
@@ -1076,10 +1094,13 @@ export function MessageBubble({
           {m.text &&
             (isUser ? (
               <>
-                <div className={`msg-text${m.pending === 'queued' ? ' msg-user-pending' : ''}`}>
+                <div className={`msg-text${m.pending ? ' msg-user-pending' : ''}`}>
                   <MentionText text={stripConfirmHandshake(stripScreenContext(m.text))} />
                 </div>
                 {m.pending === 'queued' && <PendingChip />}
+                {m.pending === 'failed' && (
+                  <FailedSendChip onRetry={onRetryQueued ? () => onRetryQueued(m.id) : undefined} />
+                )}
               </>
             ) : (
               <div className="msg-text">

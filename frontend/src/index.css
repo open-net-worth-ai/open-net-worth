@@ -10586,6 +10586,11 @@ body.hide-amounts .mask * {
     padding: 2px var(--space-2);
     cursor: pointer;
   }
+  /* Drawn inside the button: in a widget header the ring's outer half was cut off by the
+     header's edge, leaving a stray blue arc. */
+  .kebab-trigger:focus-visible {
+    outline-offset: -2px;
+  }
   .kebab-trigger[aria-expanded='true'] {
     border-color: var(--line);
     color: var(--text);
@@ -20694,7 +20699,8 @@ body.hide-amounts .mask * {
 .mf-svg--dim .mf-node.is-hot {
   opacity: 1;
 }
-.mf-node.is-link {
+.mf-node.is-link,
+.mf-lnk.is-link {
   cursor: pointer;
 }
 .mf-node.is-link:hover .mf-lbl-name {
@@ -21463,13 +21469,6 @@ body.hide-amounts .mf-lbl-amt {
     display: flex;
     justify-content: space-between;
   }
-}
-.paper-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-5);
-  margin-bottom: var(--space-6);
 }
 .paper-preview {
   background: var(--bg-2);

@@ -843,7 +843,8 @@ def get_transaction_tags() -> dict:
 
 @router.get("/api/transactions/recently-added")
 def get_recently_added_transactions(
-    limit: int = Query(8, ge=1, le=500),
+    # 0 = every row (a dashboard widget's All); otherwise at most 500 a page.
+    limit: int = Query(8, ge=0, le=500),
     offset: int = Query(0, ge=0),
     needs_review: Optional[bool] = None,
     automation_only: bool = False,
@@ -859,7 +860,7 @@ def get_recently_added_transactions(
     Needs review filter agree."""
     _opening_ids = svc.opening_txn_ids()
     page, total = svc.transactions.recent_page_by_created_at(
-        limit=limit,
+        limit=limit or None,
         offset=offset,
         needs_review=needs_review,
         automation_only=automation_only,

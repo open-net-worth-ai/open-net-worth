@@ -189,9 +189,9 @@ function useReports(instance: WidgetInstance, def: WidgetDefinition, merchantLim
     error: query.error && query.data == null ? "Couldn't load the monthly report." : '',
     meta,
     span,
-    periodLabel: sc.periodLabel,
+    periodLabel: sc.periodText,
     // The chosen period's own name while its months are still loading (never the default's).
-    chosen: sc.scope.period ? sc.periodLabel : '',
+    chosen: sc.scope.period ? sc.periodText : '',
     tags: sc.tags,
     categories: sc.categories,
   }
@@ -810,7 +810,8 @@ const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def, onPatch
   }
   const rate = Math.round(savings.rate_pct)
   // A chosen period stands on its own; the trailing average belongs to the default view.
-  const trailing = period ? null : data?.savings.trailing
+  // The 3-month average is the same whatever the period: it is the saving habit, not this window.
+  const trailing = data?.savings?.trailing
   // One line under the gauge; the 3-month average is on the gauge's hover.
   const avgTip = trailing
     ? `${trailing.months}-month average (${fMonth(`${trailing.from}-01`, 'short')} to ` +
@@ -829,8 +830,18 @@ const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def, onPatch
           <div className="ov-savings-pct money">{rate}%</div>
         </div>
         <Text as="p" size="xs" tone="faint" className="ov-savings-sub">
-          <span className="money">{fBaseCompact(savings.saved)}</span> of{' '}
-          <span className="money">{fBaseCompact(savings.income)}</span> saved
+          {savings.spent > savings.income ? (
+            // Spent more than came in: say by how much, not "S$0 saved".
+            <>
+              <span className="money">{fBaseCompact(savings.spent - savings.income)}</span> more
+              spent than <span className="money">{fBaseCompact(savings.income)}</span> income
+            </>
+          ) : (
+            <>
+              <span className="money">{fBaseCompact(savings.saved)}</span> of{' '}
+              <span className="money">{fBaseCompact(savings.income)}</span> saved
+            </>
+          )}
         </Text>
       </div>
     </WidgetShell>
@@ -849,16 +860,17 @@ const TopMerchants: ComponentType<WidgetContentProps> = ({
   onNavigate,
   onOpenRegister,
 }) => {
-  const cap = rowCap(instance, def) ?? 25
+  // All rows: merchant_limit=0 asks the server for every payee.
+  const cap = rowCap(instance, def)
   // Grouped by payee and ranked server-side (no endpoint does per-month payee spend — see the
   // header note), so the browser no longer pulls the month's raw expense legs to fold them.
   const { data, loading, error, meta, span, chosen, tags, categories } = useReports(
     instance,
     def,
-    cap,
+    cap ?? 0,
   )
   const shown = spendingMonth(data)
-  const rows = shown.merchants.slice(0, cap)
+  const rows = cap == null ? shown.merchants : shown.merchants.slice(0, cap)
   const month = shown.ym
   const filter = filterPill(
     instance,

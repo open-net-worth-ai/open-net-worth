@@ -10,12 +10,17 @@ re-folding them from its own fetch.
 
 from __future__ import annotations
 
+import logging
+
 from backend.core.fx import base_currency
 from backend.core.user_time import user_today
 from backend.services import ledger as ledger_service
 from backend.services import planning as planning_service
+from backend.services import profile as profile_service
 from backend.services import report_window
 from backend.services.fx_cache import load_fx_cache
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_MONTHS = 6
 # The trailing saving: the average over this many complete months (needing at least the minimum
@@ -386,7 +391,8 @@ def _merchants(
         for key, meta in totals.items()
     ]
     rows.sort(key=lambda r: r["amount"], reverse=True)
-    return rows[:limit]
+    # 0 = every payee (a widget's All).
+    return rows[:limit] if limit > 0 else rows
 
 
 def _side_totals(points: list[dict], key: str) -> dict:
@@ -517,5 +523,26 @@ def _period_block(period: str, points: list[dict], merchant_limit: int, tags, ca
         "to": yms[-1],
         **summary,
         "merchants": _merchants(yms, merchant_limit, tags, categories),
-        "savings": _savings(summary),
+        "savings": _period_savings(points, summary)
+        if not tags and not categories
+        else _savings(summary),
     }
+
+
+def _period_savings(points: list[dict], summary: dict) -> dict:
+    """A period's savings rate. When it ends with the month in progress, that month's income is
+    the monthly income in the profile (as the budget plans with) until more has come in: the
+    salary often lands late in the month, and without it a period counted the month's spending
+    but none of its income — 12 months of spending against 11 of salary."""
+    if not points or points[-1]["ym"] != user_today().strftime("%Y-%m"):
+        return _savings(summary)
+    try:
+        expected = float(profile_service.read_profile().get("monthly_net_income") or 0.0)
+    except Exception:
+        logger.warning("profile income unavailable for the savings rate", exc_info=True)
+        expected = 0.0
+    missing = expected - points[-1]["income_total"]
+    if missing <= 0:
+        return _savings(summary)
+    income = summary["income_total"] + missing
+    return {**_savings({**summary, "income_total": income}), "expected_income": True}

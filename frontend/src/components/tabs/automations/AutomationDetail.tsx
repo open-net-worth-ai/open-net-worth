@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import type { Automation, AutomationRun } from '../../../api/automations'
 import { Button, Modal, PageTabs, Switch, type PermissionMode } from '../../ui'
-import { fDateTime } from '../../../utils/format'
+import { fScheduleWhen } from '../../../utils/format'
 import { AutomationCostPanel } from './AutomationCostPanel'
 import { AutomationHistory } from './AutomationHistory'
 import { AutomationMenu } from './AutomationMenu'
@@ -119,7 +119,7 @@ export function AutomationDetail({
                 : paused
                   ? 'Resume it to put it back on watch.'
                   : automation.next_run_at
-                    ? `Next run: ${fDateTime(automation.next_run_at)}`
+                    ? `Next run: ${fScheduleWhen(automation.next_run_at)}`
                     : automation.trigger.kind === 'event'
                       ? 'Runs whenever this happens'
                       : 'Runs only when you start it.'}
@@ -395,7 +395,7 @@ function emptyHistoryMessage(automation: Automation) {
   if (automation.trigger.kind === 'event')
     return 'Hasn’t fired yet — it runs when the trigger happens, or hit Run now.'
   if (automation.trigger.kind === 'schedule')
-    return `Hasn’t run yet. It first runs ${automation.next_run_at ? fDateTime(automation.next_run_at) : automationTriggerLabel(automation.trigger)} — or hit Run now.`
+    return `Hasn’t run yet. It first runs ${automation.next_run_at ? fScheduleWhen(automation.next_run_at).replace(/^(Today|Tomorrow)/, (w) => w.toLowerCase()) : automationTriggerLabel(automation.trigger)} — or hit Run now.`
   return 'Hasn’t run yet. Hit Run now to start it.'
 }
 function permissionMarkStyle(source: string): React.CSSProperties {

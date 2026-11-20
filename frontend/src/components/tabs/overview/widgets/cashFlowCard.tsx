@@ -84,7 +84,7 @@ export const CashFlowCard: ComponentType<WidgetContentProps> = ({
       instance={instance}
       def={def}
       onPatch={onPatch}
-      label={g || !sc.scope.period ? span : sc.periodLabel}
+      label={g || !sc.scope.period ? span : sc.periodText}
     />
   ) : undefined
   const link =

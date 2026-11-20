@@ -51,6 +51,8 @@ export interface WidgetSettingSchema {
   /** Set on the widget itself (a Reports widget's header filter), so the settings panel leaves
    *  it out. */
   inline?: boolean
+  /** A Reports period: send the default option to the server too (Savings rate's This month). */
+  sendDefault?: boolean
   options?: string[]
   default: unknown
   /** `categoryIds` only: the category label to use when none of the stored ids exist in

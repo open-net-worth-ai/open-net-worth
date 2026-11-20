@@ -15,15 +15,10 @@ import { Button } from '../../ui/Button'
 import { FormField } from '../../ui/FormField'
 import { TextField } from '../../ui/TextField'
 
-export type CatKind = 'income' | 'expense' | 'transfer' | 'investment'
+import { KIND_LABEL, KIND_ORDER, type CatKind } from './categoryKinds'
 
-const KIND_ORDER: CatKind[] = ['expense', 'income', 'transfer', 'investment']
-const KIND_LABEL: Record<CatKind, string> = {
-  expense: 'Expense',
-  income: 'Income',
-  transfer: 'Transfer',
-  investment: 'Investment',
-}
+export type { CatKind }
+
 const KIND_PLACEHOLDER: Record<CatKind, string> = {
   expense: 'e.g. Pet care',
   income: 'e.g. Bonus',

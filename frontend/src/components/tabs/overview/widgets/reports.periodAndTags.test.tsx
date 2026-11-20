@@ -325,7 +325,8 @@ describe('the header filter', () => {
     expect(onPatch).toHaveBeenLastCalledWith({
       config: { period: '3 months', categories: ['cat_dining', 'cat_hotels'] },
     })
-    fireEvent.click(within(pop).getByRole('button', { name: '6 months' }))
+    fireEvent.focus(within(pop).getByPlaceholderText('Period'))
+    fireEvent.mouseDown(within(pop).getByRole('button', { name: '6 months' }))
     expect(onPatch).toHaveBeenLastCalledWith({
       config: { period: '6 months', categories: ['cat_dining'] },
     })
@@ -375,7 +376,8 @@ describe('the header filter', () => {
     )
     fireEvent.click(await screen.findByRole('button', { name: /^Filter:/ }))
     const pop = await screen.findByRole('dialog', { name: 'Filter this widget' })
-    expect(within(pop).getByText('Period')).toBeTruthy()
+    // A period alone is a plain menu of periods, not a box holding one dropdown.
+    expect(within(pop).getByRole('menuitemradio', { name: '3 months' })).toBeTruthy()
     expect(within(pop).queryByText('Categories')).toBeNull()
     expect(within(pop).queryByText('Tags')).toBeNull()
   })
@@ -396,5 +398,21 @@ describe('the header filter', () => {
     expect(onOpenRegister).toHaveBeenCalledWith(
       expect.objectContaining({ payee: 'QA Inn', category: ['cat_hotels'] }),
     )
+  })
+
+  it('shows every merchant on All, not none', async () => {
+    authFetch.mockImplementation(() => jsonOk(ROLLUP))
+    const Comp = reportsWidgetComponents['rep-merchants']!
+    render(
+      <Comp
+        instance={{ ...instanceOf('rep-merchants', { period: '3 months' }), limit: 0 }}
+        def={defOf('rep-merchants')}
+        onPatch={vi.fn()}
+      />,
+    )
+    // All is "no row cap": slice(0, null) read it as zero rows.
+    expect(await screen.findByText('QA Inn')).toBeTruthy()
+    const key = authFetch.mock.calls.map((c) => String(c[0])).find((u) => u.includes('rollup'))
+    expect(key).toContain('merchant_limit=0')
   })
 })

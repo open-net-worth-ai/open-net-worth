@@ -28,6 +28,9 @@ import type { WidgetDefinition } from './types'
 import { Spark } from '../../../lucius/identity'
 import { ArrowLeft } from '../../../ui/icons'
 
+/** The Add widget picker's "Build with Lucius" card. */
+const BUILD_WITH_LUCIUS = false
+
 export interface AddWidgetPickerProps {
   open: boolean
   onClose: () => void
@@ -177,7 +180,9 @@ export function AddWidgetPicker({
             </div>
 
             <div className="ov-picker-grid">
-              {onAskLucius && (
+              {/* Hidden for now: nothing pins what Lucius makes into the widget, and the widget
+                  is a snapshot, not live. Back when both are true (owner, 2026-11-20). */}
+              {BUILD_WITH_LUCIUS && onAskLucius && (
                 <button
                   type="button"
                   className="ov-picker-lucius-card"

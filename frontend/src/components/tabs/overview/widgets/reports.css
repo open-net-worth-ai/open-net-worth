@@ -398,7 +398,7 @@
   display: flex;
   justify-content: space-between;
   margin: 0;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -424,7 +424,7 @@
   gap: 8px;
   padding: 5px 4px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--ink);
   cursor: pointer;
 }
@@ -482,4 +482,108 @@
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* The same filter controls in the widget's settings panel (its Filters tab), each section a
+   row like the panel's own controls: same padding and label size, no dividers. */
+.ov-fs-filters {
+  display: flex;
+  flex-direction: column;
+}
+
+/* In the editor's right-hand column the filters take the column's height: Period keeps its
+   own, Categories and Tags share the rest and scroll inside their lists, so the column itself
+   doesn't scroll (and draw a second scrollbar) unless the window is very short. */
+.ov-fs-shell--split .ov-fs-filters {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ov-fs-shell--split .ov-fs-filters .ov-rf-sec:has(.ov-rf-list) {
+  flex: 1 1 0;
+  min-height: 150px;
+}
+
+.ov-fs-shell--split .ov-fs-filters .ov-rf-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.ov-fs-filters .ov-rf-sec {
+  padding: 12px 2px;
+}
+
+.ov-fs-filters .ov-rf-reset {
+  align-self: flex-start;
+  margin: 4px 2px 0;
+}
+
+/* Appearance | Filters, at the top of the settings panel. */
+.ov-fs-railtabs {
+  padding: 14px 0 4px;
+}
+
+.ov-fs-railtabs .ui-segmented {
+  width: 100%;
+}
+
+.ov-fs-railtabs .ui-segmented__seg {
+  flex: 1;
+}
+
+/* A custom period: the Accounts register's From / To rows, stacked. */
+.ov-rf-range {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* One type size for every field and row in the filters (the app's --text-base), so Period,
+   the search boxes, From / To and the lists read as one form. */
+.ov-rf-sec .ov-fs-input,
+.ov-rf-sec .acct-addin {
+  height: 32px;
+  font-size: var(--text-base);
+}
+
+.ov-rf-sec .acct-filtercombo {
+  width: 100%;
+}
+
+.ov-rf-range .acct-filtercombo {
+  flex: 1;
+  width: auto;
+}
+
+/* A period-only widget's header menu: a menu's own padding, Custom's rows inset like its items. */
+.ov-rf-pop--menu {
+  gap: 4px;
+  padding: 4px;
+}
+
+/* Rows fill the menu, as the chart-type menu's do: the whole row picks, not just its text. */
+.ov-rf-pop--menu [role='menu'] {
+  display: flex;
+  flex-direction: column;
+}
+
+.ov-rf-pop--menu .kebab-item {
+  width: 100%;
+}
+
+.ov-rf-pop--menu .ov-rf-range {
+  padding: 6px 8px 8px;
+}
+
+/* A kind's heading in the category list (Spending, Income, …). */
+.ov-rf-group {
+  padding: 8px 4px 2px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--faint);
+}
+
+.ov-rf-group:first-child {
+  padding-top: 2px;
 }

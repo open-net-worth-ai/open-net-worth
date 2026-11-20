@@ -24,12 +24,14 @@ vi.mock('../api/client', () => ({
 const mockLoadMessages = vi.fn()
 const mockReconcile = vi.fn()
 vi.mock('../utils/chatStore', () => ({
+  fetchServerSnapshot: vi.fn().mockResolvedValue(null),
   loadMessages: (...args: unknown[]) => mockLoadMessages(...args),
   reconcileWithRemote: (...args: unknown[]) => mockReconcile(...args),
   saveMessages: vi.fn(),
   withRestoreMarks: (target: unknown) => target,
   completeUnfinishedTail: () => null,
 }))
+vi.mock('../utils/chatServerSync', () => import('./__testing__/transcriptReadDouble'))
 
 import { useChat } from './useChat'
 import { authFetch } from '../api/client'

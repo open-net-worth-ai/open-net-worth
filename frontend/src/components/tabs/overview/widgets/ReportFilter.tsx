@@ -1,22 +1,27 @@
 // The filter on a Reports widget's own header: a pill naming what the widget covers ("3 months
 // · Dining · #travel") that opens a popover with Period, Categories and Tags. A choice applies
-// as it is made and is saved with the widget — the settings panel keeps only how the widget
-// looks. The popover portals to <body> (like ChartToggleMenu): the trigger sits inside a
+// as it is made and is saved with the widget; the settings panel shows the same controls
+// (ReportFilterControls). The popover portals to <body> (like ChartToggleMenu): the trigger sits inside a
 // clipped, scrolling card. On a phone the same controls open in a bottom sheet instead.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown } from '../../../../ui/icons'
+import { Check, ChevronDown } from '../../../../ui/icons'
 import { BottomSheet } from '../../../ui/BottomSheet'
+import { Checkbox } from '../../../ui'
+import { fMonth } from '../../../../utils/format'
 import { useIsMobile } from '../../../../hooks/useIsMobile'
 import { useCategories } from '../../../../hooks/serverState'
 import { useTransactionTags } from '../../accounts/tagOptions'
+import { FilterCombo } from '../../accounts/pickers'
+import { KIND_LABEL, KIND_ORDER, type CatKind } from '../../accounts/categoryKinds'
 import type { WidgetDefinition, WidgetInstance } from '../types'
-import { reportScope } from './reportScope'
+import { CUSTOM_PERIOD, reportHasFilters, reportScope } from './reportScope'
 
-/** How many tags show before "N more" — the most used come first. */
-const TAG_CHIPS_SHOWN = 12
 const POPOVER_W = 320
+/** A period-only widget's menu: a menu's width — wider only while Custom shows From / To. */
+const MENU_W = 176
+const MENU_CUSTOM_W = 248
 
 interface Props {
   instance: WidgetInstance
@@ -28,6 +33,11 @@ interface Props {
 
 export function ReportFilter({ instance, def, onPatch, label }: Props) {
   const sc = reportScope(instance, def)
+  const popWidth = reportHasFilters(def)
+    ? POPOVER_W
+    : sc.periodLabel === CUSTOM_PERIOD
+      ? MENU_CUSTOM_W
+      : MENU_W
   // A phone gets a bottom sheet with thumb-sized rows; a pointer gets the anchored popover.
   const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
@@ -43,15 +53,18 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
   useLayoutEffect(() => {
     if (!open || isMobile || !wrapRef.current) return
     const r = wrapRef.current.getBoundingClientRect()
-    const left = Math.min(Math.max(8, r.right - POPOVER_W), window.innerWidth - POPOVER_W - 8)
+    const w = popWidth
+    const left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8)
     setPos({ top: r.bottom + 6, left: Math.max(8, left), maxH: window.innerHeight - r.bottom - 20 })
-  }, [open, isMobile])
+  }, [open, isMobile, popWidth])
 
   useEffect(() => {
     if (!open || isMobile) return
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node
       if (wrapRef.current?.contains(t) || popRef.current?.contains(t)) return
+      // The Period menu portals to <body> too: choosing from it isn't a click outside.
+      if (t instanceof Element && t.closest('.kebab-menu--portal')) return
       setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
@@ -65,10 +78,6 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
     }
   }, [open, isMobile])
 
-  // A widget offers only the filters its definition declares (Savings rate: a period alone).
-  const has = (key: string) => !!def.settings?.some((s) => s.key === key)
-  const patch = (next: Record<string, unknown>) =>
-    onPatch({ config: { ...instance.config, ...next } })
   const catText =
     sc.categories.length === 0
       ? ''
@@ -79,28 +88,12 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
     sc.tags.length === 0 ? '' : sc.tags.length === 1 ? `#${sc.tags[0]}` : `${sc.tags.length} tags`
   const filtered = sc.categories.length > 0 || sc.tags.length > 0
   const summary = [label, catText, tagText].filter(Boolean).join(' · ')
-
-  const body = (
-    <>
-      <PeriodSection def={def} value={sc.periodLabel} onPick={(p) => patch({ period: p })} />
-      {has('categories') && (
-        <CategorySection
-          value={sc.categories}
-          options={Array.isArray(cats) ? cats : []}
-          onChange={(next) => patch({ categories: next })}
-        />
-      )}
-      {has('tags') && <TagSection value={sc.tags} onChange={(next) => patch({ tags: next })} />}
-      {filtered && (
-        <button
-          type="button"
-          className="ov-rf-reset"
-          onClick={() => patch({ categories: [], tags: [] })}
-        >
-          Clear categories and tags
-        </button>
-      )}
-    </>
+  // A widget with a period alone opens a plain menu of periods; one that also filters by
+  // category or tag opens the filter box.
+  const body = reportHasFilters(def) ? (
+    <ReportFilterControls instance={instance} def={def} onPatch={onPatch} />
+  ) : (
+    <ReportPeriodControl instance={instance} def={def} onPatch={onPatch} list />
   )
 
   return (
@@ -137,13 +130,22 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
         !isMobile &&
         createPortal(
           <div
-            className="kebab-menu kebab-menu--portal ov-rf-pop"
+            className={
+              'kebab-menu kebab-menu--portal ov-rf-pop' +
+              (reportHasFilters(def) ? '' : ' ov-rf-pop--menu')
+            }
             role="dialog"
             aria-label="Filter this widget"
             ref={popRef}
             style={
               pos
-                ? { top: pos.top, left: pos.left, width: POPOVER_W, maxHeight: pos.maxH }
+                ? {
+                    top: pos.top,
+                    left: pos.left,
+                    width: popWidth,
+                    maxHeight: pos.maxH,
+                    pointerEvents: 'auto',
+                  }
                 : { visibility: 'hidden' }
             }
             onClick={(e) => e.stopPropagation()}
@@ -156,32 +158,313 @@ export function ReportFilter({ instance, def, onPatch, label }: Props) {
   )
 }
 
+/** The Period control on its own — a Savings rate's whole filter. `list` draws it as a
+ *  menu's rows (its header button); otherwise it is the field the editor shows. */
+export function ReportPeriodControl({
+  instance,
+  def,
+  onPatch,
+  list = false,
+}: {
+  instance: WidgetInstance
+  def: WidgetDefinition
+  onPatch: (patch: Partial<WidgetInstance>) => void
+  list?: boolean
+}) {
+  const sc = reportScope(instance, def)
+  return (
+    <PeriodSection
+      def={def}
+      value={sc.periodLabel}
+      custom={sc.custom}
+      config={instance.config ?? {}}
+      onPatch={(next) => onPatch({ config: { ...instance.config, ...next } })}
+      list={list}
+    />
+  )
+}
+
+/** Period, Categories and Tags — the same controls in the header popover and in the widget's
+ *  settings panel, so a filter can be set from either place. */
+export function ReportFilterControls({
+  instance,
+  def,
+  onPatch,
+}: {
+  instance: WidgetInstance
+  def: WidgetDefinition
+  onPatch: (patch: Partial<WidgetInstance>) => void
+}) {
+  const sc = reportScope(instance, def)
+  const { data: cats } = useCategories()
+  // A widget offers only the filters its definition declares (Savings rate: a period alone).
+  const has = (key: string) => !!def.settings?.some((s) => s.key === key)
+  const patch = (next: Record<string, unknown>) =>
+    onPatch({ config: { ...instance.config, ...next } })
+  const filtered = sc.categories.length > 0 || sc.tags.length > 0
+  return (
+    <>
+      <PeriodSection
+        def={def}
+        value={sc.periodLabel}
+        custom={sc.custom}
+        config={instance.config ?? {}}
+        onPatch={patch}
+      />
+      {has('categories') && (
+        <CategorySection
+          value={sc.categories}
+          options={Array.isArray(cats) ? cats : []}
+          onChange={(next) => patch({ categories: next })}
+        />
+      )}
+      {has('tags') && <TagSection value={sc.tags} onChange={(next) => patch({ tags: next })} />}
+      {filtered && (
+        <button
+          type="button"
+          className="ov-rf-reset"
+          onClick={() => patch({ categories: [], tags: [] })}
+        >
+          Clear categories and tags
+        </button>
+      )}
+    </>
+  )
+}
+
+/** YYYY-MM for the month `back` months before this one. */
+function monthsAgo(back: number): string {
+  const d = new Date()
+  const i = d.getFullYear() * 12 + d.getMonth() - back
+  return `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`
+}
+
 function PeriodSection({
   def,
   value,
-  onPick,
+  custom,
+  config,
+  onPatch,
+  list = false,
 }: {
   def: WidgetDefinition
   value: string
-  onPick: (label: string) => void
+  custom: { from: string; to: string } | null
+  config: Record<string, unknown>
+  onPatch: (next: Record<string, unknown>) => void
+  /** The options as a menu's rows (the header button of a widget with a period alone). */
+  list?: boolean
 }) {
   const options = def.settings?.find((s) => s.key === 'period')?.options ?? []
+  const from = typeof config.periodFrom === 'string' ? config.periodFrom : ''
+  const to = typeof config.periodTo === 'string' ? config.periodTo : ''
+  const pick = (o: string) =>
+    o === CUSTOM_PERIOD && !custom
+      ? // First time on Custom: the last three full months, to change from there.
+        onPatch({ period: o, periodFrom: from || monthsAgo(3), periodTo: to || monthsAgo(1) })
+      : onPatch({ period: o })
+  const range =
+    value === CUSTOM_PERIOD ? (
+      <CustomRange
+        from={from}
+        to={to}
+        onChange={(f, t) => onPatch({ periodFrom: f, periodTo: t })}
+      />
+    ) : null
+  if (list) {
+    return (
+      <>
+        <div role="menu" aria-label="Period">
+          {options.map((o) => (
+            <button
+              key={o}
+              type="button"
+              role="menuitemradio"
+              aria-checked={value === o}
+              className={
+                'kebab-item ov-charttoggle__item' +
+                (value === o ? ' ov-charttoggle__item--active' : '')
+              }
+              onClick={() => pick(o)}
+            >
+              <span>{o}</span>
+              {value === o && <Check size={13} strokeWidth={2.4} aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+        {range}
+      </>
+    )
+  }
   return (
     <section className="ov-rf-sec">
       <h4 className="ov-rf-h">Period</h4>
-      <div className="ov-fs-seg" role="group" aria-label="Period">
-        {options.map((o) => (
-          <button
-            key={o}
-            type="button"
-            className={'ov-fs-chip' + (value === o ? ' on' : '')}
-            aria-pressed={value === o}
-            onClick={() => onPick(o)}
-          >
-            {o}
-          </button>
+      <FilterCombo
+        value={value}
+        options={options.map((o) => ({ value: o, label: o }))}
+        anyLabel="Period"
+        clearable={false}
+        onChange={pick}
+      />
+      {range}
+    </section>
+  )
+}
+
+const MONTH_OPTS = Array.from({ length: 12 }, (_, i) => ({
+  value: String(i + 1).padStart(2, '0'),
+  label: fMonth(`2000-${String(i + 1).padStart(2, '0')}`, 'short', 'never'),
+}))
+
+/** A custom period's From and To, drawn as the Accounts register's own date range: a Month and
+ *  a Year picker per row (FilterCombo; a native select on a phone, as there). */
+function CustomRange({
+  from,
+  to,
+  onChange,
+}: {
+  from: string
+  to: string
+  onChange: (from: string, to: string) => void
+}) {
+  const isMobile = useIsMobile()
+  const thisYear = new Date().getFullYear()
+  const years = new Set(Array.from({ length: 11 }, (_, i) => thisYear - i))
+  for (const m of [from, to]) if (m) years.add(Number(m.slice(0, 4)))
+  const yearOpts = [...years]
+    .sort((x, y) => y - x)
+    .map((y) => ({ value: String(y), label: String(y) }))
+  // Moving one end past the other moves the other with it, so the range never runs backwards.
+  const set = (end: 'from' | 'to', part: 'm' | 'y', v: string) => {
+    const cur = end === 'from' ? from : to
+    const next = part === 'y' ? `${v}-${cur.slice(5, 7)}` : `${cur.slice(0, 4)}-${v}`
+    if (end === 'from') onChange(next, next > to ? next : to)
+    else onChange(next < from ? next : from, next)
+  }
+  const pickerFor = (end: 'from' | 'to', part: 'm' | 'y') => {
+    const cur = end === 'from' ? from : to
+    const value = part === 'm' ? cur.slice(5, 7) : cur.slice(0, 4)
+    const opts = part === 'm' ? MONTH_OPTS : yearOpts
+    const label = `${end === 'from' ? 'From' : 'To'} ${part === 'm' ? 'month' : 'year'}`
+    return isMobile ? (
+      <select
+        className="acct-advselect"
+        aria-label={label}
+        value={value}
+        onChange={(e) => set(end, part, e.target.value)}
+      >
+        {opts.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
         ))}
+      </select>
+    ) : (
+      <FilterCombo
+        value={value}
+        options={opts}
+        anyLabel={label}
+        clearable={false}
+        popW={part === 'm' ? 148 : 120}
+        onChange={(v) => set(end, part, v)}
+      />
+    )
+  }
+  return (
+    <div className="ov-rf-range">
+      <div className="acct-advrow">
+        <span className="acct-advlbl">From</span>
+        {pickerFor('from', 'm')}
+        {pickerFor('from', 'y')}
       </div>
+      <div className="acct-advrow">
+        <span className="acct-advlbl">To</span>
+        {pickerFor('to', 'm')}
+        {pickerFor('to', 'y')}
+      </div>
+    </div>
+  )
+}
+
+/** A searchable list of checkboxes — Categories and Tags alike. */
+function CheckSection({
+  title,
+  noun,
+  value,
+  options,
+  onChange,
+  empty,
+  hint,
+}: {
+  title: string
+  noun: string
+  value: string[]
+  /** `group` heads a run of rows (a category's kind); options arrive ordered by it. */
+  options: { id: string; label: string; group?: string }[]
+  onChange: (next: string[]) => void
+  empty?: string
+  hint?: string
+}) {
+  const [q, setQ] = useState('')
+  const chosen = new Set(value)
+  const needle = q.trim().toLowerCase()
+  // The ones chosen when the filter opened come first, so they never hide below the fold —
+  // fixed for as long as it stays open, so a row never jumps under a finger mid-tap.
+  const [pinned] = useState(() => new Set(value))
+  const matches = (c: { label: string }) => !needle || c.label.toLowerCase().includes(needle)
+  const shown = [
+    ...options.filter((c) => pinned.has(c.id)),
+    ...options.filter((c) => !pinned.has(c.id) && matches(c)),
+  ]
+  const toggle = (id: string) =>
+    onChange(chosen.has(id) ? value.filter((v) => v !== id) : [...value, id])
+  return (
+    <section className="ov-rf-sec">
+      <h4 className="ov-rf-h">
+        {title}
+        <span className="ov-rf-h-note">{value.length ? `${value.length} chosen` : 'All'}</span>
+      </h4>
+      {options.length === 0 && empty ? (
+        <span className="ov-fs-ctl-hint">{empty}</span>
+      ) : (
+        <>
+          <input
+            className="ov-fs-input"
+            placeholder={`Search ${noun}`}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            aria-label={`Search ${noun}`}
+          />
+          <div className="ov-rf-list" role="group" aria-label={title}>
+            {shown.length === 0 ? (
+              <span className="ov-fs-ctl-hint">
+                No {noun.replace(/s$/, '').replace(/ie$/, 'y')} matches.
+              </span>
+            ) : (
+              shown.map((c, i) => {
+                // A heading where the kind changes, after the rows ticked when it opened.
+                const prev = shown[i - 1]
+                const head =
+                  c.group &&
+                  !pinned.has(c.id) &&
+                  (!prev || pinned.has(prev.id) || prev.group !== c.group)
+                return (
+                  <Fragment key={c.id}>
+                    {head && <span className="ov-rf-group">{c.group}</span>}
+                    <Checkbox
+                      className="ov-rf-check"
+                      label={c.label}
+                      checked={chosen.has(c.id)}
+                      onChange={() => toggle(c.id)}
+                    />
+                  </Fragment>
+                )
+              })
+            )}
+          </div>
+        </>
+      )}
+      {hint && <span className="ov-fs-ctl-hint">{hint}</span>}
     </section>
   )
 }
@@ -192,107 +475,53 @@ function CategorySection({
   onChange,
 }: {
   value: string[]
-  options: { id: string; label?: string }[]
+  options: { id: string; label?: string; kind?: string }[]
   onChange: (next: string[]) => void
 }) {
-  const [q, setQ] = useState('')
-  const chosen = new Set(value)
-  const needle = q.trim().toLowerCase()
   const list = options
     .filter((c) => c.id !== 'split')
-    .map((c) => ({ id: c.id, label: c.label || c.id }))
-    .sort((a, b) => a.label.localeCompare(b.label))
-  // The categories chosen when the filter opened come first, so they never hide below the
-  // fold — fixed for as long as it stays open, so a row never jumps under a finger mid-tap.
-  const [pinned] = useState(() => new Set(value))
-  const matches = (c: { label: string }) => !needle || c.label.toLowerCase().includes(needle)
-  const shown = [
-    ...list.filter((c) => pinned.has(c.id)),
-    ...list.filter((c) => !pinned.has(c.id) && matches(c)),
-  ]
-  const toggle = (id: string) =>
-    onChange(chosen.has(id) ? value.filter((v) => v !== id) : [...value, id])
+    .map((c) => {
+      // An unknown or retired kind (an old adjustment category) counts as an expense, as the
+      // server's own `kind_for` does.
+      const kind = (KIND_ORDER as string[]).includes(c.kind ?? '') ? (c.kind as CatKind) : 'expense'
+      return { id: c.id, label: c.label || c.id, kind, group: KIND_LABEL[kind] }
+    })
+    .sort(
+      (a, b) =>
+        KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.label.localeCompare(b.label),
+    )
   return (
-    <section className="ov-rf-sec">
-      <h4 className="ov-rf-h">
-        Categories
-        <span className="ov-rf-h-note">{value.length ? `${value.length} chosen` : 'All'}</span>
-      </h4>
-      <input
-        className="ov-fs-input"
-        placeholder="Search categories"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        aria-label="Search categories"
-      />
-      <div className="ov-rf-list" role="group" aria-label="Categories">
-        {shown.length === 0 ? (
-          <span className="ov-fs-ctl-hint">No category matches.</span>
-        ) : (
-          shown.map((c) => (
-            <label key={c.id} className="ov-rf-check">
-              <input type="checkbox" checked={chosen.has(c.id)} onChange={() => toggle(c.id)} />
-              <span>{c.label}</span>
-            </label>
-          ))
-        )}
-      </div>
-    </section>
+    <CheckSection
+      title="Categories"
+      noun="categories"
+      value={value}
+      options={list}
+      onChange={onChange}
+    />
   )
 }
 
 function TagSection({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
   const tags = useTransactionTags()
-  const [showAll, setShowAll] = useState(false)
   const known = new Set(tags)
   // A chosen tag no transaction carries any more stays listed, so it can still be removed.
-  const all = [...value.filter((t) => !known.has(t)), ...tags]
-  const chosen = new Set(value)
-  const shown = showAll
-    ? all
-    : [...all.slice(0, TAG_CHIPS_SHOWN), ...all.slice(TAG_CHIPS_SHOWN).filter((t) => chosen.has(t))]
-  const hidden = all.length - shown.length
-  const toggle = (tag: string) =>
-    onChange(chosen.has(tag) ? value.filter((t) => t !== tag) : [...value, tag])
+  const all = [...value.filter((t) => !known.has(t)), ...tags].map((t) => ({
+    id: t,
+    label: `#${t}`,
+  }))
   return (
-    <section className="ov-rf-sec">
-      <h4 className="ov-rf-h">
-        Tags
-        <span className="ov-rf-h-note">{value.length ? `${value.length} chosen` : 'All'}</span>
-      </h4>
-      {all.length === 0 ? (
-        <span className="ov-fs-ctl-hint">
-          No tags yet. Add one to a transaction in Accounts to filter by it here.
-        </span>
-      ) : (
-        <div className="ov-fs-seg" role="group" aria-label="Tags">
-          {shown.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              className={'ov-fs-chip' + (chosen.has(tag) ? ' on' : '')}
-              aria-pressed={chosen.has(tag)}
-              onClick={() => toggle(tag)}
-            >
-              #{tag}
-            </button>
-          ))}
-          {(hidden > 0 || showAll) && all.length > TAG_CHIPS_SHOWN && (
-            <button
-              type="button"
-              className="ov-fs-chip ov-fs-chip--more"
-              onClick={() => setShowAll((v) => !v)}
-            >
-              {showAll ? 'Fewer' : `${hidden} more`}
-            </button>
-          )}
-        </div>
-      )}
-      <span className="ov-fs-ctl-hint">
-        {value.length === 0
-          ? 'Pick tags to count only transactions carrying any of them.'
-          : `Counts only transactions tagged ${value.map((t) => '#' + t).join(' or ')}.`}
-      </span>
-    </section>
+    <CheckSection
+      title="Tags"
+      noun="tags"
+      value={value}
+      options={all}
+      onChange={onChange}
+      empty="No tags yet. Add one to a transaction in Accounts to filter by it here."
+      hint={
+        value.length
+          ? `Counts only transactions tagged ${value.map((t) => '#' + t).join(' or ')}.`
+          : undefined
+      }
+    />
   )
 }

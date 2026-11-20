@@ -124,4 +124,21 @@ describe('MoneyFlowModal phone drill-in', () => {
     expect(screen.queryByText('All spending')).toBeNull()
     expect(document.querySelector('.mf-chart')!.textContent).toContain('Salary')
   })
+
+  it('opens a group from its wide ribbon, not only from the thin bar at its end', async () => {
+    authFetch.mockImplementation((url: string) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(url.includes('compact=true') ? COMPACT : FULL),
+      } as Response),
+    )
+    render(<MoneyFlowModal initialMonth="2026-09" onClose={vi.fn()} />)
+    await screen.findByRole('link', { name: /^Bills/ })
+    const ribbons = document.querySelectorAll('.mf-lnk.is-link')
+    // Income → Bills opens Bills; Salary → Income and Income → Saved open nothing.
+    expect(ribbons.length).toBe(1)
+    fireEvent.click(ribbons[0]!)
+    await waitFor(() => expect(screen.getByText('All spending')).toBeTruthy())
+  })
 })

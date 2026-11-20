@@ -43,6 +43,22 @@ def test_last_month_and_this_year_cross_january_correctly():
     assert report_window.period_months("12m", jan)[0] == "2026-02"
 
 
+def test_a_custom_range_covers_both_months_and_every_one_between():
+    assert report_window.period_months("2025-11:2026-02", TODAY) == [
+        "2025-11",
+        "2025-12",
+        "2026-01",
+        "2026-02",
+    ]
+    assert report_window.period_months("2026-03:2026-03", TODAY) == ["2026-03"]
+
+
+@pytest.mark.parametrize("bad", ["2026-05:2026-02", "2026-13:2026-14", "2026-1:2026-02"])
+def test_a_malformed_or_backwards_range_is_refused(bad):
+    with pytest.raises(ValidationError):
+        report_window.period_months(bad, TODAY)
+
+
 def test_an_unknown_period_is_refused():
     with pytest.raises(ValidationError):
         report_window.period_months("2w", TODAY)
@@ -222,3 +238,58 @@ def test_the_endpoints_take_categories(book, monkeypatch):
     assert rollup["period"]["expense_total"] == pytest.approx(65.5)
     flow = client.get(f"/api/cashflow/flow?month=2026-09&category={book['hotels']}").json()
     assert flow["spend_total"] == pytest.approx(300.0)
+
+
+def test_this_months_savings_rate_counts_the_profiles_monthly_income(book, monkeypatch):
+    """Mid-month the salary often hasn't landed: income so far read near 0% saved. This month
+    is measured against the monthly income in the profile, as the budget plans with."""
+    monkeypatch.setattr(report_window, "user_today", lambda: TODAY)
+    monkeypatch.setattr(reports_rollup, "user_today", lambda: TODAY)
+    monkeypatch.setattr(
+        reports_rollup.profile_service, "read_profile", lambda: {"monthly_net_income": 5000.0}
+    )
+    savings = reports_rollup.reports_aggregates(period="this_month")["period"]["savings"]
+    # October so far: S$80 in, S$60 spent; against the profile's S$5,000 a month.
+    assert savings["income"] == pytest.approx(5000.0)
+    assert savings["saved"] == pytest.approx(4940.0)
+    assert savings["expected_income"] is True
+
+    monkeypatch.setattr(
+        reports_rollup.profile_service, "read_profile", lambda: {"monthly_net_income": 50.0}
+    )
+    received = reports_rollup.reports_aggregates(period="this_month")["period"]["savings"]
+    assert received["income"] == pytest.approx(80.0)  # more already came in: the real figure
+    assert "expected_income" not in received
+    # A period that ended before this month keeps what actually came in.
+    sep = reports_rollup.reports_aggregates(period="last_month")["period"]["savings"]
+    assert sep["income"] == pytest.approx(3000.0)
+
+
+def test_a_period_ending_this_month_counts_its_profile_income(book, monkeypatch):
+    """3 months to October counted October's spending but none of its (unpaid) salary: 3 months
+    of spending against 2 of income. October now counts the profile's monthly income."""
+    monkeypatch.setattr(report_window, "user_today", lambda: TODAY)
+    monkeypatch.setattr(reports_rollup, "user_today", lambda: TODAY)
+    monkeypatch.setattr(
+        reports_rollup.profile_service, "read_profile", lambda: {"monthly_net_income": 5000.0}
+    )
+    savings = reports_rollup.reports_aggregates(period="3m")["period"]["savings"]
+    # Aug–Oct: S$3,000 in September + October's S$5,000 (only S$80 came in so far).
+    assert savings["income"] == pytest.approx(8000.0)
+    assert savings["spent"] == pytest.approx(425.5)
+    assert savings["expected_income"] is True
+
+
+def test_a_widgets_all_rows_asks_for_every_merchant_and_transaction(book, monkeypatch):
+    """A list widget's All sends 0: every payee, every recently added transaction."""
+    monkeypatch.setattr(report_window, "user_today", lambda: TODAY)
+    monkeypatch.setattr(reports_rollup, "user_today", lambda: TODAY)
+    one = reports_rollup.reports_aggregates(period="3m", merchant_limit=1)["period"]["merchants"]
+    every = reports_rollup.reports_aggregates(period="3m", merchant_limit=0)["period"]["merchants"]
+    assert len(one) == 1
+    assert {m["label"] for m in every} >= {"QA Inn", "QA Cafe", "QA Mart"}
+    client = TestClient(app)
+    capped = client.get("/api/transactions/recently-added?limit=2&exclude_openings=true").json()
+    whole = client.get("/api/transactions/recently-added?limit=0&exclude_openings=true").json()
+    assert len(capped["transactions"]) == 2
+    assert len(whole["transactions"]) == whole["total"] == 6

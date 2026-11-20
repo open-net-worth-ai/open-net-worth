@@ -183,6 +183,7 @@ export interface LuciusChatValue {
   fetchSuggestions: ReturnType<typeof useChat>['fetchSuggestions']
   stopStreaming: ReturnType<typeof useChat>['stopStreaming']
   retryLast: ReturnType<typeof useChat>['retryLast']
+  retryQueued: ReturnType<typeof useChat>['retryQueued']
   /** Whether this browser sent a message to replay — an Automation conversation never has one. */
   canRetry: boolean
   respondToChange: ReturnType<typeof useChat>['respondToChange']
@@ -363,6 +364,7 @@ export function LuciusChatProvider({ children }: ProviderProps) {
     fetchSuggestions,
     stopStreaming,
     retryLast,
+    retryQueued,
     canRetry,
     respondToChange,
     previewCheckpoint,
@@ -619,6 +621,7 @@ export function LuciusChatProvider({ children }: ProviderProps) {
     fetchSuggestions,
     stopStreaming,
     retryLast,
+    retryQueued,
     canRetry,
     respondToChange,
     previewCheckpoint,

@@ -33,7 +33,6 @@ import { Icons } from './icons'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, PublisherLine } from './VendorTrust'
 import { MODAL_BODY_MIN_HEIGHT } from './DirectoryBrowser'
 import { previewEndpoint, type DirectoryRow } from './catalog'
-import { canAddAnotherAccount } from './directoryRows'
 import { resolveToolList } from './toolList'
 import { useChatComposerOptional } from '../../../state/chatComposer'
 import { ArrowRight } from '../../../ui/icons'
@@ -46,8 +45,6 @@ export interface DirectoryPreviewProps {
   prompts?: string[]
   onAdd: (entry: DirectoryRow) => void
   onConfigure: (entry: DirectoryRow) => void
-  /** Add a second account of an already-added sign-in server (two IBKR logins, say). */
-  onAddAnother?: (entry: DirectoryRow) => void
   /** On a phone the modal pins the action in its footer (`PreviewAction`) instead, so the
    *  header drops it rather than show it twice. */
   actionInFooter?: boolean
@@ -61,28 +58,14 @@ export function PreviewAction({
   d,
   onAdd,
   onConfigure,
-  onAddAnother,
   className,
-}: Pick<DirectoryPreviewProps, 'd' | 'onAdd' | 'onConfigure' | 'onAddAnother'> & {
+}: Pick<DirectoryPreviewProps, 'd' | 'onAdd' | 'onConfigure'> & {
   className?: string
 }): JSX.Element {
-  const settings = (
+  return d.installed ? (
     <Btn size="lg" className={className} onClick={() => onConfigure(d)}>
       Open settings
     </Btn>
-  )
-  if (d.installed && onAddAnother && canAddAnotherAccount(d)) {
-    return (
-      <span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
-        {settings}
-        <Btn size="lg" className={className} onClick={() => onAddAnother(d)}>
-          Add another
-        </Btn>
-      </span>
-    )
-  }
-  return d.installed ? (
-    settings
   ) : (
     <Btn size="lg" variant="primary" className={className} onClick={() => onAdd(d)}>
       Add{d.mcp ? '' : ' connector'}
@@ -309,7 +292,6 @@ export function DirectoryPreview({
   prompts,
   onAdd,
   onConfigure,
-  onAddAnother,
   actionInFooter = false,
   liveTools,
 }: DirectoryPreviewProps): JSX.Element {
@@ -328,14 +310,7 @@ export function DirectoryPreview({
         d={d}
         status={d.installed && statusText ? <Badge tone={statusTone}>{statusText}</Badge> : null}
         action={
-          actionInFooter ? null : (
-            <PreviewAction
-              d={d}
-              onAdd={onAdd}
-              onConfigure={onConfigure}
-              onAddAnother={onAddAnother}
-            />
-          )
+          actionInFooter ? null : <PreviewAction d={d} onAdd={onAdd} onConfigure={onConfigure} />
         }
       />
 

@@ -91,6 +91,8 @@ export function ConnectorsTab(): JSX.Element {
   /** The not-yet-installed MCP entry whose add form the directory opens ON. */
   const [directoryAddId, setDirectoryAddId] = useState<string | null>(null)
   const [directoryAutoConnect, setDirectoryAutoConnect] = useState(false)
+  /** The server whose ⋮ "Add another" opened the add form at its address. */
+  const [directoryAnotherId, setDirectoryAnotherId] = useState<string | null>(null)
   const [bankPickerOpen, setBankPickerOpen] = useState(false)
   /** The MCP server a Reconnect click is currently signing in for — an OAuth reconnect is a
    *  popup + poll, not an instant call, so this both guards against a rapid double-click
@@ -140,6 +142,7 @@ export function ConnectorsTab(): JSX.Element {
     setDetailId(null)
     setDirectoryPreviewId(null)
     setDirectoryAddId(null)
+    setDirectoryAnotherId(null)
     setDirectoryFamily(family)
   }
 
@@ -149,6 +152,15 @@ export function ConnectorsTab(): JSX.Element {
     setDetailId(null)
     setDirectoryPreviewId(connectorId)
     setDirectoryAddId(null)
+    setDirectoryAnotherId(null)
+    setDirectoryFamily('all')
+  }
+
+  const openAddAnother = (connectorId: string) => {
+    setDetailId(null)
+    setDirectoryPreviewId(null)
+    setDirectoryAddId(null)
+    setDirectoryAnotherId(connectorId)
     setDirectoryFamily('all')
   }
 
@@ -164,6 +176,7 @@ export function ConnectorsTab(): JSX.Element {
   function openConnector(connectorId: string, opts?: FocusConnectorOptions) {
     setDirectoryFamily(null)
     setDirectoryAddId(null)
+    setDirectoryAnotherId(null)
     setBankPickerOpen(false)
     setRoutedCountry(opts?.country)
     setConfigureOnOpen(opts?.configure === true)
@@ -598,6 +611,13 @@ export function ConnectorsTab(): JSX.Element {
             setDetailId(null)
             setEditMcpId(detail.id)
           }}
+          // A remote server only: a second one at the same address is a second login or key. Not
+          // before the first has connected — a second half-added server helps nobody.
+          onAddAnother={
+            detail.mcp && detail.url && !detail.neverConnected
+              ? () => openAddAnother(detail.id)
+              : undefined
+          }
           onRefreshTools={() =>
             detail.mcp
               ? void reconnect(detail)
@@ -663,9 +683,11 @@ export function ConnectorsTab(): JSX.Element {
           previewId={directoryPreviewId ?? undefined}
           addId={directoryAddId ?? undefined}
           autoConnect={directoryAutoConnect}
+          anotherId={directoryAnotherId ?? undefined}
           onClose={() => {
             setDirectoryFamily(null)
             setDirectoryAddId(null)
+            setDirectoryAnotherId(null)
             setDirectoryAutoConnect(false)
           }}
           onFocusConnector={openConnector}

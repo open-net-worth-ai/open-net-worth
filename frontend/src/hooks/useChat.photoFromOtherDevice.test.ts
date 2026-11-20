@@ -15,12 +15,14 @@ vi.mock('../api/client', () => ({
   setUnauthorizedHandler: vi.fn(),
 }))
 vi.mock('../utils/chatStore', () => ({
+  fetchServerSnapshot: vi.fn().mockResolvedValue(null),
   loadMessages: vi.fn(),
   reconcileWithRemote: vi.fn(),
   saveMessages: vi.fn(),
   withRestoreMarks: (target: Message[]) => target,
   completeUnfinishedTail: () => null,
 }))
+vi.mock('../utils/chatServerSync', () => import('./__testing__/transcriptReadDouble'))
 
 import { useChat } from './useChat'
 import { authFetch } from '../api/client'

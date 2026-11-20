@@ -2,12 +2,32 @@ import '../following/following.css'
 
 import { useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
+import { ChevronDown, Plus, Wrench } from 'lucide-react'
+import '../../tabs/automations.css'
+import { LuciusMark } from '../../../ui/icons'
+import { AutomationMenu } from '../../tabs/automations/AutomationMenu'
+import { SearchBox } from '../following/Controls'
+import type { PaperCard as Card } from '../../../api/paperTrading'
 import { Button, EmptyState, ErrorState, TabSkeleton } from '../../ui'
 import { Spark } from '../../../lucius/identity'
 import { NewPortfolioDialog } from './NewPortfolioDialog'
 import { PaperCard } from './PaperCard'
 import { PaperPortfolioPage } from './PaperPortfolioPage'
 import { usePaperList } from './usePaper'
+
+const LUCIUS_PROMPT =
+  'Set up a paper portfolio with me. Ask what idea I want to test, suggest the ' +
+  'starting cash and the first trades, then create it.'
+
+/** A portfolio matches when its name, idea, source, benchmark or a holding's symbol does. */
+function matches(p: Card, needle: string): boolean {
+  if (!needle) return true
+  return [p.name, p.mandate?.goal, p.source_label, p.benchmark, ...p.weights.map((w) => w.symbol)]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+    .includes(needle)
+}
 
 /** Intelligence › Paper Trading: your paper portfolios as cards; open one to trade on paper. */
 export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void }) {
@@ -25,6 +45,7 @@ export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void
     } as never)
   const [creating, setCreating] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
+  const [query, setQuery] = useState('')
 
   if (openId)
     return (
@@ -54,12 +75,7 @@ export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void
       variant="primary"
       className="fi-lucius"
       iconLeft={<Spark size={15} ariaHidden />}
-      onClick={() =>
-        onAskLucius(
-          'Set up a paper portfolio with me. Ask what idea I want to test, suggest the ' +
-            'starting cash and the first trades, then create it.',
-        )
-      }
+      onClick={() => onAskLucius(LUCIUS_PROMPT)}
     >
       Create with Lucius
     </Button>
@@ -95,17 +111,61 @@ export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void
       </div>
     )
 
-  const shown = showArchived ? archived : portfolios
+  const needle = query.trim().toLowerCase()
+  const shown = (showArchived ? archived : portfolios).filter((p) => matches(p, needle))
   return (
     <div className="fol-page">
       <section className="fol-sec" aria-label="Paper portfolios">
-        <div className="paper-toolbar">
-          <div className="paper-actions">
-            {withLucius}
-            <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
-              Create manually
-            </Button>
-          </div>
+        {/* Copy Trading's toolbar row (Investments' search, filling the row; it keeps itself
+            above a phone's keyboard) with the Automations page's New menu beside it. */}
+        <div className="fol-discover-bar">
+          <SearchBox
+            value={query}
+            onChange={setQuery}
+            label="Search paper portfolios"
+            placeholder="Search paper portfolios…"
+          />
+          <AutomationMenu
+            triggerClassName="a3-new-button"
+            popoverClassName="a3-new-pop"
+            label="New paper portfolio"
+            trigger={
+              <>
+                <Plus className="a3-toolbar-ic" size={14} aria-hidden="true" />
+                <span className="a3-toolbar-label">New paper portfolio</span>
+                <ChevronDown
+                  className="a3-toolbar-chevron"
+                  size={12}
+                  strokeWidth={1.7}
+                  aria-hidden="true"
+                />
+              </>
+            }
+            items={[
+              ...(onAskLucius
+                ? [
+                    {
+                      label: 'Create with Lucius',
+                      icon: (
+                        <span className="a3-menu-ic lucius">
+                          <LuciusMark size={13} aria-hidden="true" />
+                        </span>
+                      ),
+                      onSelect: () => onAskLucius(LUCIUS_PROMPT),
+                    },
+                  ]
+                : []),
+              {
+                label: 'Create manually',
+                icon: (
+                  <span className="a3-menu-ic">
+                    <Wrench size={14} aria-hidden="true" />
+                  </span>
+                ),
+                onSelect: () => setCreating(true),
+              },
+            ]}
+          />
         </div>
         {shown.length > 0 ? (
           <div className="fol-cards">
@@ -114,7 +174,11 @@ export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void
             ))}
           </div>
         ) : (
-          <p className="fol-by">No active paper portfolios</p>
+          <p className="fol-by">
+            {needle
+              ? `No paper portfolio matches “${query.trim()}”.`
+              : 'No active paper portfolios'}
+          </p>
         )}
         {archived.length > 0 && (
           <Button variant="ghost" size="sm" onClick={() => setShowArchived((v) => !v)}>

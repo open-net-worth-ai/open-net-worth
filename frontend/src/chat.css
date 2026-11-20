@@ -129,6 +129,10 @@
     color: var(--muted);
     font-size: var(--text-2xs);
   }
+  .msg-pending-chip--failed {
+    color: var(--bad);
+    gap: var(--space-2);
+  }
 
   /* Assistant: document-style, no bubble */
   .msg-assistant .msg-text {

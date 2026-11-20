@@ -28,7 +28,6 @@ import type { KebabItem } from '../planning/KebabMenu'
 import { WIDGET_COMPONENTS } from './registry'
 import { WidgetShell } from './WidgetShell'
 import { WidgetPlaceholder } from './WidgetPlaceholder'
-import { WidgetAlertDialog } from './WidgetAlertDialog'
 import { WidgetDisplayPanel } from './WidgetDisplayPanel'
 import { WidgetFullscreen } from './WidgetFullscreen'
 import { GridItemContext } from './gridItemContext'
@@ -196,7 +195,6 @@ export function DashboardGrid({
   const containerRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
   const [preview, setPreview] = useState<GridItem[] | null>(null)
-  const [alertFor, setAlertFor] = useState<string | null>(null)
   const [displayFor, setDisplayFor] = useState<string | null>(null)
   const [fullscreenFor, setFullscreenFor] = useState<string | null>(null)
   const [fullscreenMode, setFullscreenMode] = useState<'view' | 'edit'>('view')
@@ -573,19 +571,10 @@ export function DashboardGrid({
     setFullscreenFor(null)
   }
 
-  const alertItem = alertFor ? items.find((it) => it.instanceId === alertFor) : null
   const displayItem = displayFor ? items.find((it) => it.instanceId === displayFor) : null
   const fullscreenItem = fullscreenFor ? items.find((it) => it.instanceId === fullscreenFor) : null
   const dialogs = (
     <>
-      {alertItem && !isSection(alertItem) && (
-        <WidgetAlertDialog
-          open
-          onClose={() => setAlertFor(null)}
-          alert={alertItem.alert}
-          onSave={(alert) => layout.patchItem(alertItem.instanceId, { alert })}
-        />
-      )}
       {displayItem && !isSection(displayItem) && (
         <WidgetDisplayPanel
           open
@@ -749,10 +738,6 @@ export function DashboardGrid({
           const sourceTab = def?.source && def.source.tab !== 'dashboard' ? def.source : null
           const menuItems: KebabItem[] = [
             { label: 'Display…', onClick: () => setDisplayFor(displayItem.instanceId) },
-            {
-              label: displayItem.alert ? 'Edit alert…' : 'Set alert…',
-              onClick: () => setAlertFor(displayItem.instanceId),
-            },
             ...(onShareWithLucius
               ? [{ label: 'Share with Lucius', onClick: () => onShareWithLucius(label) }]
               : []),

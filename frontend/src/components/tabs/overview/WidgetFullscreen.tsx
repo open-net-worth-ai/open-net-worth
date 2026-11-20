@@ -16,7 +16,7 @@ import { LuciusMark } from '../../../ui/LuciusMark'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentType, ReactElement, ReactNode } from 'react'
-import { Button } from '../../ui'
+import { Button, SegmentedControl } from '../../ui'
 import { BottomSheet } from '../../ui/BottomSheet'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { CheckboxGroup } from '../../ui/CheckboxGroup'
@@ -29,6 +29,8 @@ import { resolveCategoryIds } from './categoryRefs'
 import { GridItemContext } from './gridItemContext'
 import { BriefingFocusControl } from './BriefingFocusControl'
 import { vizOptionsFor, vizOf } from './vizModel'
+import { ReportFilterControls, ReportPeriodControl } from './widgets/ReportFilter'
+import { reportHasFilters } from './widgets/reportScope'
 import type {
   HeightMode,
   RegisterDeepLink,
@@ -327,7 +329,9 @@ function SwatchRow({
           onClick={() => onPick(c.key)}
         />
       ))}
-      <ColorPicker value={hex} onChange={(v) => onPick(v)} />
+      <span className="ov-fs-sw-custom">
+        <ColorPicker value={hex} onChange={(v) => onPick(v)} selected={isCustom} />
+      </span>
     </div>
   )
 }
@@ -371,6 +375,8 @@ export function WidgetFullscreen({
 }: WidgetFullscreenProps) {
   const isPhone = useIsMobile()
   const [viewMode, setViewMode] = useState(mode)
+  // On a phone, a Reports widget's settings split into two tabs: how it looks, what it counts.
+  const [railTab, setRailTab] = useState<'appearance' | 'filters'>('appearance')
   const cfg = instance.config || {}
   const isAutoh = AUTOH_IDS.has(instance.defId)
   const vizOpts = vizOptionsFor(def)
@@ -495,8 +501,40 @@ export function WidgetFullscreen({
   // widget def gets for free, never a hand-built per-widget control) + the
   // list row-cap, in that order (mirrors the handoff). ──────────────────────
   const data: Ctrl[] = []
-  // An inline setting (a Reports widget's period, categories, tags) is set from the widget's own
-  // header filter, so it isn't repeated here.
+  // A widget that filters by category or tag gets the Filters column; one with a period alone
+  // gets a Period row at the top of its settings instead (a column holding one field was empty).
+  const filters = reportHasFilters(def) ? (
+    <div className="ov-fs-filters">
+      <ReportFilterControls instance={instance} def={def} onPatch={onPatch} />
+    </div>
+  ) : null
+  if (!filters && def.settings?.some((st) => st.key === 'period' && st.inline)) {
+    appearance.unshift({
+      group: 'Appearance',
+      key: 'period',
+      node: (
+        <div className="ov-fs-ctl ov-fs-ctl-wide" key="period">
+          <ReportPeriodControl instance={instance} def={def} onPatch={onPatch} />
+        </div>
+      ),
+    })
+  }
+  const railTabs = filters ? (
+    <div className="ov-fs-railtabs">
+      <SegmentedControl
+        ariaLabel="Settings"
+        value={railTab}
+        onChange={setRailTab}
+        options={[
+          { value: 'appearance', label: 'Appearance' },
+          { value: 'filters', label: 'Filters' },
+        ]}
+      />
+    </div>
+  ) : null
+  const onFilters = !!filters && railTab === 'filters'
+  // A Reports widget's period, categories and tags are drawn as one Filters section (the same
+  // controls as the widget's header pill), not one generic row each.
   ;(def.settings || [])
     .filter((st) => !st.inline)
     .forEach((st) => {
@@ -663,10 +701,11 @@ export function WidgetFullscreen({
     <div
       className={
         'ov-fs-card' +
+        (fitMode(def.defId, instance.heightMode) ? ' ov-fs-card--fit' : '') +
         (instance.hideTitle ? ' ov-fs-card--no-title' : '') +
         (instance.accent ? ' ov-fs-card--accent' : '')
       }
-      style={accentStyle}
+      style={{ ...accentStyle, ['--ov-fs-h' as string]: `${instance.h}px` }}
     >
       <GridItemContext.Provider
         value={{
@@ -710,14 +749,15 @@ export function WidgetFullscreen({
         }
       >
         <div className="ov-fs-sheet">
-          {appearance.map((c) => c.node)}
-          {hasData && (
+          {railTabs}
+          {onFilters ? filters : appearance.map((c) => c.node)}
+          {!onFilters && hasData && (
             <>
               <div className="ov-fs-bar-h">Data</div>
               {data.map((c) => c.node)}
             </>
           )}
-          {hasLux && lux.map((c) => c.node)}
+          {!onFilters && hasLux && lux.map((c) => c.node)}
         </div>
       </BottomSheet>
     )
@@ -751,7 +791,21 @@ export function WidgetFullscreen({
       >
         <Dialog.Portal>
           <Dialog.Overlay className="ov-fs-backdrop">
-            <Dialog.Content className="ov-fs-shell ov-fs-shell--view" aria-describedby={undefined}>
+            <Dialog.Content
+              className="ov-fs-shell ov-fs-shell--view"
+              aria-describedby={undefined}
+              // As in Edit: focus the window, not its first button (that ringed Edit on open).
+              onOpenAutoFocus={(e) => {
+                e.preventDefault()
+                ;(e.currentTarget as HTMLElement | null)?.focus()
+              }}
+              // A widget's own menus (Period, chart type) portal to <body>: picking from one is not a
+              // click outside the editor.
+              onInteractOutside={(e) => {
+                const t = e.target
+                if (t instanceof Element && t.closest('.kebab-menu--portal')) e.preventDefault()
+              }}
+            >
               <Dialog.Title className="ui-visually-hidden">{label} — full screen</Dialog.Title>
               <div className="ov-fs-main">
                 <div className="ov-fs-viewbar">
@@ -786,33 +840,69 @@ export function WidgetFullscreen({
     >
       <Dialog.Portal>
         <Dialog.Overlay className="ov-fs-backdrop">
-          <Dialog.Content className="ov-fs-shell" aria-describedby={undefined}>
+          <Dialog.Content
+            className={'ov-fs-shell' + (filters ? ' ov-fs-shell--split' : '')}
+            aria-describedby={undefined}
+            // Focus the editor itself, not the card's first control: that drew a focus ring
+            // around the widget's filter pill every time Edit opened.
+            onOpenAutoFocus={(e) => {
+              e.preventDefault()
+              ;(e.currentTarget as HTMLElement | null)?.focus()
+            }}
+            // A widget's own menus (Period, chart type) portal to <body>: picking from one is not a
+            // click outside the editor.
+            onInteractOutside={(e) => {
+              const t = e.target
+              if (t instanceof Element && t.closest('.kebab-menu--portal')) e.preventDefault()
+            }}
+          >
             <Dialog.Title className="ui-visually-hidden">{label} — full screen</Dialog.Title>
-            <div className="ov-fs-main">
-              <div className="ov-fs-preview">{preview}</div>
-              {(hasData || hasLux) && (
-                <div className="ov-fs-data">
-                  {hasData && (
-                    <div className="ov-fs-data-sec">
-                      <div className="ov-fs-bar-h">Data</div>
-                      <div className="ov-fs-inline">{data.map((c) => c.node)}</div>
-                    </div>
-                  )}
-                  {hasLux && <div className="ov-fs-data-sec">{lux.map((c) => c.node)}</div>}
-                </div>
-              )}
-            </div>
-            <div className="ov-fs-rail">
-              <div className="ov-fs-bar-h">Appearance</div>
-              <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
-              <div className="ov-fs-actions">
-                <Button variant="secondary" size="sm" onClick={onDiscard}>
-                  Discard
-                </Button>
-                <Button variant="primary" size="sm" onClick={onSave}>
-                  Save changes
-                </Button>
+            <div className="ov-fs-body">
+              <div className="ov-fs-main">
+                <div className="ov-fs-preview">{preview}</div>
+                {/* A widget with filters: how it looks goes under the preview, what it counts
+                    in the column on the right. */}
+                {filters && (
+                  <div className="ov-fs-below">
+                    <div className="ov-fs-bar-h">Appearance</div>
+                    <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
+                  </div>
+                )}
+                {(hasData || hasLux) && (
+                  <div className="ov-fs-data">
+                    {hasData && (
+                      <div className="ov-fs-data-sec">
+                        <div className="ov-fs-bar-h">Data</div>
+                        <div className="ov-fs-inline">{data.map((c) => c.node)}</div>
+                      </div>
+                    )}
+                    {hasLux && <div className="ov-fs-data-sec">{lux.map((c) => c.node)}</div>}
+                  </div>
+                )}
               </div>
+              <div className="ov-fs-rail">
+                {filters ? (
+                  <>
+                    <div className="ov-fs-bar-h">Filters</div>
+                    {filters}
+                  </>
+                ) : (
+                  <>
+                    <div className="ov-fs-bar-h">Appearance</div>
+                    <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
+                  </>
+                )}
+              </div>
+            </div>
+            {/* The editor's footer, full width under the preview and the settings: the app's
+                workspace-modal footer (a top divider, its buttons on the right). */}
+            <div className="ov-fs-foot">
+              <Button variant="secondary" size="sm" onClick={onDiscard}>
+                Discard
+              </Button>
+              <Button variant="primary" size="sm" onClick={onSave}>
+                Save changes
+              </Button>
             </div>
             <button
               type="button"

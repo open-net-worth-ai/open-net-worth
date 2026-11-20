@@ -566,7 +566,7 @@ class TransactionStore:
     def recent_page_by_created_at(
         self,
         *,
-        limit: int,
+        limit: int | None,
         offset: int = 0,
         needs_review: bool | None = None,
         automation_only: bool = False,

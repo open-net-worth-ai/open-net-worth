@@ -151,6 +151,16 @@ def withdraw(session_id: str, client_id: str) -> bool:
     return True
 
 
+def holds(session_id: str, client_id: str) -> bool:
+    """Is a message with this client id queued, or claimed by a turn that has not yet
+    durably adopted it? Either way the server already has it: a resend is a duplicate."""
+    if not client_id:
+        return False
+    claimed = _claims.get(session_id)
+    in_claim = claimed is not None and any(m.client_id == client_id for m in claimed.messages)
+    return in_claim or any(m.client_id == client_id for m in _queues.get(session_id, ()))
+
+
 def has_pending(session_id: str) -> bool:
     return bool(_queues.get(session_id))
 
@@ -161,6 +171,7 @@ def _reset_for_tests() -> None:
 
 
 __all__ = [
+    "holds",
     "QueuedMessage",
     "QueuedSkillInvocation",
     "QueueClaim",

@@ -577,6 +577,8 @@ button.ov-breakdown-row--go:active {
   margin: 0;
   border: 0;
   border-bottom: 1px solid var(--line);
+  /* Square: a button's default corner radius bent the row's divider up at both ends. */
+  border-radius: 0;
   background: none;
   color: inherit;
   font: inherit;

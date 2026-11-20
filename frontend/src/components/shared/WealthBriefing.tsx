@@ -73,9 +73,9 @@ export function WealthBriefing({ onChatSuggest, hideTitle }: Props) {
   const [saving, setSaving] = useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
 
-  const fetchBriefing = async (forceRefresh = false) => {
+  const fetchBriefing = async (forceRefresh = false, quiet = false) => {
     if (forceRefresh) setRefreshing(true)
-    else setLoading(true)
+    else if (!quiet) setLoading(true)
     setError(null)
     try {
       const res = await authFetch(forceRefresh ? '/api/briefing?refresh=true' : '/api/briefing')
@@ -85,13 +85,15 @@ export function WealthBriefing({ onChatSuggest, hideTitle }: Props) {
       // error:true and a reason in `note` — surface it via the error state (with retry)
       // rather than rendering it as briefing content.
       if (json.error) {
+        // Behind a note already on screen, a failed rewrite keeps that note.
+        if (quiet) return
         setError(json.note || 'Could not generate your briefing.')
         setData(null)
       } else {
         setData(json)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load')
+      if (!quiet) setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -110,8 +112,26 @@ export function WealthBriefing({ onChatSuggest, hideTitle }: Props) {
     }
   }
 
+  // The last note is shown the moment the card opens; `/api/briefing` then checks it still
+  // holds (a few seconds: it fingerprints the whole book) and swaps in a rewrite only if not.
+  const openBriefing = async () => {
+    try {
+      const res = await authFetch('/api/briefing/saved')
+      const saved: BriefingData | { note: null } = res.ok ? await res.json() : { note: null }
+      if (saved.note) {
+        setData(saved as BriefingData)
+        setLoading(false)
+        await fetchBriefing(false, true)
+        return
+      }
+    } catch {
+      /* fall through to the full load */
+    }
+    await fetchBriefing()
+  }
+
   useEffect(() => {
-    fetchBriefing()
+    void openBriefing()
     fetchPrefs()
     // The widget editor saved a new standing instruction: rewrite the note with it.
     const regenerate = () => {
@@ -120,6 +140,8 @@ export function WealthBriefing({ onChatSuggest, hideTitle }: Props) {
     }
     window.addEventListener(BRIEFING_REGENERATE_EVENT, regenerate)
     return () => window.removeEventListener(BRIEFING_REGENERATE_EVENT, regenerate)
+    // Once, on open: the loaders read only setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Close the settings popover on outside click

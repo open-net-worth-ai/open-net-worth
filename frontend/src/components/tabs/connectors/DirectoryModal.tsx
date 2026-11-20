@@ -15,14 +15,10 @@ import { Icons } from './icons'
 import { DirectoryPreview, PreviewAction } from './DirectoryPreview'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { McpAddFlowBody, McpAddFlowFooter, useMcpAddFlow } from './McpAddFlow'
-import {
-  MCP_INSTALL_PRESETS,
-  type DirectoryRow,
-  type DirectoryFamilyFilter,
-  type DirectorySort,
-} from './catalog'
+import { type DirectoryRow, type DirectoryFamilyFilter, type DirectorySort } from './catalog'
 import { resolveDirectory, sameAddressAs } from './directoryRows'
-import { mcpNeverConnected, toEntry } from './adapter'
+import { toEntry } from './adapter'
+import type { McpAuth } from './mcpConfig'
 import { REST_LAUNCHER_ID } from './restApi'
 import type { ConnectorCategory, FocusConnectorOptions } from './model'
 import type { Connector } from './types'
@@ -55,6 +51,9 @@ export interface DirectoryModalProps {
   /** With `addId`: start the sign-in at once — the user already clicked Connect on Lucius's
    *  card, which opened the sign-in window on that click (`preopenSignInWindow`). */
   autoConnect?: boolean
+  /** Open straight onto the MCP add form for ANOTHER server at this one's address (its id,
+   *  `mcp:<id>`) — a second login or key, from the ⋮ menu on its settings page. */
+  anotherId?: string
   toast?: (message: string) => void
 }
 
@@ -69,6 +68,7 @@ export function DirectoryModal({
   previewId,
   addId,
   autoConnect = false,
+  anotherId,
   toast,
 }: DirectoryModalProps): JSX.Element | null {
   const entries = resolveDirectory(connectors)
@@ -87,7 +87,8 @@ export function DirectoryModal({
         : undefined) ?? null,
   )
   const addEntry = addId ? entries.find((e) => e.id === addId && e.mcp && !e.installed) : undefined
-  const [mcpOpen, setMcpOpen] = useState(!!addEntry)
+  const anotherOf = anotherId ? connectors.find((c) => c.id === anotherId) : undefined
+  const [mcpOpen, setMcpOpen] = useState(!!addEntry || !!anotherOf)
 
   const takenIds = connectors
     .filter((c) => c.id.startsWith(MCP_PREFIX))
@@ -114,10 +115,22 @@ export function DirectoryModal({
     },
   })
 
+  /** Its directory card when it has one (publisher, docs), else the custom slot; the address
+   *  and the kind of credential are the existing server's own. */
+  function startAnother(server: Connector) {
+    const url = toEntry(server).url ?? ''
+    const card = entries.find((e) => e.installedId === server.id) ?? entries.find((e) => e.generic)
+    flow.start(card, {
+      another: sameAddressAs(url, existingServers) ?? undefined,
+      prefill: { url, auth: formAuthOf(server.config.auth_type) },
+    })
+  }
+
   // Before paint, so the add form never shows empty for a frame. Runs once: the flow is then the
   // user's to drive.
   useLayoutEffect(() => {
     if (addEntry) flow.start(addEntry)
+    else if (anotherOf) startAnother(anotherOf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -163,7 +176,11 @@ export function DirectoryModal({
    *  does, or retrying sign-in after editing the URL would orphan the first row's live
    *  credential forever. Safe to call unconditionally: a no-op when there is no dormant row. */
   function handleFlowBack() {
-    if (flow.step === 'form') {
+    if (flow.step === 'form' && anotherOf) {
+      // Opened from that server's ⋮ menu, so Back returns to its settings page.
+      close()
+      onFocusConnector(anotherOf.id)
+    } else if (flow.step === 'form') {
       leaveMcpFlow()
     } else {
       flow.discardAbandonedOAuthServer()
@@ -176,20 +193,6 @@ export function DirectoryModal({
   const configure = (entry: DirectoryRow) => {
     close()
     onFocusConnector(entry.installedId ?? entry.id)
-  }
-
-  // Offered once the one already added has connected: next to "Finish setup" it read as the
-  // way forward, and a second half-added server is the last thing that user needs.
-  const canAddAnother = (entry: DirectoryRow) => {
-    const live = mcpServers.find((c) => c.id === entry.installedId)
-    return !!live && !mcpNeverConnected(live)
-  }
-
-  const addAnother = (entry: DirectoryRow) => {
-    const url = MCP_INSTALL_PRESETS[entry.id]?.url ?? ''
-    flow.start(entry, { another: sameAddressAs(url, existingServers) ?? undefined })
-    setPreview(null)
-    setMcpOpen(true)
   }
 
   const add = (entry: DirectoryRow) => {
@@ -220,7 +223,7 @@ export function DirectoryModal({
 
   const title = mcpOpen ? (
     <BackTitle
-      label={flow.step === 'form' ? 'Back to directory' : 'Back'}
+      label={flow.step === 'form' && !anotherOf ? 'Back to directory' : 'Back'}
       onClick={handleFlowBack}
     />
   ) : preview ? (
@@ -234,13 +237,7 @@ export function DirectoryModal({
   ) : preview && isMobile ? (
     // The header's ‹ Back and the sheet's ✕ already leave, so on a phone the footer carries
     // the action instead: always in view, in thumb reach, and steady while the body scrolls.
-    <PreviewAction
-      d={preview}
-      onAdd={add}
-      onConfigure={configure}
-      onAddAnother={canAddAnother(preview) ? addAnother : undefined}
-      className="cn-foot-action"
-    />
+    <PreviewAction d={preview} onAdd={add} onConfigure={configure} className="cn-foot-action" />
   ) : preview ? (
     <Btn onClick={() => setPreview(null)}>Back</Btn>
   ) : (
@@ -294,7 +291,6 @@ export function DirectoryModal({
           liveTools={live?.tools?.map((t) => t.name)}
           onAdd={add}
           onConfigure={configure}
-          onAddAnother={canAddAnother(preview) ? addAnother : undefined}
           actionInFooter={isMobile}
         />
       ) : (
@@ -319,4 +315,9 @@ export function DirectoryModal({
       )}
     </Modal>
   )
+}
+
+function formAuthOf(authType: unknown): McpAuth {
+  if (authType === 'oauth') return 'oauth'
+  return authType === 'bearer' || authType === 'header' ? 'key' : 'none'
 }

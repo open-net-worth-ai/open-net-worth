@@ -850,6 +850,8 @@
 }
 .acct-review-tags-search {
   box-sizing: border-box;
+  /* When the keyboard scrolls the search to the top, the "Tags" caption and Done stay above it. */
+  scroll-margin-top: 44px;
   width: 100%;
   min-height: 36px;
   padding: 6px 10px;
@@ -1067,9 +1069,15 @@
     border-top: 0;
     background: transparent;
   }
+  /* No 640px floor on a phone: the stage IS the screen, and the keyboard shrinks it. With the
+     floor it stayed 640px inside a ~290px body, so the tag search sat clipped below the
+     footer, out of scroll reach (owner report 2026-11-20). Centring is the deck's and hint's
+     auto margins — `justify-content: center` would push an overflowing card's top out of
+     reach above the scroll start. */
   .acct-review-stage {
     flex: 1;
-    justify-content: center;
+    min-height: 0;
+    justify-content: flex-start;
     gap: 24px;
     padding: 24px 16px;
     overflow-y: auto;

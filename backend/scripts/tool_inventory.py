@@ -60,6 +60,7 @@ ATTRIBUTE_LIST_PARAMS: dict[str, str] = {
     "update_price_alerts.channels": "one alert, many channels",
     "set_funding_plan.funding_plan": "one plan, many rows",
     "propose_lot_dispose.lot_selection": "one disposal, many lots consumed",
+    "get_spending_breakdown.group_by": "one breakdown, many grouping dimensions (month, payee)",
     "update_goal.linked_account_ids": "one goal, many linked accounts",
     "reorder_envelope_groups.order": "the ordering IS the list",
     "reorder_envelopes_in_group.categories": "one group, an ordered list",

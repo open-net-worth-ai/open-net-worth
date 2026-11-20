@@ -114,11 +114,31 @@ export function remoteTotalFor(convId: string): number | null {
   return remoteTotals.get(convId) ?? null
 }
 
+/** One transcript read: the messages, and whether a turn is still writing them
+ *  (`live`; null from a server too old to say). */
+export interface ServerSnapshot {
+  messages: Message[]
+  live: boolean | null
+}
+
+/** The transcript's newest messages, with the server's word on whether it is finished. */
+export async function fetchServerSnapshot(convId: string): Promise<ServerSnapshot | null> {
+  return fetchSnapshot(convId, TRANSCRIPT_FETCH_TAIL)
+}
+
 async function fetchRemoteMessages(
   convId: string,
   tail?: number,
   before?: number,
 ): Promise<Message[] | null> {
+  return (await fetchSnapshot(convId, tail, before))?.messages ?? null
+}
+
+async function fetchSnapshot(
+  convId: string,
+  tail?: number,
+  before?: number,
+): Promise<ServerSnapshot | null> {
   // Guard the empty/placeholder id — otherwise this fires GET /api/sessions//messages
   // (double slash) → a 404 console error on every page load before a conversation exists.
   if (!convId) return null
@@ -132,7 +152,11 @@ async function fetchRemoteMessages(
     const data = await res.json()
     if (typeof data.total === 'number') remoteTotals.set(convId, data.total)
     recordRevision(convId, data.revision)
-    return Array.isArray(data.messages) ? (data.messages as Message[]) : null
+    if (!Array.isArray(data.messages)) return null
+    return {
+      messages: data.messages as Message[],
+      live: typeof data.live === 'boolean' ? data.live : null,
+    }
   } catch {
     return null
   }
@@ -302,6 +326,17 @@ export async function reconcileWithRemote(
   if (!convId) return null
   const remote = await fetchRemoteMessages(convId, TRANSCRIPT_FETCH_TAIL)
   if (!remote) return null
+  return reconcileAgainst(convId, local, remote)
+}
+
+/** `reconcileWithRemote`'s decision over a transcript already read — the path for a
+ *  conversation a turn is still writing (or a server too old to say), where this
+ *  browser's live copy may legitimately be ahead of the snapshot. */
+export function reconcileAgainst(
+  convId: string,
+  local: Message[] | null,
+  remote: Message[],
+): Message[] | null {
   // A run parked on an approval card adds the card to the LAST message rather than
   // adding a message, so a cache taken before the card existed has the same last id and
   // would win forever — `shouldAdoptRemote` folds that in beside the advanced-past check.

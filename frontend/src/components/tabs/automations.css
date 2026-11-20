@@ -177,7 +177,9 @@
 .rd-kebab-pop {
   position: absolute;
   right: 0;
-  top: 30px;
+  /* Below the button, whatever its height: a fixed 30px landed the menu on top of any taller
+     trigger (the New button, the round + on a phone). */
+  top: calc(100% + 6px);
   z-index: var(--z-dropdown);
   min-width: 150px;
   background: var(--modal-bg);
@@ -1956,8 +1958,10 @@
   .a3-detail-title h1 {
     font-size: 19px;
   }
+  /* Also the New menu Paper Trading borrows, in Copy Trading's toolbar row. */
   .a3-toolbar .a3-sort,
-  .a3-toolbar .a3-new-button {
+  .a3-toolbar .a3-new-button,
+  .fol-discover-bar .a3-new-button {
     width: 30px;
     min-width: 30px;
     height: 30px;
@@ -1969,13 +1973,16 @@
     border-radius: 50%;
   }
   .a3-toolbar .a3-toolbar-label,
-  .a3-toolbar .a3-toolbar-chevron {
+  .a3-toolbar .a3-toolbar-chevron,
+  .fol-discover-bar .a3-toolbar-label,
+  .fol-discover-bar .a3-toolbar-chevron {
     display: none;
   }
   .a3-sort .a3-toolbar-ic {
     display: block;
   }
-  .a3-toolbar .a3-toolbar-ic {
+  .a3-toolbar .a3-toolbar-ic,
+  .fol-discover-bar .a3-toolbar-ic {
     width: 15px;
     height: 15px;
   }

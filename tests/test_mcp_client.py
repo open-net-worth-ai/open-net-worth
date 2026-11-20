@@ -2379,7 +2379,12 @@ def test_probe_budget_is_looser_for_stdio_than_http():
     # Autonomous dispatch keeps the tight bound — nobody is watching those.
     assert client_mod.CALL_TIMEOUT_SECONDS == 20
     assert client_mod.probe_deadline("stdio").remaining() > client_mod.PROBE_TIMEOUT_HTTP_SECONDS
-    assert client_mod.probe_deadline("http").remaining() <= client_mod.PROBE_TIMEOUT_HTTP_SECONDS
+    # A microsecond of slack: `(now + 30) - now` is 30.00000000000003 when Windows' coarse
+    # monotonic clock returns the same reading twice.
+    assert (
+        client_mod.probe_deadline("http").remaining()
+        <= client_mod.PROBE_TIMEOUT_HTTP_SECONDS + 1e-6
+    )
 
 
 def test_a_connection_with_no_deadline_keeps_the_per_call_timeout(monkeypatch):

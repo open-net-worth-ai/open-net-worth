@@ -78,13 +78,11 @@ on its name (the first view can't be deleted).
 
 **Widget menu** — outside Customize mode, each widget's **⋯** menu offers **Edit…** (the same
 settings as **Edit** in Customize — title, chart type, categories and so on), **Display…** (accent
-color, hide title, fixed height), **Set alert…**, **Share with Lucius**, **Duplicate** and
-**Remove**, and a link to the tab it comes from. **Set alert…** has Lucius notify you when the
-widget's number crosses a threshold you choose.
+color, hide title, fixed height), **Share with Lucius**, **Duplicate** and **Remove**, and a
+link to the tab it comes from. Every list widget's **Rows** setting includes **All**.
 
-**Build with Lucius** — in **Add widget**, describe what you want ("my USD exposure over time")
-and Lucius builds the widget. An empty view also offers **Build with Lucius** to assemble a whole
-view for you.
+**Build with Lucius** — an empty view offers **Build with Lucius**, which asks Lucius in chat
+which widgets to add for you.
 
 Each widget is as tall as its content (or the height you set, if you switched it to **Fixed**).
 Widgets side by side line up when their heights are close; when one is much shorter, it simply
@@ -123,26 +121,33 @@ that month.
 ### Filtering a report: period, categories and tags
 
 Every Reports widget has a filter in its own header: a small pill naming what it shows (for
-example *This month*, or *Aug – Oct · Dining · #trip*). Click it to change, in place:
+example *This month*, or *Aug – Oct · Dining · #trip*). Click it to change, in place. The same
+filters are also in the widget's editor (**Edit**): **Filters** down the right, **Appearance**
+under the preview. Savings rate, which has a period alone, opens a plain list of periods
+instead, and its editor shows **Period** with its other settings:
 
 - **Period.** Spending by category, Top merchants, Savings rate and Money flow can show
   **This month**, **Last month**, **3 months**, **6 months**, **12 months** or **This year**,
   added up as one figure. **3/6/12 months** end with this month, so they include the month in
   progress. Spending trends, Income vs expense and Income & expense table chart month by month,
-  so they offer **3 months**, **6 months**, **12 months** or **This year**.
-- **Categories.** Pick one or more (search the list) to count only those categories. A split
+  so they offer **3 months**, **6 months**, **12 months** or **This year**. Every one also
+  offers **Custom**: pick a **From** and a **To** month and year, and it covers both and every
+  month between.
+- **Categories.** Pick one or more (search the list, grouped by kind: Expense, Income,
+  Investment, Transfer) to count only those categories. A split
   transaction counts only its split in the chosen category.
-- **Tags.** Pick one or more to count only transactions carrying any of them, for example
-  everything tagged *#trip*.
+- **Tags.** Search the list and pick one or more to count only transactions carrying any of
+  them, for example everything tagged *#trip*.
 
 Categories and tags combine: *Dining* and *#trip* shows dining on trips. A choice applies as
 you make it and stays with the widget; **Clear categories and tags** goes back to everything.
 Savings rate offers a period only. A filtered widget's pill is outlined in the accent colour,
 so a narrowed figure is never mistaken for your whole book. Each widget keeps its usual window
-until you pick something else: Spending by category and Top merchants this month, Savings rate
-and Money flow the last full month, the month-by-month charts the last 6 months.
+until you pick something else: Spending by category, Top merchants and Savings rate this month,
+Money flow the last full month, the month-by-month charts the last 6 months.
 
-In **Money flow**, click a spending group to see its categories, then click a category to open
+In **Money flow**, click a spending group (its bar, its label or the ribbon flowing into it) to
+see its categories, then click a category the same way to open
 its transactions in Accounts, for the same months and tags. **All groups** goes back.
 
 In Reports, **Top merchants** can be shown as a list, bars or a pie (the header menu), and each
@@ -230,9 +235,11 @@ yet, it shows the latest month that does and says so (*"September. Nothing yet i
 - **Money flow** says under the diagram that it is **Net of refunds and reimbursements**: a
   refund reduces the category it came from. Plan → Cash Flow shows gross In and Out, so the same
   month reads larger there, and its footnote says so.
-- **Savings rate** is the last complete month that had income, named in the card's header
-  ("Sep"); partway through a month with income it says "this month". It is **Income − spending
-  recorded in that month**, shown as one line under the gauge ("$3.2K of $5.8K saved"). Hover the
+- **Savings rate** is this month unless you pick another period, named in the card's header
+  ("Nov"). It is **Income − spending recorded in that period**. When the period ends with this
+  month (This month, 3/6/12 months, This year), this month's income is the monthly income in
+  your profile (as the budget plans with) until more than that has come in. It is shown as one
+  line under the gauge ("$3.2K of $5.8K saved", or how much more was spent than came in). Hover the
   gauge for the **3-month average** with its months (for example "3-month average (Jul to Sep):
   $3.17K a month, 55%"): the same figure the [Outlook](retirement-planning.md) checks your saving
   against. Both differ from the Budget screen's month-in-progress pace and from Cash Flow's
@@ -254,8 +261,8 @@ yet, it shows the latest month that does and says so (*"September. Nothing yet i
 
 - **Spending pulse, Spending pace and Budget vs actual** leave out a credit card's payment
   envelope: paying the card isn't new spending, the purchases already count in their own
-  categories. **Savings rate** and the **Income & expense table** averages use complete months
-  only, and Goals lists your savings goals.
+  categories. The **Savings rate** 3-month average and the **Income & expense table** averages
+  use complete months only, and Goals lists your savings goals.
 
 ## What Lucius can do here
 

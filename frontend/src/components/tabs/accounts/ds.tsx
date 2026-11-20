@@ -118,8 +118,11 @@ function hsvToHex(h: number, s: number, v: number) {
 export interface ColorPickerProps {
   value: string
   onChange: (c: string) => void
+  /** Whether the custom swatch reads as the chosen one. Defaults to "the colour isn't one of
+   *  the Accounts palette", which is always true for a caller with a palette of its own. */
+  selected?: boolean
 }
-export function ColorPicker({ value, onChange }: ColorPickerProps) {
+export function ColorPicker({ value, onChange, selected }: ColorPickerProps) {
   const [open, setOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
   const [shiftX, setShiftX] = useState(0)
@@ -194,7 +197,9 @@ export function ColorPicker({ value, onChange }: ColorPickerProps) {
     <div className="acct-cp" ref={ref}>
       <button
         type="button"
-        className={'acct-swatch acct-swatch-custom' + (COLORS.includes(value) ? '' : ' on')}
+        className={
+          'acct-swatch acct-swatch-custom' + ((selected ?? !COLORS.includes(value)) ? ' on' : '')
+        }
         style={COLORS.includes(value) ? undefined : { background: value }}
         title="Custom colour"
         onClick={() => {

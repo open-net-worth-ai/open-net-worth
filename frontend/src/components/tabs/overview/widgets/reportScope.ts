@@ -17,13 +17,26 @@ const PERIOD_BY_LABEL: Record<string, ReportPeriod> = {
   'This year': 'ytd',
 }
 
+/** The option that reads its months from the widget's `periodFrom` / `periodTo` (YYYY-MM). */
+export const CUSTOM_PERIOD = 'Custom'
 /** Widgets that show one figure for the whole period (a breakdown, a flow, a gauge). */
-export const TOTAL_PERIOD_OPTIONS = Object.keys(PERIOD_BY_LABEL)
+export const TOTAL_PERIOD_OPTIONS = [...Object.keys(PERIOD_BY_LABEL), CUSTOM_PERIOD]
 /** Widgets that chart month by month: a one-month window would be a single bar. */
-export const SERIES_PERIOD_OPTIONS = ['3 months', '6 months', '12 months', 'This year']
+export const SERIES_PERIOD_OPTIONS = [
+  '3 months',
+  '6 months',
+  '12 months',
+  'This year',
+  CUSTOM_PERIOD,
+]
 
-// All three are set from the widget's own header filter (ReportFilter), not the settings panel.
-export function periodSetting(options: string[], fallback: string): WidgetSettingSchema {
+// All three are drawn by ReportFilterControls, in the header pill and in the settings panel.
+export function periodSetting(
+  options: string[],
+  fallback: string,
+  /** Send the default period too, rather than leaving the server its own default window. */
+  sendDefault = false,
+): WidgetSettingSchema {
   return {
     key: 'period',
     type: 'segment',
@@ -31,6 +44,7 @@ export function periodSetting(options: string[], fallback: string): WidgetSettin
     options,
     default: fallback,
     inline: true,
+    ...(sendDefault ? { sendDefault: true } : {}),
   }
 }
 
@@ -53,8 +67,12 @@ export const CATEGORIES_SETTING: WidgetSettingSchema = {
 export interface WidgetReportScope {
   /** What to send the server. */
   scope: ReportScope
-  /** The chosen option's label, for the widget's header. */
+  /** The chosen option's label ("3 months", "Custom"), to mark which one is picked. */
   periodLabel: string
+  /** What the period reads as on the widget: the label, or a custom range's months. */
+  periodText: string
+  /** A custom range's months, when Custom is picked and both are set. */
+  custom: { from: string; to: string } | null
   tags: string[]
   categories: string[]
 }
@@ -63,6 +81,8 @@ function stringList(raw: unknown): string[] {
   return Array.isArray(raw) ? raw.filter((t): t is string => typeof t === 'string' && !!t) : []
 }
 
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/
+
 export function reportScope(instance: WidgetInstance, def: WidgetDefinition): WidgetReportScope {
   const setting = def.settings?.find((s) => s.key === 'period')
   const fallback = typeof setting?.default === 'string' ? setting.default : ''
@@ -70,11 +90,37 @@ export function reportScope(instance: WidgetInstance, def: WidgetDefinition): Wi
   const label = typeof chosen === 'string' && setting?.options?.includes(chosen) ? chosen : fallback
   const tags = stringList(instance.config?.tags)
   const categories = stringList(instance.config?.categories)
-  const period = label && label !== fallback ? PERIOD_BY_LABEL[label] : undefined
-  return { scope: { period, tags, categories }, periodLabel: label, tags, categories }
+  const from = instance.config?.periodFrom
+  const to = instance.config?.periodTo
+  const custom =
+    label === CUSTOM_PERIOD &&
+    typeof from === 'string' &&
+    typeof to === 'string' &&
+    MONTH.test(from) &&
+    MONTH.test(to) &&
+    from <= to
+      ? { from, to }
+      : null
+  const period =
+    label === CUSTOM_PERIOD
+      ? custom
+        ? `${custom.from}:${custom.to}`
+        : undefined
+      : label && (label !== fallback || setting?.sendDefault)
+        ? PERIOD_BY_LABEL[label]
+        : undefined
+  const periodText = custom ? monthSpan(custom.from, custom.to) : label
+  return {
+    scope: { period, tags, categories },
+    periodLabel: label,
+    periodText,
+    custom,
+    tags,
+    categories,
+  }
 }
 
-/** "Aug – Oct 2026", or one month's name. */
+/** "Aug – Oct", or one month's name; a range across years names both ("Nov 2025 – Feb"). */
 export function monthSpan(from: string, to: string): string {
   if (from === to) return fMonth(from, 'short')
   return `${fMonth(from, 'short')} – ${fMonth(to, 'short')}`
@@ -83,4 +129,9 @@ export function monthSpan(from: string, to: string): string {
 /** The tag chips a header shows ("#trip"), or nothing. */
 export function tagsText(tags: string[]): string {
   return tags.map((t) => `#${t}`).join(' ')
+}
+
+/** Whether a Reports widget filters by category or tag (not by period alone). */
+export function reportHasFilters(def: WidgetDefinition): boolean {
+  return !!def.settings?.some((s) => s.key === 'categories' || s.key === 'tags')
 }

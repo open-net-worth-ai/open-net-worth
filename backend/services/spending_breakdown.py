@@ -38,7 +38,7 @@ from datetime import date
 from backend.core.errors import ValidationError
 from backend.db.transaction_store import txn_text
 from backend.models.transaction import SPLIT
-from backend.services import labels, spending_bills, spending_income
+from backend.services import labels, spending_bills, spending_groups, spending_income
 from backend.services import ledger as ledger_service
 from backend.services import spending_periods as periods
 from backend.services.fx_cache import load_fx_cache
@@ -373,9 +373,11 @@ def spending_breakdown(
     period: str | None = None,
     baseline_periods: int | None = None,
     include_year_ago: bool = False,
+    group_by: list[str] | None = None,
     today: date | None = None,
 ) -> dict:
     today = today or date.today()
+    grouping = spending_groups.validate(group_by)
     start, end = periods.parse(date_from, "date_from"), periods.parse(date_to, "date_to")
     if end < start:
         raise ValidationError("date_to is before date_from")
@@ -460,4 +462,6 @@ def spending_breakdown(
             entry["category"] = entry["category"] or names.get(entry["category_id"], UNSORTED)
     if ya_win:
         out["year_ago"] = _span(ya_win, _totals(book.window(*ya_win)))
+    if grouping:
+        out["groups"] = spending_groups.groups(cur_rows, grouping)
     return out

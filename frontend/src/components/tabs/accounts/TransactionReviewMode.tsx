@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useKeepFieldInView } from './useKeepFieldInView'
 import { authFetch } from '../../../api/client'
 import { Check, ChevronLeft, Trash2 } from '../../../ui/icons'
 import { Button, ConfirmDialog, Modal } from '../../ui'
@@ -121,6 +122,7 @@ export function TransactionReviewMode({
   // it earns the confetti; opening onto an already-empty one does not.
   const [clearedCount, setClearedCount] = useState(0)
   const [inputMode, setInputMode] = useState<'keyboard' | 'pointer' | null>(null)
+  const keepFieldInView = useKeepFieldInView<HTMLDivElement>()
   // Outlives each keyed card, so the next one animates from the height the last one had.
   const cardHeight = useRef<number | null>(null)
   const lastCardHeight = useCallback(() => cardHeight.current, [])
@@ -411,6 +413,7 @@ export function TransactionReviewMode({
         footer={reviewFooter}
       >
         <div
+          ref={keepFieldInView}
           className="acct-review-stage"
           aria-label="Transaction review keyboard shortcuts"
           tabIndex={0}

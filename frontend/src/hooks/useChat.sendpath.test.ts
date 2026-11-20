@@ -24,10 +24,12 @@ vi.mock('../api/client', () => ({
 }))
 
 vi.mock('../utils/chatStore', () => ({
+  fetchServerSnapshot: vi.fn().mockResolvedValue(null),
   loadMessages: vi.fn().mockResolvedValue([]),
   reconcileWithRemote: vi.fn().mockResolvedValue(null),
   saveMessages: vi.fn(),
 }))
+vi.mock('../utils/chatServerSync', () => import('./__testing__/transcriptReadDouble'))
 
 // ── Import after mocks ─────────────────────────────────────────────────────────
 

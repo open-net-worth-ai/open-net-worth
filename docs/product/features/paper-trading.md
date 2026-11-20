@@ -23,16 +23,20 @@ connected over MCP.
 
 ## Start a paper portfolio
 
-Open **Intelligence → Paper Trading** and click **Create manually**. Give it a name, then
-start with:
+Open **Intelligence → Paper Trading**, click **New paper portfolio** (**+** on a phone) and pick
+**Create manually**. (With none yet, the page offers **Create manually** itself.) Give it a
+name, then start with:
 
 - **Cash**: the same amount as your investments, 10,000, 100,000, or another amount.
 - **A copy of my holdings**: today's holdings at today's prices.
 - **A portfolio I follow**: its current weights, bought with the cash you choose. On a Copy
   Trading portfolio, **Paper-copy** does this in one click.
 
-Or click **Create with Lucius** and describe the idea you want to test. Lucius suggests the
+Or pick **Create with Lucius** from the same menu and describe the idea you want to test. Lucius suggests the
 starting cash and the first trades, then creates the portfolio.
+
+The search box beside it finds a portfolio by its name, its idea, where it came from, its
+benchmark or a symbol it holds.
 
 Each paper portfolio is a card with its return against the benchmark, its two
 newest trades and a ring of what it holds.

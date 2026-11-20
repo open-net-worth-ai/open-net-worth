@@ -663,20 +663,31 @@ async def _generate_briefing(total_nw: float) -> dict:
     }
 
 
-@router.get("/api/briefing")
-async def get_briefing(
-    refresh: bool = Query(False),
-    current_nw: Optional[float] = Query(None),
-):
-    # Taken BEFORE the note is written: a change landing mid-generation then marks it stale
-    # rather than being silently folded into a fingerprint the note never saw.
-    fingerprint = await asyncio.to_thread(_current_fingerprint)
-    activity = await asyncio.to_thread(_current_activity)
-    if not refresh:
-        cached = _load_cache(fingerprint, activity)
-        if cached:
-            return {**_without_fingerprint(cached), "is_cached": True}
+def _saved_note() -> Optional[dict]:
+    """The last note written, read straight from its file with no freshness check — what the
+    card shows the moment it opens, while `GET /api/briefing` decides whether it still holds."""
+    try:
+        with open(CACHE_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) and data.get("note") else None
 
+
+@router.get("/api/briefing/saved")
+async def get_saved_briefing():
+    data = await asyncio.to_thread(_saved_note)
+    if not data:
+        return {"note": None}
+    return {**_without_fingerprint(data), "is_cached": True}
+
+
+# One rewrite at a time: two cards opening together (or a reload mid-write) used to start two
+# model calls for the same note. A caller that finds one running waits for it instead.
+_inflight: Optional[asyncio.Task] = None
+
+
+async def _write_briefing(current_nw: Optional[float], fingerprint, activity) -> dict:
     if current_nw is None:
         try:
             # Canonical add-everything fold (accounts + market), base-normalised —
@@ -697,3 +708,25 @@ async def get_briefing(
         return {**payload, "is_cached": False}
     data = _save_cache(payload, fingerprint, activity)
     return {**_without_fingerprint(data), "is_cached": False}
+
+
+@router.get("/api/briefing")
+async def get_briefing(
+    refresh: bool = Query(False),
+    current_nw: Optional[float] = Query(None),
+):
+    global _inflight
+    if _inflight is not None and not _inflight.done():
+        return await asyncio.shield(_inflight)
+    # Taken BEFORE the note is written: a change landing mid-generation then marks it stale
+    # rather than being silently folded into a fingerprint the note never saw.
+    fingerprint = await asyncio.to_thread(_current_fingerprint)
+    activity = await asyncio.to_thread(_current_activity)
+    if not refresh:
+        cached = _load_cache(fingerprint, activity)
+        if cached:
+            return {**_without_fingerprint(cached), "is_cached": True}
+    # Checked again: another request may have started a rewrite while this one fingerprinted.
+    if _inflight is None or _inflight.done():
+        _inflight = asyncio.create_task(_write_briefing(current_nw, fingerprint, activity))
+    return await asyncio.shield(_inflight)

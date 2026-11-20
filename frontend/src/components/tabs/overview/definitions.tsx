@@ -260,7 +260,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     defId: 'recent-added-txns',
-    rows: { options: [5, 10, 15, 25], default: 10 },
+    rows: { options: [5, 10, 15, 25, 'all'], default: 10 },
     label: 'Recently added',
     group: 'Cash flow',
     dsize: 4,
@@ -274,7 +274,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     defId: 'recent-txns',
-    rows: { options: [5, 10, 15, 25], default: 10 },
+    rows: { options: [5, 10, 15, 25, 'all'], default: 10 },
     label: 'Recent transactions',
     group: 'Cash flow',
     dsize: 4,
@@ -288,7 +288,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     defId: 'category-txns',
-    rows: { options: [5, 10, 15, 25], default: 10 },
+    rows: { options: [5, 10, 15, 25, 'all'], default: 10 },
     label: 'Category transactions',
     group: 'Cash flow',
     dsize: 4,
@@ -305,7 +305,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     // Category transactions with a home: titled and preset to the starter Subscriptions
     // category. Its Categories setting still takes any others.
     defId: 'subscriptions',
-    rows: { options: [5, 10, 15, 25], default: 10 },
+    rows: { options: [5, 10, 15, 25, 'all'], default: 10 },
     label: 'Subscriptions',
     group: 'Cash flow',
     dsize: 4,
@@ -592,15 +592,17 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     group: 'Reports',
     dsize: 3,
     dh: 188,
-    desc: 'Share of income saved last month or over a period, as a gauge.',
+    desc: 'Share of income saved this month or over a period, as a gauge.',
     title: 'Savings rate',
     source: { tab: 'plan', label: 'Plan' },
-    settings: [periodSetting(TOTAL_PERIOD_OPTIONS, 'Last month')],
+    // This month by default, sent as a period: the server's own default is the last complete
+    // month, which read as "Oct" in November.
+    settings: [periodSetting(TOTAL_PERIOD_OPTIONS, 'This month', true)],
     icon: icon('<path d="M4 14a8 8 0 0 1 16 0" /><path d="M12 14l4-3" />'),
   },
   {
     defId: 'rep-merchants',
-    rows: { options: [5, 10, 15, 25], default: 10 },
+    rows: { options: [5, 10, 15, 25, 'all'], default: 10 },
     label: 'Top merchants',
     group: 'Reports',
     dsize: 4,

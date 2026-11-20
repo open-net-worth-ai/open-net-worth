@@ -8,6 +8,7 @@ flow is exactly the three single months added up.
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from backend.core.errors import ValidationError
@@ -16,17 +17,36 @@ from backend.core.user_time import user_today
 PERIODS = ("this_month", "last_month", "3m", "6m", "12m", "ytd")
 _TRAILING = {"3m": 3, "6m": 6, "12m": 12}
 _EPSILON = 0.005
+# A custom range, "YYYY-MM:YYYY-MM", both months included.
+_RANGE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2]):(\d{4})-(0[1-9]|1[0-2])$")
 
 
 def _ym(index: int) -> str:
     return f"{index // 12}-{index % 12 + 1:02d}"
 
 
+def _custom_months(period: str) -> list[str] | None:
+    match = _RANGE.match(period)
+    if not match:
+        return None
+    start = int(match[1]) * 12 + int(match[2]) - 1
+    end = int(match[3]) * 12 + int(match[4]) - 1
+    if end < start:
+        raise ValidationError(f"period {period!r} ends before it starts")
+    return [_ym(i) for i in range(start, end + 1)]
+
+
 def period_months(period: str, today: date | None = None) -> list[str]:
     """The months (`YYYY-MM`, oldest first) `period` covers. Trailing periods end with this
-    month, so they include the month in progress — the same window the reports always used."""
+    month, so they include the month in progress — the same window the reports always used.
+    A custom `YYYY-MM:YYYY-MM` covers its two months and every month between."""
+    custom = _custom_months(period)
+    if custom is not None:
+        return custom
     if period not in PERIODS:
-        raise ValidationError(f"period must be one of {', '.join(PERIODS)}, got {period!r}")
+        raise ValidationError(
+            f"period must be one of {', '.join(PERIODS)} or YYYY-MM:YYYY-MM, got {period!r}"
+        )
     day = today or user_today()
     now = day.year * 12 + (day.month - 1)
     if period == "this_month":

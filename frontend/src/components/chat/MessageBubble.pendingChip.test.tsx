@@ -5,7 +5,7 @@
 // not-yet-delivered, clearing exactly on delivery (the `pending` field going away).
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { MessageBubble } from './MessageBubble'
 import type { Message } from '../../types/chat'
 
@@ -51,5 +51,22 @@ describe('MessageBubble — pending (queued) user message', () => {
 
     expect(container.querySelector('.msg-pending-chip')).toBeNull()
     expect(container.querySelector('.msg-user-pending')).toBeNull()
+  })
+})
+
+describe('MessageBubble — a queued message that never reached Lucius', () => {
+  it('says so instead of "Still queued" forever, and offers Retry (live report 2026-11-18)', () => {
+    const onRetryQueued = vi.fn()
+    const { getByText, getByRole, queryByText } = render(
+      <MessageBubble
+        message={{ id: 'm9', role: 'user', text: 'sign-up offers?', pending: 'failed' }}
+        onSendMessage={noop}
+        onRetryQueued={onRetryQueued}
+      />,
+    )
+    expect(getByText('Not delivered — Lucius never read this')).toBeTruthy()
+    expect(queryByText(/Queued/)).toBeNull()
+    fireEvent.click(getByRole('button', { name: /Retry/ }))
+    expect(onRetryQueued).toHaveBeenCalledWith('m9')
   })
 })
