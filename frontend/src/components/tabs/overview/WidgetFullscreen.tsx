@@ -23,7 +23,7 @@ import { CheckboxGroup } from '../../ui/CheckboxGroup'
 import { X, ChevronDown } from '../../../ui/icons'
 import { useCategories, usePlanningSummary } from '../../../hooks/serverState'
 import { ColorPicker } from '../accounts/ds'
-import { AUTOH_IDS, fitMode } from './grid'
+import { AUTOH_IDS, fitMode, heightModeFor } from './grid'
 import { ALL_ROWS, CURATED_ACCENTS, DEFAULT_CUSTOM_HEX, rowCap } from './widgetDisplayShared'
 import { resolveCategoryIds } from './categoryRefs'
 import { GridItemContext } from './gridItemContext'
@@ -32,7 +32,6 @@ import { vizOptionsFor, vizOf } from './vizModel'
 import { ReportFilterControls, ReportPeriodControl } from './widgets/ReportFilter'
 import { reportHasFilters } from './widgets/reportScope'
 import type {
-  HeightMode,
   RegisterDeepLink,
   WidgetContentProps,
   WidgetDefinition,
@@ -337,7 +336,7 @@ function SwatchRow({
 }
 
 interface Ctrl {
-  group: 'Appearance' | 'Data' | 'Lucius'
+  group: 'Appearance' | 'Settings' | 'Data' | 'Lucius'
   key: string
   node: ReactNode
 }
@@ -378,8 +377,11 @@ export function WidgetFullscreen({
   // On a phone, a Reports widget's settings split into two tabs: how it looks, what it counts.
   const [railTab, setRailTab] = useState<'appearance' | 'filters'>('appearance')
   const cfg = instance.config || {}
-  const isAutoh = AUTOH_IDS.has(instance.defId)
   const vizOpts = vizOptionsFor(def)
+  // Net worth's Numbers view has no chart to fill its box, so it fits its numbers too — or keeps
+  // a set height, like any list.
+  const heroNumbers = instance.defId === 'hero' && vizOf(instance, def) === 'numbers'
+  const isAutoh = AUTOH_IDS.has(instance.defId) || heroNumbers
   const isLux = !!def.lucius || instance.defId === 'briefing' || instance.defId === 'lux-ask'
   // Mirrors GridCard's own accent-tint resolution, so the fullscreen preview
   // shows the SAME emphasis tint as the grid card it was opened from.
@@ -458,7 +460,9 @@ export function WidgetFullscreen({
     })
   }
   if (isAutoh) {
-    const fit = fitMode(instance.defId, instance.heightMode)
+    const fit = heroNumbers
+      ? instance.heightMode !== 'fixed'
+      : fitMode(instance.defId, instance.heightMode)
     appearance.push({
       group: 'Appearance',
       key: 'height',
@@ -472,7 +476,13 @@ export function WidgetFullscreen({
                 type="button"
                 className={'ov-fs-chip' + ((fit ? 'Fit' : 'Fixed') === o ? ' on' : '')}
                 onClick={() =>
-                  onPatch({ heightMode: o === 'Fit' ? undefined : ('fixed' as HeightMode) })
+                  onPatch({
+                    heightMode: heroNumbers
+                      ? o === 'Fit'
+                        ? undefined
+                        : 'fixed'
+                      : heightModeFor(instance.defId, o === 'Fit'),
+                  })
                 }
               >
                 {o}
@@ -535,13 +545,14 @@ export function WidgetFullscreen({
   const onFilters = !!filters && railTab === 'filters'
   // A Reports widget's period, categories and tags are drawn as one Filters section (the same
   // controls as the widget's header pill), not one generic row each.
+  const settings: Ctrl[] = []
   ;(def.settings || [])
     .filter((st) => !st.inline)
     .forEach((st) => {
       const cur = cfg[st.key] !== undefined ? cfg[st.key] : st.default
       if (st.type === 'segment' && st.options) {
-        appearance.push({
-          group: 'Appearance',
+        settings.push({
+          group: 'Settings',
           key: st.key,
           node: (
             <div className="ov-fs-ctl" key={st.key}>
@@ -563,8 +574,8 @@ export function WidgetFullscreen({
         })
       } else if (st.type === 'categories' || st.type === 'categoryIds') {
         const Row = st.type === 'categoryIds' ? LedgerCategorySettingRow : CategorySettingRow
-        appearance.push({
-          group: 'Appearance',
+        settings.push({
+          group: 'Settings',
           key: st.key,
           node: (
             <Row
@@ -576,8 +587,8 @@ export function WidgetFullscreen({
           ),
         })
       } else if (st.type === 'pairs') {
-        appearance.push({
-          group: 'Appearance',
+        settings.push({
+          group: 'Settings',
           key: st.key,
           node: (
             <div className="ov-fs-ctl ov-fs-ctl-wide" key={st.key}>
@@ -590,8 +601,8 @@ export function WidgetFullscreen({
           ),
         })
       } else if (st.type === 'url') {
-        appearance.push({
-          group: 'Appearance',
+        settings.push({
+          group: 'Settings',
           key: st.key,
           node: (
             <div className="ov-fs-ctl" key={st.key}>
@@ -696,6 +707,8 @@ export function WidgetFullscreen({
 
   const hasData = data.length > 0
   const hasLux = lux.length > 0
+  const hasSettings = settings.length > 0
+  const hasRail = !!filters || hasSettings || hasLux
   const label = instance.title || def.title || def.label
   const preview = (
     <div
@@ -751,6 +764,12 @@ export function WidgetFullscreen({
         <div className="ov-fs-sheet">
           {railTabs}
           {onFilters ? filters : appearance.map((c) => c.node)}
+          {!onFilters && hasSettings && (
+            <>
+              <div className="ov-fs-bar-h">Settings</div>
+              {settings.map((c) => c.node)}
+            </>
+          )}
           {!onFilters && hasData && (
             <>
               <div className="ov-fs-bar-h">Data</div>
@@ -841,7 +860,7 @@ export function WidgetFullscreen({
       <Dialog.Portal>
         <Dialog.Overlay className="ov-fs-backdrop">
           <Dialog.Content
-            className={'ov-fs-shell' + (filters ? ' ov-fs-shell--split' : '')}
+            className="ov-fs-shell"
             aria-describedby={undefined}
             // Focus the editor itself, not the card's first control: that drew a focus ring
             // around the widget's filter pill every time Edit opened.
@@ -860,39 +879,38 @@ export function WidgetFullscreen({
             <div className="ov-fs-body">
               <div className="ov-fs-main">
                 <div className="ov-fs-preview">{preview}</div>
-                {/* A widget with filters: how it looks goes under the preview, what it counts
-                    in the column on the right. */}
-                {filters && (
-                  <div className="ov-fs-below">
-                    <div className="ov-fs-bar-h">Appearance</div>
-                    <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
-                  </div>
-                )}
-                {(hasData || hasLux) && (
+                {/* Every widget: how it looks goes under the preview; what it shows (filters,
+                    its own settings, a Lucius prompt) in the column on the right. */}
+                <div className="ov-fs-below">
+                  <div className="ov-fs-bar-h">Appearance</div>
+                  <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
+                </div>
+                {hasData && (
                   <div className="ov-fs-data">
-                    {hasData && (
-                      <div className="ov-fs-data-sec">
-                        <div className="ov-fs-bar-h">Data</div>
-                        <div className="ov-fs-inline">{data.map((c) => c.node)}</div>
-                      </div>
-                    )}
-                    {hasLux && <div className="ov-fs-data-sec">{lux.map((c) => c.node)}</div>}
+                    <div className="ov-fs-data-sec">
+                      <div className="ov-fs-bar-h">Data</div>
+                      <div className="ov-fs-inline">{data.map((c) => c.node)}</div>
+                    </div>
                   </div>
                 )}
               </div>
-              <div className="ov-fs-rail">
-                {filters ? (
-                  <>
-                    <div className="ov-fs-bar-h">Filters</div>
-                    {filters}
-                  </>
-                ) : (
-                  <>
-                    <div className="ov-fs-bar-h">Appearance</div>
-                    <div className="ov-fs-stack">{appearance.map((c) => c.node)}</div>
-                  </>
-                )}
-              </div>
+              {hasRail && (
+                <div className="ov-fs-rail">
+                  {filters && (
+                    <>
+                      <div className="ov-fs-bar-h">Filters</div>
+                      {filters}
+                    </>
+                  )}
+                  {hasSettings && (
+                    <>
+                      <div className="ov-fs-bar-h">Settings</div>
+                      <div className="ov-fs-stack">{settings.map((c) => c.node)}</div>
+                    </>
+                  )}
+                  {hasLux && lux.map((c) => c.node)}
+                </div>
+              )}
             </div>
             {/* The editor's footer, full width under the preview and the settings: the app's
                 workspace-modal footer (a top divider, its buttons on the right). */}

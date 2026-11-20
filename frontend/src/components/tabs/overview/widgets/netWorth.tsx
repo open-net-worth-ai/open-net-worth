@@ -516,7 +516,7 @@ const Hero: ComponentType<WidgetContentProps> = ({ instance, def, onNavigate }) 
   // A monthly series needs two months before there is a line to draw. Until then the
   // number+chart card shows its numbers alone — not a chart-sized hole with a caption.
   const heroViz = chosen === 'full' && !loading && history.length < 2 ? 'numbers' : chosen
-  useFitContentWhen(heroViz === 'numbers')
+  useFitContentWhen(heroViz === 'numbers' && instance.heightMode !== 'fixed')
   const mode: 'trend' | 'comp' = instance.config?.chart === 'Composition' ? 'comp' : 'trend'
   const range = (instance.config?.range as string) || '3M'
   return (

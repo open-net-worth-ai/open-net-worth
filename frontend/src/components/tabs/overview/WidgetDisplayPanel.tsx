@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { Button, Modal } from '../../ui'
 import { ColorPicker } from '../accounts/ds'
-import { AUTOH_IDS } from './grid'
+import { AUTOH_IDS, fitMode, heightModeFor } from './grid'
 import { findDefinition } from './definitions'
 import { ALL_ROWS, CURATED_ACCENTS, DEFAULT_CUSTOM_HEX, rowCap } from './widgetDisplayShared'
 import type { HeightMode } from './types'
@@ -39,7 +39,7 @@ export function WidgetDisplayPanel({
   onSave,
 }: WidgetDisplayPanelProps) {
   const [draftHideTitle, setDraftHideTitle] = useState(!!hideTitle)
-  const [draftFixed, setDraftFixed] = useState(heightMode === 'fixed')
+  const [draftFixed, setDraftFixed] = useState(!fitMode(defId, heightMode))
   const [draftLimit, setDraftLimit] = useState<number | null>(limit ?? null)
   const [draftAccent, setDraftAccent] = useState<string | null>(accent ?? null)
 
@@ -52,7 +52,7 @@ export function WidgetDisplayPanel({
   const save = () => {
     onSave({
       hideTitle: draftHideTitle,
-      heightMode: draftFixed ? 'fixed' : undefined,
+      heightMode: heightModeFor(defId, !draftFixed),
       limit: isList ? draftLimit : undefined,
       accent: draftAccent,
     })

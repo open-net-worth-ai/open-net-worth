@@ -44,6 +44,7 @@ import {
   computeDisplayLayout,
   sectionMembership,
   fitMode,
+  heightModeFor,
   phoneOrdered,
   topmostFit,
 } from './grid'
@@ -787,9 +788,10 @@ export function DashboardGrid({
               fitOn={fitMode(displayItem.defId, displayItem.heightMode)}
               onToggleFit={() =>
                 layout.patchItem(displayItem.instanceId, {
-                  heightMode: fitMode(displayItem.defId, displayItem.heightMode)
-                    ? 'fixed'
-                    : undefined,
+                  heightMode: heightModeFor(
+                    displayItem.defId,
+                    !fitMode(displayItem.defId, displayItem.heightMode),
+                  ),
                 })
               }
               onRemove={editing ? () => layout.removeItem(displayItem.instanceId) : undefined}
