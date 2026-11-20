@@ -106,7 +106,8 @@ function putTo(url: string) {
   return authFetch.mock.calls.find((c) => c[0] === url && c[1]?.method === 'PUT')
 }
 
-const T = { timeout: 4000 }
+// Each step is a mocked round trip plus a re-render; a loaded CI runner has passed 4s.
+const T = { timeout: 15000 }
 
 /** The first "Use this" button — a detected CLI provider is one click. */
 async function firstUseThis(): Promise<HTMLElement> {
