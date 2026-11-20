@@ -30,6 +30,7 @@ const loadMessages = vi.fn()
 const reconcileWithRemote = vi.fn()
 
 vi.mock('../utils/chatStore', () => ({
+  fetchServerSnapshot: vi.fn().mockResolvedValue(null),
   loadMessages: (...a: unknown[]) => loadMessages(...a),
   reconcileWithRemote: (...a: unknown[]) => reconcileWithRemote(...a),
   saveMessages: vi.fn(),

@@ -21,6 +21,7 @@ vi.mock('../api/client', () => ({
 }))
 const mockReconcile = vi.fn()
 vi.mock('../utils/chatStore', () => ({
+  fetchServerSnapshot: vi.fn().mockResolvedValue(null),
   loadMessages: vi.fn().mockResolvedValue([]),
   reconcileWithRemote: (...args: unknown[]) => mockReconcile(...args),
   saveMessages: vi.fn(),

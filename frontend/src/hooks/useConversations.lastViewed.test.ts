@@ -15,6 +15,7 @@ vi.mock('../api/client', () => ({
 }))
 
 vi.mock('../utils/chatStore', () => ({
+  fetchServerSnapshot: vi.fn().mockResolvedValue(null),
   deleteMessages: vi.fn(),
 }))
 

@@ -15,6 +15,7 @@ vi.mock('../api/client', () => ({
   setUnauthorizedHandler: vi.fn(),
 }))
 vi.mock('../utils/chatStore', () => ({
+  fetchServerSnapshot: vi.fn().mockResolvedValue(null),
   loadMessages: vi.fn(),
   reconcileWithRemote: vi.fn(),
   saveMessages: vi.fn(),
