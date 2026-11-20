@@ -20,6 +20,7 @@
   right: 0;
 }
 .ui-modal-card.acct-review-mode {
+  --acct-review-floor: min(640px, calc(100dvh - 190px));
   width: min(520px, calc(100vw - 40px));
   max-height: calc(100dvh - 40px);
   padding: 0;
@@ -241,8 +242,12 @@
      (stage 620-680px across the kinds, 2026-09-21), and the dialog re-centred with it. Most
      cards clear this, so they render at one height; the category search is the only thing
      that grows it. Never a fixed height — that forced tall cards to scroll inside themselves,
-     which clipped the heading and hid the search results. */
-  min-height: 640px;
+     which clipped the heading and hid the search results. Capped at what the dialog can
+     give it: the dialog tops out at 100dvh - 40px, and its head + footer take ~140px more, so
+     on a short screen (an iPad in landscape, 700px) a full 640px floor overflowed a 521px body —
+     the card centred in the hidden height, a gap above it and its bottom clipped beyond scroll
+     reach (owner report 2026-11-20). */
+  min-height: var(--acct-review-floor);
   padding: 18px 20px 16px;
   /* A dragged card is clipped sideways; a card taller than a short desktop viewport scrolls
      instead of being cut off by the modal. */
@@ -258,7 +263,7 @@
   --receipt-edge-w: 2px;
 }
 .acct-review-state {
-  min-height: 640px;
+  min-height: var(--acct-review-floor);
   display: grid;
   place-content: center;
   justify-items: center;
