@@ -55,7 +55,7 @@ def play(script):
         send({"jsonrpc": "2.0", **note})
 
 def record(kind, params):
-    with open(RECORD, "a") as fh:
+    with open(RECORD, "a", encoding="utf-8") as fh:
         fh.write(json.dumps({"kind": kind, "params": params}) + "\n")
 
 for raw in sys.stdin:
@@ -143,7 +143,7 @@ def _rows(record, kind):
         return []
     return [
         json.loads(line)["params"]
-        for line in record.read_text().splitlines()
+        for line in record.read_text(encoding="utf-8").splitlines()
         if json.loads(line)["kind"] == kind
     ]
 
