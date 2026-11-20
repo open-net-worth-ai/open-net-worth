@@ -189,9 +189,31 @@ analysis while the feature is on, combined with Lucius's own analysis and never 
   failure guards hold, nothing runs a model inside the run's path, and an instrument with no take
   yet costs nothing. If that trigger declines, `_key_issues_force_stale` is also true while the
   newest usable run is not the one the take used, so the next page open regenerates it.
-- **The take never starts a run** (it costs money); it only uses an existing one.
+- **The take never starts a run** (it costs money); it only uses an existing one. A finished run
+  does start one background model call on the take's provider, once per run and only for a ticker
+  that already has a take.
 - **New disclosure.** The decision text (up to 1,200 characters) now also goes to the take's own
-  model provider, the one that already receives the position block. The product page says so.
+  model provider, the one that already receives the position block. The product page says so. The
+  text may restate figures the run was shown (a position size, a price); the digest does not
+  filter them.
+
+Review fixes (same day):
+
+- **Considered is not used.** The chip's `trading_agents_run_id` is the run the take USED.
+  Staleness compares `trading_agents_considered_run_id`, set at the end of every completed pass
+  that had a digest whatever it wrote (empty take, refused answer, off-subject skip, no evidence, a
+  swallowed write), so a pass that records no run cannot be asked again by every page load.
+  `trading_agents_attempted_run_id` / `_at` (set when the pass starts) bound a pass that never
+  completes to one retry per run per 12 hours; a genuinely newer run is still taken once.
+- **The digest is fenced data.** It is its own `--- BEGIN/END TRADINGAGENTS DATA ---` block beside
+  the untrusted news, scrubbed like the news snippets, on one line per field, with the fence words
+  stripped from the text; never part of the trusted context header.
+- **Only the take's own pass reads it** (`brief_stale`). A crash, news-spike or material-news pass
+  writes the Intel timeline and can push, so it never sees the digest; the rule also forbids the
+  mention in `message`, `headline`, `analysis`, `why`, `impact` and `actions`. A take rewritten by
+  such a pass drops the chip until the next `brief_stale` pass.
+- **The page hears about the take.** A completed pass publishes an `intel` data event; the refetch
+  it causes finds nothing superseded.
 
 ## Alternatives considered
 

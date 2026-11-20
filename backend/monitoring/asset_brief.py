@@ -1255,6 +1255,36 @@ def stamp_key_issues_checked(instrument_id: str, now: str) -> None:
     )
 
 
+def stamp_trading_agents_attempt(instrument_id: str, run_id: str, now: str) -> None:
+    """A synthesis pass is starting with TradingAgents run ``run_id`` as input
+    (``services.trading_agents.take_input.awaiting``): even a pass that never completes asks again
+    for this run no sooner than ``take_input.RETRY_HOURS``."""
+    store = AssetBriefStore()
+    store.upsert_brief(
+        {
+            **(store.get(instrument_id) or {}),
+            "instrument_id": instrument_id,
+            "trading_agents_attempted_run_id": run_id,
+            "trading_agents_attempted_at": now,
+        }
+    )
+
+
+def stamp_trading_agents_considered(instrument_id: str, run_id: str) -> None:
+    """A COMPLETED pass was shown TradingAgents run ``run_id``, whatever it then wrote — a take, an
+    empty one, nothing. This, not the displayed ``trading_agents_run_id`` (the run the take used),
+    is what ``take_input.supersedes`` compares, so a pass that records no usable take is not asked
+    again by every page load."""
+    store = AssetBriefStore()
+    store.upsert_brief(
+        {
+            **(store.get(instrument_id) or {}),
+            "instrument_id": instrument_id,
+            "trading_agents_considered_run_id": run_id,
+        }
+    )
+
+
 def stamp_key_issues_refresh_stage(instrument_id: str, stage: str) -> None:
     """Raw (non-monotonic) `key_issues_refresh_stage` write — the on-demand top-up's own
     progress marker (`backend.monitoring.analyst.trigger_on_demand_brief_refresh`), on its OWN

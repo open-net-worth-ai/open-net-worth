@@ -36,6 +36,10 @@ Brief schema:
                                   TradingAgents run informed the take above (services.
                                   trading_agents.take_input); absent when the take was written
                                   without one.
+    trading_agents_considered_run_id : str  the run a COMPLETED pass was shown, whatever it wrote
+                                  (what staleness compares; ``..._run_id`` above is what the take
+                                  USED and what the chip shows); trading_agents_attempted_run_id /
+                                  trading_agents_attempted_at : a pass that started with it.
     key_issues_synthesized_at : ISO|None  when key_issues/portfolio_narrative last landed, OR
                                   the last time a COMPLETED synthesis pass checked and found
                                   nothing to show (H1 fix, security-review 2026-08-29 —

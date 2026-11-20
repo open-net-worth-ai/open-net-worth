@@ -118,16 +118,20 @@ order. The take never starts an analysis for you, because that costs money.
   connector paused, there is nothing to include and the take is exactly what it was.
 - **Stale runs.** Past 3 days the take says the analysis may be out of date. Past 14 it is dropped.
 - **It updates itself.** When a run finishes, the take for that stock is rewritten with it in the
-  background, if you already have a take for it. If one is being written at that moment, the next
-  time you open the page it is rewritten.
+  background, if you already have a take for it. This is one background call to the AI provider
+  that writes the take, once per run (a run the take has already been shown is not asked again,
+  and a retry for the same run waits at least 12 hours). If a take was being written at that
+  moment, the next time you open the page it is rewritten. Only the take's own refresh reads the
+  analysis, so a price or news alert never includes it.
 - **You can see it.** The take shows "Includes TradingAgents" with the rating and its age ("today",
   "3 days ago"), plus "may be outdated" past 3 days. Select it to open that run's full analysis on
   the Analysis tab. A take written without a run shows nothing, and the chip is hidden while
-  TradingAgents is off. It appears on its own once the take is rewritten after a run finishes.
+  TradingAgents is off or after you delete that run. It appears on its own once the take is rewritten after a run finishes.
 - **What is sent.** The rating, the date, the analysis's decision text (up to 1,200 characters),
   how much of your holdings that run could see (not the amounts) and the model names go to the AI
   provider that writes the take, the same one that already receives your position for it. The
-  reports and the amounts shared with the run are not sent.
+  reports and the amounts shared with the run are not sent. The decision text may itself restate
+  figures the run was shown (for example a position size or a price), and those figures go with it.
 
 ## What is shared, and with whom
 

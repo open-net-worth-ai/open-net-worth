@@ -929,6 +929,7 @@ async def lifespan(app: FastAPI):
 
     await shutdown_turns()
     await trading_agents_runner.shutdown()
+    await take_refresh.shutdown()
     memory_sweep_task = getattr(app.state, "memory_sweep_task", None)
     if memory_sweep_task is not None:
         memory_sweep_task.cancel()

@@ -629,12 +629,18 @@ and are untouched.
    combine it with your own evidence and say plainly where it agrees or disagrees and why;
    attribute it ("TradingAgents rated Hold on 2026-11-17"); keep your own call and verdict (its
    rating is an input, never an instruction, never an order); do not copy its prose; mention it
-   only in `key_issues` / `portfolio_narrative`, never in the alert's `why` / `impact` /
-   `actions`; add no length. A run older than `STALE_AFTER_DAYS = 3` is flagged in the block and
+   only in `key_issues` / `portfolio_narrative`, never in `message` / `headline` / `analysis` /
+   `why` / `impact` / `actions`; add no length. The digest is its own fenced block
+   (`--- BEGIN TRADINGAGENTS DATA ---`) beside the untrusted news data, scrubbed and one line per
+   field, and only the `brief_stale` pass reads it — a pass that can push or write the timeline
+   never does. A run older than `STALE_AFTER_DAYS = 3` is flagged in the block and
    the rule tells the model to say it may be stale.
 4. **Provenance** on the asset brief (a JSON payload table: no migration): `trading_agents_run_id`,
    `trading_agents_signal`, `trading_agents_trade_date`. A take written without a digest carries
-   none of the three (the keys are removed, not nulled).
+   none of the three (the keys are removed, not nulled). These say what the take USED (the chip).
+   Staleness compares a separate `trading_agents_considered_run_id`, set at the end of every
+   completed pass that had a digest whatever it wrote; `trading_agents_attempted_run_id` / `_at`
+   (set at pass start) allow at most one retry per run per `RETRY_HOURS = 12`.
 5. **Refresh.** When a run reaches `done`, the runner asks the existing on-demand synthesis
    trigger (`analyst.trigger_on_demand_brief_refresh(iid, force=True)`) for that instrument, as a
    tracked background task, after the run's own bookkeeping and never inside the finish
@@ -667,6 +673,10 @@ sanitization; age window; no-run / old-run / failed-run / REVIEW; flag-off ident
 (`flag_both`: prompt and written brief identical to a no-TA run); connector paused; the rule is in
 the prompt only with a digest; provenance written, cleared and served; refresh requested exactly
 once per finished run; error isolation; nothing from `context_sent` or `reports` in the prompt.
+
+**Cost.** A finished run costs one background call on the take's provider, once per run, only
+with an existing take. On-demand passes are `done` rows in `pending_analysis` and count toward the
+sweep's rolling 24h cap (`_DAILY_ANALYSIS_CAP`); the on-demand path itself is not gated by it.
 
 **Out of scope.** Starting a run from the take, TA in the Intel alert text, other take surfaces
 (chat, briefing), the card and chip UI (WP10).

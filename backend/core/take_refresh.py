@@ -7,7 +7,8 @@ refresh is inverted through this leaf seam, like ``core.headless_turn``: ``main.
 
 ``request`` never blocks and never raises: it schedules the registered coroutine as a tracked
 background task (the model call must not run inside the run's own path) and drops the request when
-nothing is registered or no loop is running.
+nothing is registered or no loop is running. ``shutdown`` (app teardown) clears the refresher and
+cancels what is still running, so no model call outlives the loop it was started on.
 
 This module imports nothing internal so ``core`` stays a leaf.
 """
@@ -50,3 +51,12 @@ def request(run_id: str) -> None:
         return
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
+
+
+async def shutdown() -> None:
+    """Stop accepting refreshes and cancel every one still in flight."""
+    register(None)
+    pending = list(_tasks)
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
