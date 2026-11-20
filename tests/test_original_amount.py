@@ -497,6 +497,9 @@ def test_add_tool_transfer_ignores_explicit_original(env):
                 "to_account_id": usd,
                 "amount": 100.0,
                 "currency": "SGD",
+                # The destination leg is stated, so the transfer stands whether or not an
+                # SGD/USD rate happens to be known (equal amounts across a known pair refuse).
+                "to_amount": 77.5,
                 "original_amount": 74.0,
                 "original_currency": "USD",
                 "description": "Move to USD wallet",
