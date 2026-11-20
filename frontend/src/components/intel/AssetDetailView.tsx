@@ -35,6 +35,8 @@ import { QuoteStats } from './QuoteStats'
 import { MarketStatusChip } from './MarketStatusChip'
 import { AnalystConsensus, AnalystConsensusRailCard } from './AnalystConsensus'
 import { TradingAgentsCard } from './TradingAgentsCard'
+import { TradingAgentsInputChip } from './TradingAgentsInputChip'
+import type { TaFocus } from './useTaPanel'
 import { NewsCardGrid } from './NewsCardGrid'
 import { LatestDevelopments } from './LatestDevelopments'
 import { PriceMovementTimeline } from './PriceMovementTimeline'
@@ -125,6 +127,13 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
     handleProps: railHandleProps,
   } = useRailResize()
   const [activeTab, setActiveTab] = useState<DetailTab>(() => loadDetailTab(search.sub))
+  // The take's TradingAgents chip asks the Analysis tab's card to open that run.
+  const [taFocus, setTaFocus] = useState<TaFocus | null>(null)
+  const openTaRun = useCallback((runId: string) => {
+    setActiveTab('analysis')
+    setTaFocus((f) => ({ runId, seq: (f?.seq ?? 0) + 1 }))
+  }, [])
+  const taFocusHandled = useCallback(() => setTaFocus(null), [])
   // One effect covers three cases: (1) mirror a manual tab click into the URL, (2) deep-link /
   // back-forward (?sub=analysis) for the SAME instrument, and (3) the Intel tab reusing one
   // AssetDetailView instance across tickers (no remount), where `instrumentId` changes under
@@ -1036,6 +1045,12 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                               ticker={asset.ticker}
                             />
                           )}
+                          {data.trading_agents_input && (
+                            <TradingAgentsInputChip
+                              input={data.trading_agents_input}
+                              onOpen={openTaRun}
+                            />
+                          )}
                           <p className="asd-pi-disclaimer">
                             <Info size={12} aria-hidden="true" />
                             <span>{TAKE_NOT_ADVICE}</span>
@@ -1184,7 +1199,12 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                 />
               )}
               {data.has_ticker && asset.asset_class === 'equity' && asset.ticker && (
-                <TradingAgentsCard instrumentId={instrumentId} ticker={asset.ticker} />
+                <TradingAgentsCard
+                  instrumentId={instrumentId}
+                  ticker={asset.ticker}
+                  focus={taFocus}
+                  onFocusHandled={taFocusHandled}
+                />
               )}
               <AnalystConsensus
                 data={analyst.data}

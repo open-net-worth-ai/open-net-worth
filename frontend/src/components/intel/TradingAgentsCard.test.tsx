@@ -10,6 +10,8 @@ import { TaError } from '../../hooks/useTradingAgents'
 import type { TaRun, TaRunSummary, TaStatus } from '../../types/tradingAgents'
 import { CONTEXT, makeRun, makeStatus, makeSummary } from './tradingAgentsFixtures'
 import { TradingAgentsCard } from './TradingAgentsCard'
+import { _resetTaPanelMemoryForTests } from './useTaPanel'
+import type { TaFocus } from './useTaPanel'
 
 const navigate = vi.hoisted(() => vi.fn())
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
@@ -81,11 +83,21 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
+  _resetTaPanelMemoryForTests()
   restore()
   vi.clearAllMocks()
 })
 
-const mount = () => render(<TradingAgentsCard instrumentId="inst_acme" ticker="ACME" />)
+const mount = (focus: TaFocus | null = null, onFocusHandled?: () => void) =>
+  render(
+    <TradingAgentsCard
+      instrumentId="inst_acme"
+      ticker="ACME"
+      focus={focus}
+      onFocusHandled={onFocusHandled}
+    />,
+  )
+const openFull = () => fireEvent.click(screen.getByRole('button', { name: 'Show full analysis' }))
 
 describe.each([false, true])('with the trading_agents flag %s', (on) => {
   it(on ? 'renders the card' : 'renders nothing at all', () => {
@@ -381,13 +393,27 @@ describe('running', () => {
 })
 
 describe('done', () => {
-  it('shows the rating, the decision, the report rows that exist and the footer', () => {
+  it('shows only the rating, the decision and the disclaimer until the full analysis is opened', () => {
     setup({ runs: [makeSummary()], run: makeRun() })
     const { container } = mount()
     expect(screen.getByRole('img', { name: 'Rating: Overweight, 4 of 5' })).toBeTruthy()
     expect(container.querySelector('.ta-decision')?.textContent).toBe(
       'Overweight ACME: the thesis holds.',
     )
+    expect(screen.getByText(/Research only\. Ratings come from AI models/)).toBeTruthy()
+    expect(screen.queryByText('Market', { selector: 'summary' })).toBeNull()
+    expect(screen.queryByText('What was shared', { selector: 'summary' })).toBeNull()
+    expect(screen.queryByText(/\$0\.38 metered/)).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Earlier analyses' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull()
+  })
+
+  it('shows the report rows that exist, the history and the footer once opened', () => {
+    const older = makeSummary({ id: 'tar_000000000000', signal: 'Hold', trade_date: '2026-10-30' })
+    setup({ runs: [makeSummary(), older], run: makeRun(), total: 2 })
+    mount()
+    openFull()
+    expect(screen.getAllByRole('img', { name: 'Rating: Overweight, 4 of 5' })).toHaveLength(2)
     for (const row of ['Market', 'Bull vs Bear', 'Portfolio manager', 'What was shared']) {
       expect(screen.getByText(row, { selector: 'summary' })).toBeTruthy()
     }
@@ -395,7 +421,69 @@ describe('done', () => {
       expect(screen.queryByText(row, { selector: 'summary' })).toBeNull()
     }
     expect(screen.getByText(/\$0\.38 metered/)).toBeTruthy()
+    expect(screen.getByRole('list', { name: 'Earlier analyses' })).toBeTruthy()
     expect(screen.getByText(/Research only\. Ratings come from AI models/)).toBeTruthy()
+  })
+
+  it('cuts a long decision at a sentence boundary and expands it in place', () => {
+    const long = `${'First point stands. '.repeat(2)}Third point holds. Fourth point is held back. Fifth too.`
+    setup({ runs: [makeSummary()], run: makeRun({ decision_text: long }) })
+    const { container } = mount()
+    const decision = () => container.querySelector('.ta-decision')?.textContent
+    expect(decision()).toBe('First point stands. First point stands. Third point holds.')
+    const more = screen.getByRole('button', { name: 'Show more' })
+    expect(more.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(more)
+    expect(decision()).toBe(long)
+    const less = screen.getByRole('button', { name: 'Show less' })
+    expect(less.getAttribute('aria-expanded')).toBe('true')
+    expect(less.getAttribute('aria-controls')).toBe(
+      container.querySelector('.ta-decision')?.getAttribute('id'),
+    )
+    fireEvent.click(less)
+    expect(decision()).toBe('First point stands. First point stands. Third point holds.')
+  })
+
+  it('opens and closes the full analysis with a labelled, controlled region', () => {
+    setup({ runs: [makeSummary()], run: makeRun() })
+    mount()
+    const toggle = screen.getByRole('button', { name: 'Show full analysis' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('region', { name: 'Full analysis' })).toBeNull()
+    fireEvent.click(toggle)
+    const hide = screen.getByRole('button', { name: 'Hide full analysis' })
+    expect(hide.getAttribute('aria-expanded')).toBe('true')
+    const region = screen.getByRole('region', { name: 'Full analysis' })
+    expect(hide.getAttribute('aria-controls')).toBe(region.id)
+    fireEvent.click(hide)
+    expect(screen.queryByText('Market', { selector: 'summary' })).toBeNull()
+  })
+
+  it('remembers the open state for the ticker while the page lives', () => {
+    setup({ runs: [makeSummary()], run: makeRun() })
+    mount()
+    openFull()
+    cleanup()
+    mount()
+    expect(screen.getByRole('button', { name: 'Hide full analysis' })).toBeTruthy()
+  })
+
+  it('opens the requested run in full, scrolls to it and reports the request handled', () => {
+    const older = makeSummary({ id: 'tar_000000000000', signal: 'Hold', trade_date: '2026-10-30' })
+    setup({ runs: [makeSummary(), older], run: makeRun({ id: older.id }), total: 2 })
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    const handled = vi.fn()
+    mount({ runId: 'tar_000000000000', seq: 1 }, handled)
+    expect(screen.getByRole('button', { name: 'Hide full analysis' })).toBeTruthy()
+    expect(scroll).toHaveBeenCalledTimes(1)
+    expect(handled).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the latest run when the requested one is gone', () => {
+    setup({ runs: [makeSummary()], run: makeRun() })
+    mount({ runId: 'tar_deleted', seq: 1 })
+    expect(screen.getByRole('img', { name: 'Rating: Overweight, 4 of 5' })).toBeTruthy()
   })
 
   it('shows the thesis chip from the server stance and never computes one', () => {
@@ -444,6 +532,7 @@ describe('done', () => {
       }),
     })
     mount()
+    openFull()
     expect(screen.getByText('Shortened at 40,000 characters.')).toBeTruthy()
     expect(screen.getByText(/receives the ticker and date, and:/)).toBeTruthy()
   })
@@ -452,6 +541,7 @@ describe('done', () => {
     api.deleteTaRun.mockResolvedValue(undefined)
     setup({ runs: [makeSummary()], run: makeRun() })
     mount()
+    openFull()
     fireEvent.click(screen.getByRole('button', { name: 'Delete run' }))
     expect(screen.getByText('Delete this run?')).toBeTruthy()
     const buttons = screen.getAllByRole('button', { name: 'Delete run' })
@@ -463,6 +553,7 @@ describe('done', () => {
     api.deleteTaRun.mockRejectedValue(new TaError('The run is locked.'))
     setup({ runs: [makeSummary()], run: makeRun() })
     mount()
+    openFull()
     fireEvent.click(screen.getByRole('button', { name: 'Delete run' }))
     const buttons = screen.getAllByRole('button', { name: 'Delete run' })
     fireEvent.click(buttons[buttons.length - 1]!)
@@ -474,6 +565,7 @@ describe('done', () => {
     api.deleteTaRun.mockResolvedValue(undefined)
     setup({ runs: [makeSummary()], run: makeRun() })
     mount()
+    openFull()
     fireEvent.click(screen.getByRole('button', { name: 'Delete run' }))
     const buttons = screen.getAllByRole('button', { name: 'Delete run' })
     fireEvent.click(buttons[buttons.length - 1]!)
@@ -493,6 +585,7 @@ describe('done', () => {
     const older = makeSummary({ id: 'tar_000000000000', signal: 'Hold', trade_date: '2026-10-30' })
     setup({ runs: [makeSummary(), older], run: makeRun(), total: 2 })
     mount()
+    openFull()
     const list = screen.getByRole('list', { name: 'Earlier analyses' })
     expect(within(list).getAllByRole('button')).toHaveLength(2)
     expect(within(list).getAllByRole('button')[0]!.getAttribute('aria-current')).toBe('true')

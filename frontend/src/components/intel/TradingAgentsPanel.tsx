@@ -9,7 +9,7 @@ import { TradingAgentsReport } from './TradingAgentsReport'
 import { TradingAgentsRunForm } from './TradingAgentsRunForm'
 import { TradingAgentsStopped } from './TradingAgentsStopped'
 import { useTaPanel } from './useTaPanel'
-import type { TaPanelState } from './useTaPanel'
+import type { TaFocus, TaPanelState } from './useTaPanel'
 
 const TITLE = 'TradingAgents · research only'
 
@@ -53,8 +53,8 @@ function unavailable(status: TaStatus): Unavailable | null {
 function Disclaimer() {
   return (
     <Text size="xs" tone="faint" className="ta-disclaimer">
-      Research only. Ratings come from AI models reading public data and can be wrong. Not financial
-      advice, never an order.
+      Research only. Ratings come from AI models and can be wrong. Not financial advice, never an
+      order.
     </Text>
   )
 }
@@ -76,12 +76,25 @@ function History({ p }: { p: TaPanelState }) {
   )
 }
 
+/** A finished featured run folds the history behind its "Show full analysis"; a stopped one
+ *  keeps it in view. While the run loads there is no history to place yet. */
+const stoppedRun = (p: TaPanelState) =>
+  !!p.featured && !(p.featured.status === 'done' && p.featured.signal)
+
 /** The featured run: its report, why it stopped, or a placeholder while it loads. */
 function Result({ p }: { p: TaPanelState }) {
   const run = p.featured
   if (!run) return p.featuredId ? <Skeleton height={36} width="100%" /> : null
   if (run.status === 'done' && run.signal) {
-    return <TradingAgentsReport run={run} onDelete={p.askDelete} />
+    return (
+      <TradingAgentsReport
+        run={run}
+        onDelete={p.askDelete}
+        open={p.fullOpen}
+        onToggle={p.toggleFull}
+        history={<History p={p} />}
+      />
+    )
   }
   return (
     <TradingAgentsStopped
@@ -141,7 +154,7 @@ function BlockedBody({ p, blocked }: { p: TaPanelState; blocked: Unavailable }) 
   const openSetup = () =>
     void navigate({ to: '/connectors', search: { connector: 'trading_agents' } } as never)
   return (
-    <Stack gap="--space-5">
+    <Stack gap="--space-4">
       <Cluster justify="between" gap="--space-4">
         <Text size="sm" tone="faint">
           {blocked.message}
@@ -155,7 +168,7 @@ function BlockedBody({ p, blocked }: { p: TaPanelState; blocked: Unavailable }) 
       {p.featuredId && (
         <>
           <Result p={p} />
-          <History p={p} />
+          {stoppedRun(p) && <History p={p} />}
           <Disclaimer />
         </>
       )}
@@ -166,7 +179,7 @@ function BlockedBody({ p, blocked }: { p: TaPanelState; blocked: Unavailable }) 
 function ReadyBody({ p, status, ticker }: { p: TaPanelState; status: TaStatus; ticker: string }) {
   const composeNew = p.rows.length === 0 || p.composing
   return (
-    <Stack gap="--space-5">
+    <Stack gap="--space-4">
       {composeNew ? (
         <TradingAgentsRunForm
           ticker={ticker}
@@ -180,7 +193,7 @@ function ReadyBody({ p, status, ticker }: { p: TaPanelState; status: TaStatus; t
       ) : (
         <Result p={p} />
       )}
-      {!composeNew && <History p={p} />}
+      {!composeNew && stoppedRun(p) && <History p={p} />}
       <Disclaimer />
     </Stack>
   )
@@ -188,8 +201,8 @@ function ReadyBody({ p, status, ticker }: { p: TaPanelState; status: TaStatus; t
 
 /** The card body for one ticker, one state at a time: loading, live run, not available (the last
  *  report stays readable), or the form / last report with its history. */
-export function TradingAgentsPanel({ ticker }: { ticker: string }) {
-  const p = useTaPanel(ticker)
+export function TradingAgentsPanel({ ticker, focus }: { ticker: string; focus: TaFocus | null }) {
+  const p = useTaPanel(ticker, focus)
   const st = p.status.data
   if (!st && p.status.error) {
     return (

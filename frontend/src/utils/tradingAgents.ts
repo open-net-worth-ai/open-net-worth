@@ -131,3 +131,42 @@ export function stageRows(run: TaRun, now: number): StageRow[] {
     }
   })
 }
+
+const DECISION_SENTENCES = 3
+const DECISION_CHARS = 400
+
+/** How a rating chip words a run's age: "today", "yesterday", "3 days ago". */
+export function runAgeText(ageDays: number): string {
+  if (ageDays <= 0) return 'today'
+  if (ageDays === 1) return 'yesterday'
+  return `${ageDays} days ago`
+}
+
+/** The short form of a decision: its first few sentences, within a character budget, cut at a
+ *  sentence boundary (a newline counts as one) — a single sentence longer than the budget is cut
+ *  at a word with an ellipsis. `cut` says whether anything was left out. */
+export function condenseDecision(
+  text: string,
+  maxSentences = DECISION_SENTENCES,
+  maxChars = DECISION_CHARS,
+): { text: string; cut: boolean } {
+  const full = text.trim()
+  const ends: number[] = []
+  for (const m of full.matchAll(/[.!?]+(?=\s)|\n+/g)) {
+    const end = m[0].startsWith('\n') ? m.index : m.index + m[0].length
+    if (end > (ends.at(-1) ?? 0)) ends.push(end)
+  }
+  const bySentences = ends.length >= maxSentences ? ends[maxSentences - 1]! : full.length
+  let limit = bySentences
+  if (limit > maxChars) {
+    const fitting = ends.filter((e) => e <= maxChars).at(-1)
+    if (fitting) limit = fitting
+    else {
+      const head = full.slice(0, maxChars)
+      const space = head.lastIndexOf(' ')
+      const word = space > maxChars / 2 ? head.slice(0, space) : head
+      return { text: `${word.trimEnd()}…`, cut: true }
+    }
+  }
+  return { text: full.slice(0, limit).trimEnd(), cut: limit < full.length }
+}

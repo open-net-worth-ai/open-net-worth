@@ -172,3 +172,7 @@ export const TA_ACTIVE_STATUSES: readonly TaRunStatus[] = ['queued', 'running']
 
 /** The asset card lists this many runs at most; older ones are in Settings, Cost & Performance. */
 export const TA_HISTORY_MAX = 20
+
+/** A run older than this many days is flagged as possibly outdated where the take uses it
+ *  (the backend's `take_input.STALE_AFTER_DAYS`). */
+export const TA_STALE_AFTER_DAYS = 3

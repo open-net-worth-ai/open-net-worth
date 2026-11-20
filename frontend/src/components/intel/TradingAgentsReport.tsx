@@ -1,9 +1,11 @@
+import { useId, useState } from 'react'
+import type { ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { TA_FIELD_LABEL, TA_REPORT_SECTIONS } from '../../types/tradingAgentsConstants'
 import type { TaReportField, TaRun } from '../../types/tradingAgents'
 import { fCompact, fCurrency, fDate, timeAgo } from '../../utils/format'
-import { modelRef, modelText, runProviders } from '../../utils/tradingAgents'
+import { condenseDecision, modelRef, modelText, runProviders } from '../../utils/tradingAgents'
 import { Badge, Button, Cluster, Stack, Tag, Text } from '../ui'
 import { SAFE_MARKDOWN_COMPONENTS } from '../ui/safeMarkdown'
 import { TradingAgentsRating } from './TradingAgentsRating'
@@ -83,9 +85,57 @@ function footerParts(run: TaRun): string[] {
   ].filter(Boolean)
 }
 
-/** A finished run: the rating, how it sits against the owner's thesis (as the server judged it),
- *  the decision, the reports behind it, and what was shared. Presentational. */
-export function TradingAgentsReport({ run, onDelete }: { run: TaRun; onDelete: () => void }) {
+/** The decision, short by default (first sentences, cut at a sentence boundary) with the whole
+ *  text one tap away. */
+function Decision({ text }: { text: string | null }) {
+  const [more, setMore] = useState(false)
+  const id = useId()
+  if (!text) {
+    return (
+      <Text size="sm" tone="faint">
+        No decision text was recorded.
+      </Text>
+    )
+  }
+  const short = condenseDecision(text)
+  return (
+    <Stack gap="--space-2">
+      <div className="ta-decision" id={id}>
+        <ReportMarkdown>{more || !short.cut ? text : short.text}</ReportMarkdown>
+      </div>
+      {short.cut && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ta-toggle"
+          aria-expanded={more}
+          aria-controls={id}
+          onClick={() => setMore((m) => !m)}
+        >
+          {more ? 'Show less' : 'Show more'}
+        </Button>
+      )}
+    </Stack>
+  )
+}
+
+/** A finished run: the rating, how it sits against the owner's thesis (as the server judged it)
+ *  and a short decision up front; the reports behind it, what was shared, the run's history and
+ *  its cost behind one "Show full analysis" control (`history` is that slot). Presentational: the
+ *  open state is the caller's. */
+export function TradingAgentsReport({
+  run,
+  onDelete,
+  open,
+  onToggle,
+  history,
+}: {
+  run: TaRun
+  onDelete: () => void
+  open: boolean
+  onToggle: () => void
+  history: ReactNode
+}) {
   const fields = run.reports?.fields ?? {}
   const truncated = run.reports?.truncated ?? []
   const sections = TA_REPORT_SECTIONS.flatMap((section) => {
@@ -97,9 +147,10 @@ export function TradingAgentsReport({ run, onDelete }: { run: TaRun; onDelete: (
   })
   const judgment = run.thesis_judgment
   const when = run.finished_at ?? run.created_at
+  const fullId = useId()
 
   return (
-    <Stack gap="--space-5">
+    <Stack gap="--space-4">
       <div className="ta-result">
         {run.signal && <TradingAgentsRating signal={run.signal} />}
         {judgment?.read && (
@@ -115,47 +166,56 @@ export function TradingAgentsReport({ run, onDelete }: { run: TaRun; onDelete: (
         {run.requested_by === 'lucius' && <Tag tone="lucius">Asked by Lucius</Tag>}
         {run.requested_by === 'automation' && <Tag tone="muted">Automation</Tag>}
       </Cluster>
-      {run.decision_text ? (
-        <div className="ta-decision">
-          <ReportMarkdown>{run.decision_text}</ReportMarkdown>
-        </div>
-      ) : (
-        <Text size="sm" tone="faint">
-          No decision text was recorded.
-        </Text>
-      )}
-      <div>
-        {sections.map((section) => (
-          <ReportRow
-            key={section.id}
-            label={section.label}
-            parts={section.parts}
-            truncated={truncated}
-          />
-        ))}
-        {run.decision_text && (
-          <ReportRow
-            label="Portfolio manager"
-            parts={[{ field: null, text: run.decision_text }]}
-            truncated={truncated}
-          />
+      <Decision key={run.id} text={run.decision_text} />
+      <Button
+        variant="ghost"
+        size="sm"
+        className="ta-toggle"
+        aria-expanded={open}
+        aria-controls={fullId}
+        onClick={onToggle}
+      >
+        {open ? 'Hide full analysis' : 'Show full analysis'}
+      </Button>
+      <section id={fullId} aria-label="Full analysis" hidden={!open}>
+        {open && (
+          <Stack gap="--space-5">
+            <div>
+              {sections.map((section) => (
+                <ReportRow
+                  key={section.id}
+                  label={section.label}
+                  parts={section.parts}
+                  truncated={truncated}
+                />
+              ))}
+              {run.decision_text && (
+                <ReportRow
+                  label="Portfolio manager"
+                  parts={[{ field: null, text: run.decision_text }]}
+                  truncated={truncated}
+                />
+              )}
+              <details className="ta-disclose">
+                <summary>What was shared</summary>
+                <div className="ta-disclose__body">
+                  <TradingAgentsShared
+                    context={run.context_sent}
+                    providers={runProviders(run.config_snapshot)}
+                  />
+                </div>
+              </details>
+            </div>
+            {history}
+            <p className="ta-footer">
+              {footerParts(run).join(' · ')} ·{' '}
+              <Button variant="ghost" size="sm" onClick={onDelete}>
+                Delete run
+              </Button>
+            </p>
+          </Stack>
         )}
-        <details className="ta-disclose">
-          <summary>What was shared</summary>
-          <div className="ta-disclose__body">
-            <TradingAgentsShared
-              context={run.context_sent}
-              providers={runProviders(run.config_snapshot)}
-            />
-          </div>
-        </details>
-      </div>
-      <p className="ta-footer">
-        {footerParts(run).join(' · ')} ·{' '}
-        <Button variant="ghost" size="sm" onClick={onDelete}>
-          Delete run
-        </Button>
-      </p>
+      </section>
     </Stack>
   )
 }

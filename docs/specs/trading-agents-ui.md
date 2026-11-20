@@ -983,7 +983,7 @@ Default view is the rating and a short decision; everything else is behind one c
   decision in place; it is a `Button variant="ghost" size="sm"` with `aria-expanded`.
 - **"Show full analysis"** is the one control that reveals everything else: the reports
   accordion, "What was shared", History and the models/cost footer. Collapsed by default,
-  state is component state (no `localStorage`), reset when the featured run changes.
+  state is kept in memory per ticker for the page load (no `localStorage`); the take's chip opens it.
   Expanded, those regions render exactly as in 2.4 (no redesign of their contents).
 - **Kept visible always:** rating pill + scale, as-of/age line, thesis chip, disclaimer line,
   "Run new analysis".

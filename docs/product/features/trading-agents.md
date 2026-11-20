@@ -66,10 +66,15 @@ only** card.
    in progress or waiting, and a **Cancel** button. One run goes at a time and up to three can
    wait.
 
-A finished run shows the rating, the portfolio manager's decision, each written report, what it
-cost and **What was shared**. If you have an investment thesis on the stock, the rating is set
-beside it and where the price sits against it. The thesis is compared on your computer afterwards
-and never sent to TradingAgents. **Earlier analyses** lists past runs; you can delete one.
+A finished run opens short: the rating, the date it covers, and the first few sentences of the
+portfolio manager's decision (**Show more** reads the rest). If you have an investment thesis on the
+stock, the rating is set beside it and where the price sits against it. The thesis is compared on
+your computer afterwards and never sent to TradingAgents. One line of research-only disclaimer is
+always in view.
+
+**Show full analysis** opens everything else: each written report, **What was shared**,
+**Earlier analyses** (past runs; you can delete one), and what the run cost. It stays open or closed
+for that stock until you reload the page.
 
 A run that stops early says why and keeps what it spent:
 
@@ -115,8 +120,10 @@ order. The take never starts an analysis for you, because that costs money.
 - **It updates itself.** When a run finishes, the take for that stock is rewritten with it in the
   background, if you already have a take for it. If one is being written at that moment, the next
   time you open the page it is rewritten.
-- **You can see it.** The take shows "Includes TradingAgents" with the rating and its age, linked
-  to the run. A take written without a run shows nothing.
+- **You can see it.** The take shows "Includes TradingAgents" with the rating and its age ("today",
+  "3 days ago"), plus "may be outdated" past 3 days. Select it to open that run's full analysis on
+  the Analysis tab. A take written without a run shows nothing, and the chip is hidden while
+  TradingAgents is off. It appears on its own once the take is rewritten after a run finishes.
 - **What is sent.** The rating, the date, the analysis's decision text (up to 1,200 characters),
   how much of your holdings that run could see (not the amounts) and the model names go to the AI
   provider that writes the take, the same one that already receives your position for it. The
