@@ -3,7 +3,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ActionMenu, Button, ConfirmDialog, ErrorState, PageTabs, TabSkeleton, Tag } from '../../ui'
 import { AutopilotTag } from './AutopilotTag'
 import { Spark } from '../../../lucius/identity'
-import { fCurrency, fDateTime } from '../../../utils/format'
+import { fCurrency, fDateTime, fTime } from '../../../utils/format'
 import { SortTable, type Column } from '../following/SortTable'
 import { NameCell } from '../following/NameCell'
 import { SectorPie } from '../following/SectorPie'
@@ -456,14 +456,16 @@ function holdingColumns(
   return cols
 }
 
-/** When a fill came later than its order (one placed after the close fills at the open): the
- *  fill's time, shown under the status. An order that filled as it was placed shows none. */
-function filledLater(o: PaperOrder): string | null {
+/** A filled order's fill time, muted after its status on the same line so every row keeps one
+ *  height: "at 9:42 PM", with the date too when it filled on a later day than it was placed
+ *  (one placed after the close fills at the open). */
+function fillTime(o: PaperOrder): string | null {
   if (!o.fill) return null
-  const placed = Date.parse(o.placed_at)
-  const filled = Date.parse(o.fill.filled_at)
-  if (Number.isNaN(placed) || Number.isNaN(filled) || filled - placed < 60_000) return null
-  return fDateTime(o.fill.filled_at)
+  const placed = new Date(o.placed_at)
+  const filled = new Date(o.fill.filled_at)
+  if (Number.isNaN(filled.getTime())) return null
+  const sameDay = placed.toDateString() === filled.toDateString()
+  return `at ${sameDay ? fTime(filled) : fDateTime(o.fill.filled_at)}`
 }
 
 function orderStatus(o: PaperOrder): string {
@@ -519,11 +521,11 @@ function orderColumns(cancel: (id: string) => void): Column<PaperOrder>[] {
       primary: true,
       // A short status; the server's full sentence (why it waits, until when) is its tooltip.
       cell: (o) => {
-        const late = filledLater(o)
+        const at = fillTime(o)
         return (
           <span title={o.state_reason ?? undefined}>
             {orderStatus(o)}
-            {late && <span className="paper-fill-when">{late}</span>}
+            {at && <span className="paper-fill-when">{at}</span>}
           </span>
         )
       },
