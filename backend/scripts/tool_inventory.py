@@ -66,6 +66,11 @@ ATTRIBUTE_LIST_PARAMS: dict[str, str] = {
     "reorder_envelopes_in_group.categories": "one group, an ordered list",
     "save_code_as_skill.parameters": "one skill, many parameters",
     "calculate.expressions": "one call, many expressions (batch by design)",
+    # Reviewed 2026-11-21: each call records ONE record of the running paper autopilot review;
+    # a later call replaces it whole. The list is that record's contents, not entities acted on.
+    "record_autopilot_memo.lessons": "one review memo, its lessons on stocks fully sold",
+    "record_challenge.verdicts": "one review's challenge, a verdict per proposed buy",
+    "record_risk_review.verdicts": "one review's risk review, a verdict per buy",
     # One entity, list-valued attributes — reviewed 2026-07-19 against each handler.
     "add_watchlist_item.search_queries": "one item, many queries",
     "add_watchlist_item.linked_tickers": "one item, many tickers",
