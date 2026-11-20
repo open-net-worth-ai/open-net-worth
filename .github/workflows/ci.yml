@@ -367,6 +367,24 @@ jobs:
           npm ci
           npm run build
 
+  # --- test-frontend: the vitest suite. It never ran in CI, so failures sat unnoticed on main.
+  test-frontend:
+    name: test (frontend, vitest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: npm ci && npm test
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+
   # --- package: the wheel a user installs is self-contained. Build it, install it into a
   # clean environment (no checkout on sys.path), boot `onw start` from it on an isolated
   # scratch root, and hit the API, the SPA and the docs. This is the evidence behind
@@ -432,7 +450,7 @@ jobs:
   ci-ok:
     name: ci ok
     if: ${{ always() }}
-    needs: [privacy, lint, type, test, test-flags, test-windows, db-postgres, build, package]
+    needs: [privacy, lint, type, test, test-flags, test-windows, db-postgres, build, test-frontend, package]
     runs-on: ubuntu-24.04
     steps:
       - name: Every gating job passed
