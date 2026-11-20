@@ -1,4 +1,4 @@
-"""get_spending_advice_before_payment — the verdict logic over stubbed authorities, and the flag.
+"""get_spending_advice_before_payment — the verdict logic over stubbed authorities.
 
 The service composes the Budget table, card coverage and the Commitments feed; these tests stub
 those reads with synthetic figures so each verdict path is pinned exactly. The figures-match-the-
@@ -204,16 +204,7 @@ def test_missing_fx_rate_is_a_clear_error(book):
         _advise(amount=10, currency="XYZ")
 
 
-@pytest.mark.flags(spending_advice=False)
-def test_tool_refuses_while_the_flag_is_off():
-    text, change = asyncio.run(
-        registry.dispatch("get_spending_advice_before_payment", {"amount": 5, "currency": "USD"})
-    )
-    assert change is None and "switched off" in json.loads(text)["error"]
-
-
-@pytest.mark.flags(spending_advice=True)
-def test_tool_returns_the_advice_when_on(book):
+def test_tool_returns_the_advice(book):
     text, _ = asyncio.run(
         registry.dispatch(
             "get_spending_advice_before_payment",

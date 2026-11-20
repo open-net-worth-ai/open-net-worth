@@ -17,13 +17,8 @@ from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of
 from backend.core.errors import OpenNetWorthError
 from backend.services import spending_advice as advice_service
-from backend.services.feature_flags import enabled as flag_enabled
 
 _NAME = "get_spending_advice_before_payment"
-_OFF = (
-    "Spending advice is switched off on this install (Settings → Developer → Experimental). "
-    "Answer from simulate_cashflow, get_commitments and get_budget_month instead."
-)
 
 
 class GetSpendingAdviceInput(ToolInput):
@@ -73,8 +68,6 @@ class GetSpendingAdviceInput(ToolInput):
     input_schema=schema_of(GetSpendingAdviceInput, tool_name=_NAME),
 )
 async def get_spending_advice_before_payment(input_data: dict):
-    if not flag_enabled("spending_advice"):
-        return json.dumps({"error": _OFF}), None
     missing = [key for key in ("amount", "currency") if input_data.get(key) in (None, "")]
     if missing:
         return json.dumps({"error": f"{' and '.join(missing)} required."}), None

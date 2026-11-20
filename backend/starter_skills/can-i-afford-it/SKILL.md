@@ -31,8 +31,8 @@ Options: <its options in words — always including "buy anyway">
 ```
 
 Never shame; talk about the money, not the person. Offer a cover as a move the user
-approves, never make it. If the tool says spending advice is switched off, or the question is
-a big one-off, a new monthly cost, or how long cash would last, use the steps below instead.
+approves, never make it. If the question is a big one-off, a new monthly cost, or how long cash
+would last, use the steps below instead.
 
 ## Steps
 

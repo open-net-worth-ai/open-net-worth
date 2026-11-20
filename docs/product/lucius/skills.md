@@ -135,7 +135,7 @@ using the words you'd actually type.
 - [Mentioning things in chat](mentions.md) — `@` and `/` in the message box
 - [Permissions](permissions.md) — what a skill can't override
 
-## Ask Lucius before you buy (experimental)
+## Ask Lucius before you buy
 
 Lucius tells you before you spend, not after. Ask in chat, on Telegram or by voice, for
 example "Can I buy a 1,400 laptop?" or "Is 84 at ACME Store OK for a gift, on Card A?". Lucius
@@ -151,7 +151,3 @@ until** a named date (only when a bill before payday would be short, and never f
 you mark essential); or **not this month**. "Buy anyway" is always an option, and Lucius never
 moves money for you: covering a shortfall is a budget change you approve as usual. Nothing is
 written to your book.
-
-Off by default: switch on **Ask Lucius before you buy** in Settings → Developer →
-[Experimental](../features/settings.md#experimental-features). With it off, Lucius answers
-"can I afford it" from your cash and runway, as before.
