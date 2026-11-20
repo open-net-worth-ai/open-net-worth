@@ -50,11 +50,14 @@ def buy_amount(
     return want * FILL_ROOM, label
 
 
-def trim_amount(*, conviction: str, total: float, current: float) -> tuple[float, str]:
-    """(amount to sell in home currency, why): down to the conviction's weight."""
+def trim_amount(
+    *, conviction: str, total: float, current: float, cap_pct: float | None = None
+) -> tuple[float, str]:
+    """(amount to sell in home currency, why): down to the conviction's weight, and never above
+    the mandate's cap — a trim of a holding over its cap must end under it."""
     if total <= 0:
         return 0.0, "the portfolio has no value to size against"
-    weight = CONVICTION_WEIGHT[conviction]
+    weight = target_weight(conviction, cap_pct)
     extra = current - weight * total
     if extra <= MIN_TRADE * total:
         return 0.0, f"already at {current / total:.1%}, below its {weight:.0%} target"

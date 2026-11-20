@@ -103,8 +103,17 @@ def _clean(pid: str, verdicts, allowed: tuple, text_key: str, allowed_words: str
 
 async def decide(pid: str, row: dict, runner, settings: dict) -> list[dict]:
     """Challenge and risk-review the review's buys, then size and place what is left. Only when
-    the review finished with its memo; a review that failed places nothing. Never raises."""
-    a = autopilot.of(service.portfolio(pid))
+    the review finished with its memo; a review that failed places nothing. Never raises: an
+    error before placing places nothing (``execute`` itself never raises)."""
+    try:
+        return await _decide(pid, row, runner, settings)
+    except Exception:  # noqa: BLE001 — fail safe: nothing new is placed, the review still logs
+        logger.exception("autopilot committee failed for %s", pid)
+        return []
+
+
+async def _decide(pid: str, row: dict, runner, settings: dict) -> list[dict]:
+    a = await asyncio.to_thread(lambda: autopilot.of(service.portfolio(pid)))
     if not (a.get("memo_draft") or {}).get("memo"):
         return []
     proposals = list(a.get("proposals_draft") or [])
@@ -116,11 +125,11 @@ async def decide(pid: str, row: dict, runner, settings: dict) -> list[dict]:
         ok = await _turn(
             runner, challenge_prompt(row, buys), CHALLENGE_TOOLS, CHALLENGE_CALLS, settings
         )
-        verdicts = _draft(pid, "challenge_draft") if ok else None
+        verdicts = await asyncio.to_thread(_draft, pid, "challenge_draft") if ok else None
         buys = _apply_challenge(buys, verdicts, notes, dropped)
     if buys:
         ok = await _turn(runner, risk_prompt(row, buys), RISK_TOOLS, RISK_CALLS, settings)
-        verdicts = _draft(pid, "risk_draft") if ok else None
+        verdicts = await asyncio.to_thread(_draft, pid, "risk_draft") if ok else None
         buys = _apply_risk(buys, verdicts, notes, dropped)
     placed = await asyncio.to_thread(autopilot_proposals.execute, pid, others + buys)
     out = [{**o, **notes.get(o["asset"], {})} for o in placed]

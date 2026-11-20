@@ -122,8 +122,9 @@ def _lessons(runs: list[dict]) -> list[dict]:
 def _lesson_due(book, fills: list[dict], lessons: list[dict]) -> list[str]:
     """Stocks fully sold whose last sale has no lesson written after it, newest first."""
     last_lesson: dict[str, str] = {}
+    # Lessons are stored upper-cased (autopilot._clean_lessons): match on the same form.
     for item in lessons:
-        last_lesson.setdefault(item["symbol"], str(item["at"]))
+        last_lesson.setdefault(str(item["symbol"]).upper(), str(item["at"]))
     due: list[str] = []
     seen: set[str] = set()
     for f in fills:
@@ -132,7 +133,7 @@ def _lesson_due(book, fills: list[dict], lessons: list[dict]) -> list[str]:
         seen.add(f["asset_key"])
         if book.quantity(f["asset_key"]) > 0:
             continue
-        if last_lesson.get(f["symbol"], "") < str(f["at"] or ""):
+        if last_lesson.get(str(f["symbol"]).upper()[:20], "") < str(f["at"] or ""):
             due.append(f["symbol"])
     return due[:MAX_DUE]
 

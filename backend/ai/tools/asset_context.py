@@ -236,7 +236,8 @@ def _paper_run_lookup(ticker: str) -> dict | str | None:
     from backend.core.automation_runner import get_automation_approval
 
     ctx = get_automation_approval()
-    if ctx is None or not ctx.simulation_only or not ctx.paper_portfolio_id:
+    in_review = ctx is not None and ctx.automation_id.startswith("autopilot:")
+    if not in_review or not ctx.simulation_only or not ctx.paper_portfolio_id:
         return None
     from backend.services.instruments import resolve_instrument
 

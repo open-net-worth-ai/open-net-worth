@@ -192,6 +192,54 @@ def test_a_trim_sells_down_to_its_weight(paper_db, lucius):
     assert 0.035 < _weight(pid) < 0.045
 
 
+def test_a_trim_of_a_holding_over_its_cap_ends_under_the_cap(paper_db, lucius):
+    # Review finding: a high-conviction trim aimed at 10% left a holding over an 8% cap.
+    pid = _new(max_position_pct=8)["id"]
+    body = {"asset_key": ACME, "side": "buy", "quantity": 120, "override_mandate": True}
+    place(pid, body, origin="owner")  # about 12%, over the cap
+    lucius(proposals=[{"asset": ACME, "action": "trim", "conviction": "high", "why": "Over cap"}])
+    with flags(autopilot_committee=True):
+        _review(pid)
+    assert 0.07 < _weight(pid) <= 0.08
+
+
+def test_a_trim_never_aims_above_the_cap():
+    amount, _ = autopilot_sizing.trim_amount(
+        conviction="high", total=100_000, current=12_000, cap_pct=8
+    )
+    assert amount == pytest.approx(4_000)
+
+
+def test_cash_promised_to_an_open_order_is_not_spent_again(paper_db, lucius):
+    # Review finding: a buy still waiting from an earlier review holds its cash; sizing must
+    # plan against the cash that is actually free.
+    pid = _new()["id"]
+    waiting = {"asset_key": ACME, "side": "buy", "quantity": 1800, "order_type": "limit"}
+    body = {**waiting, "limit_price": 50.0, "tif": "gtc", "override_mandate": True}
+    place(pid, body, origin="owner")  # holds 90,000
+    lucius(proposals=[{"asset": "ACOIN", "action": "buy", "conviction": "high", "why": "Bet"}])
+    with flags(autopilot_committee=True):
+        _review(pid)
+    coin = _weight(pid, "inst:inst_coin")
+    # 10,000 free, 5,000 kept as the floor: about 5% bought, never the 10% high conviction asks.
+    assert 0.04 < coin < 0.055
+
+
+def test_a_committee_error_places_nothing_and_the_review_still_logs(paper_db, lucius, monkeypatch):
+    from backend.services.paper_trading import autopilot_committee
+
+    def broken(*a, **kw):
+        raise RuntimeError("database went away")
+
+    monkeypatch.setattr(autopilot_committee, "_draft", broken)
+    pid = _new()["id"]
+    lucius(proposals=[{"asset": ACME, "action": "buy", "conviction": "high", "why": "Leader"}])
+    with flags(autopilot_committee=True):
+        out = _review(pid)
+    assert out["status"] == "done" and _weight(pid) == 0.0
+    assert _last_run(pid)["proposals"] == []
+
+
 def test_a_proposal_the_mandate_refuses_is_logged_not_fatal(paper_db, lucius, monkeypatch):
     # Offline: the market lookup for a ticker the app has never seen finds nothing.
     monkeypatch.setattr(

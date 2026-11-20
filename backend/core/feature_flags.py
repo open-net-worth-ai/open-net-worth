@@ -284,7 +284,9 @@ FLAGS: tuple[Flag, ...] = (
             "stock it already holds competes with new ones for the same cash. Before any buy, "
             "a challenge argues against it (keep, shrink or drop) and a risk review checks the "
             "buys as a set (approve or trim). History shows every proposal and what happened "
-            "to it. Off: the review places its own orders, as before."
+            "to it. Off: the review places its own orders, as before. Its track record, lessons "
+            "and lookup of a stock the app hasn't seen are not part of this flag: they run "
+            "either way."
         ),
         default=False,
         owner="owner",

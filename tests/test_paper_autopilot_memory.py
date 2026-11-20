@@ -111,6 +111,17 @@ def test_a_buy_of_a_stock_since_sold_says_so(paper_db):
     assert "since sold" in autopilot_memory.render(_record(pid))
 
 
+def test_a_lesson_matches_its_stock_whatever_the_case():
+    # Review finding: lessons are stored upper-cased; a lower-cased symbol stayed "due" forever.
+    class Book:
+        def quantity(self, key):
+            return 0.0
+
+    fills = [{"side": "sell", "asset_key": "inst:x", "symbol": "acme", "at": "2026-11-20T10:00"}]
+    lessons = [{"symbol": "ACME", "lesson": "x", "at": "2026-11-21T10:00"}]
+    assert autopilot_memory._lesson_due(Book(), fills, lessons) == []
+
+
 def test_a_partly_sold_stock_needs_no_lesson_a_fully_sold_one_does(paper_db):
     pid = _new()["id"]
     _trade(pid, "buy", 20)

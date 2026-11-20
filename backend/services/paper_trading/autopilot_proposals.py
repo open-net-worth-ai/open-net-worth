@@ -12,10 +12,18 @@ do, with why) or refused (with the choke's reason). One failing never stops the 
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime, timezone
 
 from backend.core.errors import OpenNetWorthError, ValidationError
-from backend.services.paper_trading import assets, autopilot_sizing, quotes, service, valuation
+from backend.services.paper_trading import (
+    assets,
+    autopilot_sizing,
+    orders,
+    quotes,
+    service,
+    valuation,
+)
 from backend.services.paper_trading.facade import place
 
 logger = logging.getLogger(__name__)
@@ -102,9 +110,20 @@ class _State:
         self.val: dict | None = None
 
     def valuation(self) -> dict:
+        """The live valuation, with cash already promised to open orders (a buy from an earlier
+        review still waiting for the open) taken out: a buy is sized against FREE cash."""
         if self.val is None:
             book = service.derive(self.pid)
-            self.val = valuation.value(self.row, book, self.now)
+            val = valuation.value(self.row, book, self.now)
+            open_orders = [o for o in service.portfolio_orders(self.pid) if o["status"] == "open"]
+            cash_reserved, _ = orders.reserved(open_orders)
+            rates = val.get("rates") or {}
+            promised = sum(
+                amount * (1.0 if ccy == self.home else float(rates.get(ccy) or 0.0))
+                for ccy, amount in cash_reserved.items()
+            )
+            val["cash_home"] = float(val["cash_home"] or 0.0) - promised
+            self.val = val
         return self.val
 
     def holding(self, key: str) -> dict | None:
@@ -145,12 +164,17 @@ def _sell(state: _State, p: dict, asset) -> dict:
         if not h or not h.get("value_home"):
             return _outcome(p, "skipped", f"{asset.symbol} has no price to trim against.", asset)
         amount, detail = autopilot_sizing.trim_amount(
-            conviction=p["conviction"], total=total, current=float(h["value_home"])
+            conviction=p["conviction"],
+            total=total,
+            current=float(h["value_home"]),
+            cap_pct=state.mandate.get("max_position_pct"),
         )
         if amount <= 0:
             return _outcome(p, "skipped", detail, asset)
         share = amount / float(h["value_home"])
-        qty = autopilot_sizing.units(held * share, 1.0, fractional=asset.kind != "listed")
+        # Rounded UP: a trim must end at or under its target (a holding over its cap, under it).
+        raw = held * share
+        qty = float(math.ceil(raw)) if asset.kind == "listed" else math.ceil(raw * 1e6) / 1e6
         qty = min(qty, held)
         if qty <= 0:
             return _outcome(p, "skipped", "less than one share to sell", asset)

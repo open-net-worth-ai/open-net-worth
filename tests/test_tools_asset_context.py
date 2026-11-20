@@ -268,8 +268,14 @@ def test_only_a_paper_run_looks_up_an_unseen_ticker(env, monkeypatch):
         raise AssertionError("must not look an instrument up outside a paper run")
 
     monkeypatch.setattr("backend.services.instruments.resolve_instrument", boom)
-    # An ordinary chat turn, and a simulated Automation that is not a paper review.
-    for ctx in (None, _paper_run(paper_portfolio_id=None), _paper_run(simulation_only=False)):
+    # An ordinary chat turn, a simulated Automation that is not a paper review, and a paper
+    # Automation bound to a portfolio that is not an autopilot review.
+    for ctx in (
+        None,
+        _paper_run(paper_portfolio_id=None),
+        _paper_run(simulation_only=False),
+        _paper_run(automation_id="automation:auto_1"),
+    ):
         got = _resolve_in(ctx, "ACME")
         assert isinstance(got, str) and "resolve_instruments" in got
 

@@ -176,7 +176,8 @@ Sells go first, then buys from the most convinced down, each through the same ch
 order. **History** lists every proposal with what happened to it — placed (with its order),
 skipped (and why, such as "already at its target" or "no cash above the floor"), refused or
 dropped — and, for a buy, the case against it and the risk note. Off: the review places its own
-orders, as before.
+orders, as before. The track record and lessons above are not part of this setting: every review
+uses them either way.
 
 A review also starts early, between scheduled ones, when a holding moves 5% or more in its last session,
 falls past the stop loss, or breaks a mandate limit (checked every few minutes, each reason once a
