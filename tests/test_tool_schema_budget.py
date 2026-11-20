@@ -297,7 +297,10 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # default offer is unchanged.
     # 2026-11-20: 498_300 -> 498_700. get_spending_breakdown's group_by (month / payee, commit 279a5dc6)
     # measured 498,590 on CI; it replaces raw SQL Lucius used to drop split lines. Not CORE.
-    budget = 498_700
+    # 2026-11-20: 498_700 -> 503_000. TradingAgents' four tools (start / get / list / cancel
+    # _trading_agents_analysis, flag trading_agents): ~4.1K chars measured on top of main's
+    # 498,590 (502,652 total). Discoverable, not CORE, so the default offer is unchanged.
+    budget = 503_000
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."
