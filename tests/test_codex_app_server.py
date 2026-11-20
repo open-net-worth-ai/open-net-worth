@@ -16,6 +16,7 @@ import pytest
 
 from backend.ai.models import codex_app_server as cas
 from backend.ai.models import codex_cli_provider as ccp
+from backend.core import process_tree
 from backend.core.errors import CliNotSignedInError, ExternalServiceError
 from tests.fake_exe import python_cli
 
@@ -187,6 +188,10 @@ def test_the_exec_transport_still_folds_what_it_cannot_send():
 _FAKE_SERVER = r"""
 import json, sys
 
+# The app passes a scrubbed env (no PYTHONUTF8), so decode the UTF-8 protocol explicitly.
+sys.stdin.reconfigure(encoding="utf-8")
+sys.stdout.reconfigure(encoding="utf-8")
+
 def send(obj):
     sys.stdout.write(json.dumps(obj) + "\n")
     sys.stdout.flush()
@@ -197,7 +202,7 @@ RECORD = %(record)r
 turn_n = 0
 
 def record(kind, params):
-    with open(RECORD, "a") as fh:
+    with open(RECORD, "a", encoding="utf-8") as fh:
         fh.write(json.dumps({"kind": kind, "params": params}) + "\n")
 
 for raw in sys.stdin:
@@ -262,7 +267,7 @@ def _received(record, kind: str) -> dict:
 def _received_all(record, kind: str) -> list:
     rows = [
         json.loads(line)["params"]
-        for line in record.read_text().splitlines()
+        for line in record.read_text(encoding="utf-8").splitlines()
         if json.loads(line)["kind"] == kind
     ]
     if not rows:
@@ -545,7 +550,8 @@ async def test_every_turn_carries_the_tool_manifest_across_model_switch_and_resp
     await _turn("gpt-5.6-terra")
     await _turn("gpt-6-luna")
     client = cas.client_for(cli)
-    client._proc.kill()
+    # Kill the whole tree, as a real crash would: on Windows the pid is a .cmd launcher.
+    process_tree.kill_tree(client._proc.pid)
     await client._proc.wait()
     await _turn("gpt-6-luna")
     await client.aclose()
@@ -586,7 +592,8 @@ async def test_a_dead_server_is_respawned_on_the_next_turn(tmp_path):
     async for _ in client.run_turn(instructions="s", transcript="t", model="m", effort="low"):
         pass
     first = client._proc.pid
-    client._proc.kill()
+    # Kill the whole tree, as a real crash would: on Windows the pid is a .cmd launcher.
+    process_tree.kill_tree(client._proc.pid)
     await client._proc.wait()
 
     async for _ in client.run_turn(instructions="s", transcript="t", model="m", effort="low"):
@@ -1339,7 +1346,7 @@ async def test_a_retry_after_text_stops_rather_than_showing_the_reply_twice(tmp_
 async def _wait_for_interrupt(record) -> None:
     """The model must not keep running a reply nobody will read."""
     for _ in range(100):
-        if '"turn/interrupt"' in record.read_text():
+        if '"turn/interrupt"' in record.read_text(encoding="utf-8"):
             return
         await asyncio.sleep(0.02)
     raise AssertionError("the abandoned turn was never interrupted")

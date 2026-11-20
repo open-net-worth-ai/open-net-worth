@@ -30,6 +30,10 @@ TURN_ID = "019fbbae-29cf-7991-8ee7-c323140a9b42"
 _FAKE_SERVER = r"""
 import json, sys
 
+# The app passes a scrubbed env (no PYTHONUTF8), so decode the UTF-8 protocol explicitly.
+sys.stdin.reconfigure(encoding="utf-8")
+sys.stdout.reconfigure(encoding="utf-8")
+
 def send(obj):
     sys.stdout.write(json.dumps(obj) + "\n")
     sys.stdout.flush()
@@ -55,7 +59,7 @@ def play(script):
         send({"jsonrpc": "2.0", **note})
 
 def record(kind, params):
-    with open(RECORD, "a") as fh:
+    with open(RECORD, "a", encoding="utf-8") as fh:
         fh.write(json.dumps({"kind": kind, "params": params}) + "\n")
 
 for raw in sys.stdin:
@@ -143,7 +147,7 @@ def _rows(record, kind):
         return []
     return [
         json.loads(line)["params"]
-        for line in record.read_text().splitlines()
+        for line in record.read_text(encoding="utf-8").splitlines()
         if json.loads(line)["kind"] == kind
     ]
 

@@ -99,6 +99,10 @@ async def kill_and_reap(proc: Any, timeout: float = 5.0) -> None:
     program is a grandchild that killing only the launcher leaves running (holding its cwd).
     Awaiting ``wait()`` matters: left to the GC the transport is torn down after the loop may
     have closed."""
+    if proc.returncode is not None:
+        # Already exited and reaped: its pid may now name an unrelated process (Windows reuses
+        # pids fast), and a tree kill by that pid would take down whatever holds it.
+        return
     try:
         await asyncio.to_thread(kill_tree, proc.pid)
     except (OSError, subprocess.SubprocessError):

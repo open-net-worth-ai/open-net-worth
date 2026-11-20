@@ -8,6 +8,7 @@ import time
 
 import pytest
 
+from backend.core import process_tree
 from backend.core.process_tree import kill_tree, spawn_kwargs, terminate_tree
 
 _PARENT = """
@@ -74,3 +75,26 @@ def test_a_child_is_not_in_this_processes_group():
     finally:
         child.kill()
         child.wait(timeout=10)
+
+
+def test_kill_and_reap_never_tree_kills_a_pid_that_already_exited(monkeypatch):
+    """A reaped child's pid may already name another process (Windows reuses pids fast); a
+    tree kill by it would take that process down. Only a live child is tree-killed."""
+    import asyncio
+
+    calls = []
+    monkeypatch.setattr(process_tree, "kill_tree", lambda pid: calls.append(pid))
+
+    class _Exited:
+        pid = 4242
+        returncode = 0
+
+        def kill(self):
+            calls.append("kill")
+
+        async def wait(self):
+            return 0
+
+    asyncio.run(process_tree.kill_and_reap(_Exited()))
+
+    assert calls == []

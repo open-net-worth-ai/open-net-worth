@@ -31,7 +31,10 @@ function extraAllowedHosts(): string[] {
       // No .env.local — the committed defaults are the whole allowlist.
     }
   }
-  return raw.split(',').map((h) => h.trim()).filter(Boolean)
+  return raw
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean)
 }
 
 export default defineConfig({
@@ -47,19 +50,14 @@ export default defineConfig({
     // Default node environment for plain .ts tests (fs/path; no DOM needed for CSS parsing).
     // .tsx tests opt in to jsdom via the `@vitest-environment jsdom` file-level docblock.
     environment: 'node',
-    include: [
-      'src/__tests__/**/*.test.ts',
-      'src/**/*.test.ts',
-      'src/**/*.test.tsx',
-    ],
+    include: ['src/__tests__/**/*.test.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx'],
     // Bridge jsdom Storage objects over Node 26's experimental localStorage/sessionStorage stubs,
     // which otherwise block vitest's populateGlobal from exposing the jsdom versions globally.
     setupFiles: ['src/vitest.setup.ts'],
+    // A loaded CI runner can pass the 5s default on a multi-step async test that is not hung.
+    testTimeout: 15_000,
   },
-  plugins: [
-    react(),
-    inlineAppleTouchIcon(),
-  ],
+  plugins: [react(), inlineAppleTouchIcon()],
   build: {
     // KEEP the previous build's chunks when VITE_KEEP_OLD_CHUNKS is set (the hosted demo).
     //
@@ -93,11 +91,14 @@ export default defineConfig({
             return 'vendor-react'
           // Chart.js (and any chartjs adapters/plugins) + lightweight-charts (the
           // asset-detail OHLCV chart) — both charting libs share one cacheable chunk.
-          if (id.includes('/chart.js/') || id.includes('/chartjs') || id.includes('/lightweight-charts/'))
+          if (
+            id.includes('/chart.js/') ||
+            id.includes('/chartjs') ||
+            id.includes('/lightweight-charts/')
+          )
             return 'vendor-charts'
           // @dnd-kit family: core + sortable + modifiers + utilities + accessibility
-          if (id.includes('/@dnd-kit/'))
-            return 'vendor-dnd'
+          if (id.includes('/@dnd-kit/')) return 'vendor-dnd'
           // Markdown rendering: react-markdown + remark-gfm + their entire transitive tree
           // (micromark-*, mdast-util-*, unist-util-*, hast-util-*, unified, vfile*, trough,
           //  trim-lines, zwitch, ccount, character-entities*, stringify-entities,
@@ -154,14 +155,14 @@ export default defineConfig({
     //     VITE_EXTRA_ALLOWED_HOSTS=my-host.example,other-host.example
     allowedHosts: ['.ngrok-free.app', 'demo.opennetworth.ai', ...extraAllowedHosts()],
     proxy: {
-      '/api':          devApiTarget,
-      '/data.csv':     devApiTarget,
+      '/api': devApiTarget,
+      '/data.csv': devApiTarget,
       '/actions.json': devApiTarget,
       // The in-app docs (Help frames these). Without it Vite answers /docs/* with its own
       // SPA fallback — the app's index.html — so the Help frame sees "not the docs", falls
       // back to docs.opennetworth.ai, and dev silently reads the PUBLISHED site instead of
       // this checkout's. It looks almost right, which is what makes it worth a line here.
-      '/docs':         devApiTarget,
+      '/docs': devApiTarget,
     },
   },
   // QA harness uses `vite preview` (not `vite`), which does NOT inherit
@@ -170,10 +171,10 @@ export default defineConfig({
   preview: {
     allowedHosts: ['demo.opennetworth.ai'],
     proxy: {
-      '/api':          previewApiTarget,
-      '/data.csv':     previewApiTarget,
+      '/api': previewApiTarget,
+      '/data.csv': previewApiTarget,
       '/actions.json': previewApiTarget,
-      '/docs':         previewApiTarget,
+      '/docs': previewApiTarget,
     },
   },
 })
