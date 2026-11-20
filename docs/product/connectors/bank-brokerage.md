@@ -301,7 +301,7 @@ uses up the reads a sync needs. A sync that gets no balance from the bank says s
 
 Banks and investment accounts in 30+ countries, through Lunch Flow's own sign-in page.
 
-1. At [Lunch Flow's developer page](https://lunchflow.app/developer), create an app and copy its
+1. At [Lunch Flow's developer page](https://www.lunchflow.app/developer), create an app and copy its
    **client ID** and **client secret**.
 2. In Open Net Worth: **Connectors → Browse & add → Lunch Flow → Add connector**.
 3. Fill in **Client ID** and **Client secret**. **Email** is optional — it just pre-fills your
