@@ -7,6 +7,8 @@
 
 import { useMemo, useState } from 'react'
 import { Plus, X } from '../../../ui/icons'
+import { TextField } from '../../ui'
+import { useIsCoarsePointer } from '../../../hooks/useIsCoarsePointer'
 import { slugTag } from './categories'
 import { tagItems, useTransactionTags } from './tagOptions'
 
@@ -75,6 +77,7 @@ function TagCloud({
   onDone: () => void
 }) {
   const known = useTransactionTags()
+  const coarsePointer = useIsCoarsePointer()
   const [query, setQuery] = useState('')
   const items = useMemo(() => tagItems(known, tags, query), [known, tags, query])
   const cloud = items.filter((it) => it.type === 'tag').slice(0, CLOUD_LIMIT)
@@ -86,38 +89,42 @@ function TagCloud({
   }
   return (
     <div className="acct-review-tags-block is-open" data-testid="review-tags-editor">
-      <div className="acct-review-tags-head">
-        <span className="acct-review-category-caption">Tags</span>
+      {/* The category picker's own search row — field, then a round ✕ — so the two searches
+          on the card read as one control (owner, 2026-11-20). The ✕ keeps a typed name, as
+          the Done it replaces did: closing never throws a tag away. */}
+      <div className="acct-review-category-search-row">
+        <TextField
+          className="acct-review-tags-search"
+          aria-label="Find or create a tag"
+          placeholder="Find or create a tag…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              const first = cloud[0]?.tag ?? create?.tag
+              if (first) add(first)
+            } else if (e.key === 'Escape') {
+              e.stopPropagation()
+              onDone()
+            }
+          }}
+          autoFocus={!coarsePointer}
+        />
         <button
           type="button"
-          className="acct-review-tags-done"
+          className="acct-review-category-search-close"
+          aria-label="Done"
           aria-expanded="true"
           onClick={() => {
             if (query.trim()) add(query)
             onDone()
           }}
         >
-          Done
+          <X size={16} aria-hidden="true" />
         </button>
       </div>
       {tags.length > 0 && <div className="acct-review-tags">{chosen}</div>}
-      <input
-        className="acct-review-tags-search"
-        aria-label="Find or create a tag"
-        placeholder="Find or create a tag"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            const first = cloud[0]?.tag ?? create?.tag
-            if (first) add(first)
-          } else if (e.key === 'Escape') {
-            e.stopPropagation()
-            onDone()
-          }
-        }}
-      />
       <div className="acct-review-tags" aria-label="Your tags" role="group">
         {cloud.map((it) => (
           <button

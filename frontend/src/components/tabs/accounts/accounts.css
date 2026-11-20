@@ -836,14 +836,6 @@
   flex-direction: column;
   gap: 10px;
 }
-.acct-review-tags-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.acct-review-tags-head .acct-review-category-caption {
-  margin-bottom: 0;
-}
 .acct-review-tags-block:not(.is-open) .acct-review-category-caption {
   margin-bottom: 10px;
 }
@@ -853,26 +845,10 @@
   gap: 6px;
   min-width: 0;
 }
+/* The field is the category search's TextField; this only keeps the row above it in view when
+   the keyboard scrolls the field to the top. */
 .acct-review-tags-search {
-  box-sizing: border-box;
-  /* When the keyboard scrolls the search to the top, the "Tags" caption and Done stay above it. */
-  scroll-margin-top: 44px;
-  width: 100%;
-  min-height: 36px;
-  padding: 6px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--text-sm);
-}
-.acct-review-tags-search:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.acct-review-tags-search::placeholder {
-  color: var(--faint);
+  scroll-margin-top: 12px;
 }
 .acct-review-tags-hint {
   color: var(--faint);
@@ -929,8 +905,7 @@
   padding: 6px var(--acct-review-card-pad) 10px calc(var(--acct-review-card-pad) - 10px);
 }
 /* The old corner Details/Edit buttons' own look: primary, semibold, footer-size type. */
-.acct-review-expand,
-.acct-review-tags-done {
+.acct-review-expand {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -945,19 +920,13 @@
   font-weight: 650;
   cursor: pointer;
 }
-.acct-review-tags-done {
-  min-height: 28px;
-  margin-right: -10px;
-}
 /* Hover-capable pointers only: on touch, an unguarded :hover paints on tap before the action. */
 @media (hover: hover) {
-  .acct-review-expand:hover,
-  .acct-review-tags-done:hover {
+  .acct-review-expand:hover {
     background: color-mix(in srgb, var(--primary) 9%, transparent);
   }
 }
 .acct-review-expand:focus-visible,
-.acct-review-tags-done:focus-visible,
 .acct-review-tag:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
