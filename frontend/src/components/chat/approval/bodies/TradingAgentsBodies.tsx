@@ -70,6 +70,7 @@ function asDisclosure(v: unknown): TaDisclosure | null {
     average_price_omitted: list(v.average_price_omitted),
     partial_cost: list(v.partial_cost),
     cash_omitted: typeof v.cash_omitted === 'string' ? v.cash_omitted : null,
+    cash_floored: typeof v.cash_floored === 'string' ? v.cash_floored : null,
   }
 }
 

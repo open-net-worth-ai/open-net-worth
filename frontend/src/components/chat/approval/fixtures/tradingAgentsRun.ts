@@ -31,6 +31,7 @@ const DISCLOSURE: TaDisclosure = {
   average_price_omitted: ['INITECH'],
   partial_cost: [],
   cash_omitted: null,
+  cash_floored: null,
 }
 
 function startCard(

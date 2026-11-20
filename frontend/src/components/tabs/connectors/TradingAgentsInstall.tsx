@@ -63,9 +63,11 @@ export function TradingAgentsInstall({
         or the run.
       </div>
       {reinstallMessage && (
-        <Text size="sm" tone="warn" role="status">
-          {reinstallMessage}
-        </Text>
+        <div role="status">
+          <Text size="sm" tone="warn">
+            {reinstallMessage}
+          </Text>
+        </div>
       )}
       <Cluster justify="between" gap="--space-4">
         <Cluster gap="--space-4">
