@@ -120,7 +120,7 @@ Autopilot needs a mandate: it is what you approve in advance. Every review:
   anything;
 - looks for new names that fit the mandate's goal: it searches for companies in the theme it
   doesn't hold yet, shortlists two or three, and checks their figures and charts against what it
-  holds. A holding it sold leaves a slot it tries to fill, and cash well above the floor needs a
+  holds (a stock the app hasn't seen before is looked up for it). A holding it sold leaves a slot it tries to fill, and cash well above the floor needs a
   reason (an event it is waiting for, a price it wants) or it buys the strongest candidate. The
   memo names the names it weighed and why it bought or passed;
 - ends with a memo Lucius writes for you, plus what he is watching next. A review that ends

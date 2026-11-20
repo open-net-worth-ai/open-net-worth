@@ -82,7 +82,7 @@ def _fundamental_row(row: dict) -> dict:
     input_schema=schema_of(GetAssetTechnicalsInput, tool_name="get_asset_technicals"),
 )
 async def get_asset_technicals(input_data: dict):
-    resolved = _resolve(input_data)
+    resolved = await asyncio.to_thread(_resolve, input_data)
     if isinstance(resolved, str):
         return json.dumps({"error": resolved}), None
 
@@ -118,7 +118,7 @@ async def get_asset_technicals(input_data: dict):
     input_schema=schema_of(GetAssetFundamentalsInput, tool_name="get_asset_fundamentals"),
 )
 async def get_asset_fundamentals(input_data: dict):
-    resolved = _resolve(input_data)
+    resolved = await asyncio.to_thread(_resolve, input_data)
     if isinstance(resolved, str):
         return json.dumps({"error": resolved}), None
 

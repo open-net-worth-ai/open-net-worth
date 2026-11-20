@@ -217,6 +217,71 @@ def test_unknown_ticker_is_refused_not_created(env):
     assert len(InstrumentStore().all()) == before  # never mints an instrument
 
 
+def _paper_run(**over):
+    from backend.core.automation_runner import AutomationApprovalContext
+
+    fields = dict(
+        automation_id="autopilot:ppf_1",
+        run_id="autopilot:run",
+        session_id="",
+        mode="manual",
+        simulation_only=True,
+        paper_portfolio_id="ppf_1",
+    )
+    fields.update(over)
+    return AutomationApprovalContext(**fields)
+
+
+def _resolve_in(ctx, ticker: str):
+    """Resolve the way the async tools do (off the loop), with ``ctx`` bound for the turn."""
+    from backend.ai.tools.asset_context import _resolve_asset_ref
+    from backend.core.automation_runner import (
+        bind_automation_approval,
+        reset_automation_approval,
+    )
+
+    token = bind_automation_approval(ctx) if ctx else None
+    try:
+        return asyncio.run(asyncio.to_thread(_resolve_asset_ref, ticker, None))
+    finally:
+        if token is not None:
+            reset_automation_approval(token)
+
+
+def test_a_paper_autopilot_review_looks_an_unseen_ticker_up(env, monkeypatch):
+    # The review found a name while researching and must be able to weigh it: inside a paper
+    # run only, an unseen ticker goes through the instrument front door a paper order uses.
+    calls = []
+
+    def fake_resolve(query, **kw):
+        calls.append((query, kw))
+        return _inst("inst-new", symbol="ACME", price_source_id="ACME"), True
+
+    monkeypatch.setattr("backend.services.instruments.resolve_instrument", fake_resolve)
+    got = _resolve_in(_paper_run(), "ACME")
+    assert isinstance(got, dict) and got["id"] == "inst-new"
+    assert calls == [("ACME", {"allow_duplicate_symbol": True})]
+
+
+def test_only_a_paper_run_looks_up_an_unseen_ticker(env, monkeypatch):
+    def boom(*a, **kw):
+        raise AssertionError("must not look an instrument up outside a paper run")
+
+    monkeypatch.setattr("backend.services.instruments.resolve_instrument", boom)
+    # An ordinary chat turn, and a simulated Automation that is not a paper review.
+    for ctx in (None, _paper_run(paper_portfolio_id=None), _paper_run(simulation_only=False)):
+        got = _resolve_in(ctx, "ACME")
+        assert isinstance(got, str) and "resolve_instruments" in got
+
+
+def test_a_paper_run_lookup_that_finds_nothing_says_so(env, monkeypatch):
+    monkeypatch.setattr(
+        "backend.services.instruments.resolve_instrument", lambda q, **kw: (None, False)
+    )
+    got = _resolve_in(_paper_run(), "NOSUCHTICKER")
+    assert isinstance(got, str) and "don't know it" in got
+
+
 def test_unknown_instrument_id_is_refused(env):
     res, _ = call("get_asset_context", instrument_id="does-not-exist")
     assert "error" in res

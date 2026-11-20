@@ -84,9 +84,8 @@ NEW_IDEAS = (
     "they are about the owner's real book: read them for ideas, never trade it or mention "
     "its amounts. Shortlist two or three and check each with get_asset_fundamentals, "
     "get_asset_technicals and get_live_prices before you weigh it against what you hold "
-    "(a name the app hasn't seen yet is refused there: preview_paper_orders a buy of it "
-    "first, which looks it up). A sold holding leaves a slot: fill it from the shortlist "
-    "when one fits.",
+    "(by its ticker; a name the app hasn't seen yet is looked up for you). A sold holding "
+    "leaves a slot: fill it from the shortlist when one fits.",
 )
 
 

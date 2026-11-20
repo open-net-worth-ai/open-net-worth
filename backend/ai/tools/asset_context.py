@@ -24,6 +24,10 @@ aged past the fast TTL but short of the stale hard limit — the common case a m
 any page load — still left a ``price_history`` row behind. That path now threads
 ``record_history`` through like every other call site.
 
+One exception to read-only, inside a paper autopilot review only: an unseen ticker is looked up
+through the instrument front door (``_paper_run_lookup``), as a paper order's own lookup is, so
+the review can weigh a name it found. Elsewhere an unseen ticker is still refused.
+
 Both blocking-I/O calls this tool makes (``read_asset_detail``, ``analyst_consensus``) run via
 ``asyncio.to_thread`` (R2 fix, security-review 2026-08-29) — matching the sibling
 ``backend.monitoring.analyst._fetch_analyst_consensus_block``, which already does this and cites
@@ -43,6 +47,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Optional
 
 from pydantic import Field
@@ -58,6 +63,8 @@ from backend.services import thesis_judgment
 # uses, so a model reading this tool's output sees the same amount of history it would see if
 # it were the one writing the next signal update.
 _DEFAULT_TIMELINE_LIMIT = 5
+logger = logging.getLogger(__name__)
+
 _MAX_TIMELINE_LIMIT = 20
 _DEFAULT_PEERS_LIMIT = 8
 _MAX_PEERS_LIMIT = 20
@@ -210,11 +217,35 @@ def _resolve_asset_ref(ticker: Optional[str], instrument_id: Optional[str]) -> d
             f"ambiguous ticker {t!r} ({len(matches)} instruments share this symbol) — pass "
             "instrument_id instead (from get_portfolio / get_watchlist)"
         )
+    minted = _paper_run_lookup(t)
+    if minted is not None:
+        return minted
     return (
         f"unknown ticker {t!r} — not a known instrument yet. This tool never creates one; "
         "call resolve_instruments first if it's a brand-new ticker, then retry with the "
         "returned instrument_id."
     )
+
+
+def _paper_run_lookup(ticker: str) -> dict | str | None:
+    """Inside a paper autopilot review only, an unseen ticker is looked up through the
+    instrument front door a paper order already uses (an ``instruments`` row carries no
+    ownership), so the review can weigh a name it found while researching. The review cannot
+    call ``resolve_instruments`` (a real-book write), and told to preview a buy first it did
+    not (owner, 2026-11-20). None outside a paper run: there the tools stay read-only."""
+    from backend.core.automation_runner import get_automation_approval
+
+    ctx = get_automation_approval()
+    if ctx is None or not ctx.simulation_only or not ctx.paper_portfolio_id:
+        return None
+    from backend.services.instruments import resolve_instrument
+
+    try:
+        inst, _created = resolve_instrument(ticker, allow_duplicate_symbol=True)
+    except Exception as exc:  # noqa: BLE001 — a failed lookup is the tool's answer, not a crash
+        logger.warning("paper-run ticker lookup failed for %r: %s", ticker, exc)
+        inst = None
+    return inst or f"unknown ticker {ticker!r} — the market data sources don't know it."
 
 
 def _alert_with_distance(alert: dict, current_price: Optional[float]) -> dict:
@@ -333,7 +364,7 @@ async def get_asset_context(input_data: dict):
     if not ticker and not instrument_id:
         return json.dumps({"error": "pass ticker or instrument_id"}), None
 
-    resolved = _resolve_asset_ref(ticker, instrument_id)
+    resolved = await asyncio.to_thread(_resolve_asset_ref, ticker, instrument_id)
     if isinstance(resolved, str):
         return json.dumps({"error": resolved}), None
     inst = resolved
