@@ -566,6 +566,7 @@ per-connector permission list).
 | WP8 | Docs, ADR, CLAUDE.md, product pages | all | junior-engineer |
 | WP9 | Take integration (§16): `take_input` digest, analyst prompt + rule, provenance on the brief, `trading_agents_input` in the asset detail, refresh on run finish, tests, ADR amendment, product docs | WP1–WP6 | senior-engineer |
 | WP10 | Condensed card + take chip, frontend only (`docs/specs/trading-agents-ui.md` §10) | WP7, WP9 | senior-engineer |
+| WP11 | One view (§17): vocabulary bridge, overlay rule, correction at `normalize`, leaner digest and rule, `trading_agents_input` view/held/allowed_actions, tests, docs | WP9 | senior-engineer |
 | Gate | `security-reviewer` (bridge auth + loopback, subprocess, third-party code, portfolio data in prompts and logs, external I/O) + `code-reviewer`; `make check` before merge | all | — |
 
 ## 14. Verification (end to end)
@@ -680,3 +681,75 @@ sweep's rolling 24h cap (`_DAILY_ANALYSIS_CAP`); the on-demand path itself is no
 
 **Out of scope.** Starting a run from the take, TA in the Intel alert text, other take surfaces
 (chat, briefing), the card and chip UI (WP10).
+
+## 17. One view: the take and TradingAgents (WP11)
+
+**Problem (owner, real example).** A held stock at 85% of the portfolio: the take said Hold, the
+TradingAgents card said Sell, and the take's text said it was "disagreeing with that Hold". A stock
+not held: the take said WAIT, TradingAgents said SELL. Two verdicts side by side read as two
+analysts competing.
+
+**Principle.** They fill each other's gaps. TradingAgents is the STOCK research (technicals,
+fundamentals, sentiment, news, bull/bear debate). Lucius is the POSITION overlay (size,
+concentration, thesis, levels, alerts, pending orders, the run's age, whether the run saw the
+position). The take is ONE recommendation that uses the research; it is never written as a
+disagreement. The rating is still an input, not an order: the take decides.
+
+**Vocabulary bridge** (`services/trading_agents/vocabulary.py`, pure; `allowed_actions(signal, held)`
+and `view(signal, held)`):
+
+| Rating | Held: allowed | Held: reads as | Not held: allowed | Not held: reads as |
+|---|---|---|---|---|
+| Buy | add, hold | research is positive — adding is supported | buy, wait | positive outlook — a buy is supported |
+| Overweight | add, hold | research leans positive — adding is supported | buy, wait | leans positive — a buy is supported |
+| Hold | hold | research says keep the position as it is | wait | neutral outlook — no reason to buy now |
+| Underweight | trim, hold | research leans negative — reducing is supported | wait | leans negative — not a buy now |
+| Sell | sell, trim | research says exit or reduce | wait | negative outlook — not a buy now |
+
+A Sell on a stock the user does not hold is never shown as an instruction to sell.
+
+**Prompt.** With a digest the take anchors on the research and does not re-derive the stock view.
+`take_input.RULE` (shorter than WP9's) says so, asks for ONE recommendation naming the research in
+one clause, asks `verdict.action` to be an allowed action, and lets it differ ONLY for an overlay
+reason: `concentration`, `thesis`, `levels`, `alerts` (Lucius's read of the position) or `stale_run`
+(run older than 3 days), `position_unseen` (run sized at `ticker`) — facts the server checks. The
+verdict carries `ta_overlay_reason` (those six, or `none`); `why` starts with the reason.
+
+**Correction (checkable, not only prompted).** `position_verdict.normalize(..., ta_signal=,
+ta_facts=)`: an action outside `allowed_actions` with no valid reason is REPLACED by the nearest
+allowed action along sell < trim < hold < add (wait < buy), `why` becomes a plain line from the
+bridge (the model's was written for the action it lost), and `ta_aligned: true` is stored. Orders
+that no longer fit the action drop through the existing side check; alerts, levels and the L1 buy
+cap are unchanged. A kept exception stores `ta_overlay_reason`. Without a digest `normalize` is
+byte-identical to before.
+
+**Token budget (must not rise).** The digest block carries rating, one-line reading, allowed
+actions, age, context level and a decision text capped at `DECISION_CHARS = 600` (was 1200); the
+models line is gone from the block. With a digest the model writes `portfolio_narrative` in at most
+2 sentences and `why` in 1. No extra model call. Measured on the worst-case fixture (decision at the
+cap, stale): `RULE` 964 -> 938 chars; block 1613 -> 984 chars (about 246 tokens); added to the
+prompt 2577 -> 1922 chars (about 644 -> 480 tokens). `key_issues` and the news evidence are NOT
+trimmed: the page shows 3-5 issues and the model needs the evidence for them.
+
+**Data contract.** `trading_agents_input` gains `view`, `held`, `allowed_actions`; `run_id`,
+`signal`, `trade_date`, `age_days` are unchanged. `position_verdict` gains `ta_aligned` /
+`ta_overlay_reason` only when set.
+
+**What TradingAgents sees** (so the research is not mistaken for portfolio-blind). The default
+`context_level` is `investments`; every start path (tool, REST, card form) uses the configured
+level unless the caller names one. The worker passes `PortfolioContext` to `propagate`, which
+renders it into the prompts of the trader, risk team and portfolio manager (not the data analysts).
+`investments`: cash and every investment position (ticker, quantity, average price); `position`:
+cash and the analysed ticker's own position; `ticker`: nothing (`None`, not a flat book). A held
+ticker at `investments` or `position` is seen as held with its quantity; a not-held ticker at either
+is seen with no position, and at `investments` beside the other holdings. Weights are not sent, so
+TradingAgents sees the quantity and cash, not "85% of the portfolio" — the overlay reasons exist for
+that gap.
+
+**Tests.** `tests/test_trading_agents_take.py`: table completeness (5 ratings x held/not held), the
+correction (replaced, kept with reason, run-fact reasons checked, no signal untouched, orders
+dropped), the rule in the prompt and the old duplication gone, token growth bound, flag-off identity,
+`served` carries `view` / `held`.
+
+**Out of scope.** A second model pass to reconcile, changing the `context_level` default, trimming
+`key_issues`.
