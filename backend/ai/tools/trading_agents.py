@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import time
 from typing import List, Literal, Optional
 
 from pydantic import Field
@@ -29,6 +30,12 @@ from backend.services.trading_agents import budget, run_views, runs, ticker
 _LIST_DEFAULT, _LIST_MAX = 10, 20
 # A rough pace for the ETA the start tool reports: seconds per model call, API vs a CLI subscription.
 _SECONDS_PER_CALL = {"api": 8, "cli": 20}
+# The plan an approval was validated against, held for the handler that runs right after it, so the
+# context that is shared is exactly the one the card was checked against (not a second read of a
+# book that may have moved). Keyed by the call's arguments, taken once, never kept long.
+_VALIDATED_TTL_SECONDS = 30.0
+_VALIDATED_MAX = 8
+_validated: dict[str, tuple[float, runner.Plan]] = {}
 
 _ABOUT = (
     "TradingAgents is RESEARCH, not financial advice: analysts read the market, news, sentiment and "
@@ -126,6 +133,26 @@ def _plan(args: dict) -> runner.Plan:
     )
 
 
+def _args_key(args: dict) -> str:
+    return json.dumps(args, sort_keys=True, default=str)
+
+
+def _remember_validated(args: dict, plan: runner.Plan) -> None:
+    now = time.monotonic()
+    for key in [k for k, (at, _) in _validated.items() if now - at > _VALIDATED_TTL_SECONDS]:
+        del _validated[key]
+    while len(_validated) >= _VALIDATED_MAX:
+        del _validated[next(iter(_validated))]
+    _validated[_args_key(args)] = (now, plan)
+
+
+def _take_validated(args: dict) -> Optional[runner.Plan]:
+    held = _validated.pop(_args_key(args), None)
+    if held is None or time.monotonic() - held[0] > _VALIDATED_TTL_SECONDS:
+        return None
+    return held[1]
+
+
 def _precheck(args: dict) -> None:
     _plan(args)
 
@@ -192,15 +219,17 @@ class _StartPreview:
         frozen = data.get("frozen") if isinstance(data, dict) else None
         if not isinstance(frozen, dict):
             return "This approval card is missing what it was drawn from. Ask for a fresh preview."
+        args = preview.get("raw_arguments") or {}
         try:
-            now = _frozen(_plan(preview.get("raw_arguments") or {}))
+            plan = _plan(args)
         except OpenNetWorthError as exc:
             return exc.message or str(exc)
-        if now != frozen:
+        if _frozen(plan) != frozen:
             return (
                 "Your settings, models, the date or your portfolio changed since this card was "
                 "drawn, so it no longer shows what would run. Ask for a fresh preview."
             )
+        _remember_validated(args, plan)
         return None
 
 
@@ -230,7 +259,7 @@ def _failure(exc: OpenNetWorthError) -> tuple[str, None]:
 )
 async def start_trading_agents_analysis(input_data: dict):
     try:
-        plan = await asyncio.to_thread(_plan, input_data)
+        plan = _take_validated(input_data) or await asyncio.to_thread(_plan, input_data)
         run_id = await runner.submit(
             plan.symbol,
             requested_by="automation" if is_unattended() else "lucius",

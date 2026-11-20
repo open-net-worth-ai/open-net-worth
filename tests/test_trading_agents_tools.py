@@ -39,6 +39,7 @@ NAMES = (
 
 @pytest.fixture(autouse=True)
 def isolated_db(db_isolated):
+    tools._validated.clear()
     return db_isolated
 
 
@@ -487,3 +488,35 @@ async def test_the_whole_view_is_held_under_a_total_cap_without_losing_the_facts
     assert out["signal"] == "Hold" and out["cost"]["llm_calls"] == 2
     assert all(r["truncated"] and r["full_chars"] == 9_000 for r in out["reports"].values())
     assert len(out["reports"]) == 11 and out["decision"]["text"]
+
+
+@pytest.mark.usefixtures("ready")
+async def test_the_approved_start_shares_exactly_the_context_the_card_was_validated_against(
+    monkeypatch, submitted
+):
+    """The handler runs after validation; it must not read a book that moved in between."""
+    adapter = tools._StartPreview()
+    args = {"ticker": "ACME", "context_level": "position"}
+    card = adapter.build(args)
+    assert adapter.validate(card) is None
+    real = context.build
+    monkeypatch.setattr(
+        runner.context,
+        "build",
+        lambda symbol, level: (lambda p, d: ({**p, "cash": p["cash"] + 1}, d))(
+            *real(symbol, level)
+        ),
+    )
+    _parsed(await tools.start_trading_agents_analysis(args))
+    assert submitted[0]["prepared"].portfolio == card["data"]["frozen"]["portfolio"]
+
+
+@pytest.mark.usefixtures("ready")
+async def test_a_validated_plan_is_used_once_and_an_unvalidated_start_plans_afresh(submitted):
+    adapter = tools._StartPreview()
+    args = {"ticker": "ACME", "context_level": "position"}
+    assert adapter.validate(adapter.build(args)) is None
+    _parsed(await tools.start_trading_agents_analysis(args))
+    _parsed(await tools.start_trading_agents_analysis(args))
+    first, second = submitted[0]["prepared"], submitted[1]["prepared"]
+    assert first is not second and tools._validated == {}
