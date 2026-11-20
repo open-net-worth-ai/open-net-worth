@@ -281,7 +281,7 @@ export const chatSessions = {
 //   __mockCompacting(35)        → 35%, no token count
 //   __mockCompacting(35, 820)   → 35% · ↓ 820 tokens
 //   __mockCompacting()          → clears it (same as a real compacting_done)
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV && typeof window !== 'undefined') {
   ;(
     window as unknown as { __mockCompacting: (percent?: number, outputTokens?: number) => void }
   ).__mockCompacting = (percent?: number, outputTokens?: number) => {

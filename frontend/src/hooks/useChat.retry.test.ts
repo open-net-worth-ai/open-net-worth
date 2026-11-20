@@ -23,6 +23,7 @@ vi.mock('../utils/chatStore', () => ({
   saveMessages: vi.fn(),
   withRestoreMarks: (target: unknown) => target,
   completeUnfinishedTail: () => null,
+  repairCutReplies: (target: unknown) => target,
 }))
 vi.mock('../utils/chatServerSync', () => import('./__testing__/transcriptReadDouble'))
 

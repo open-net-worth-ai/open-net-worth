@@ -212,7 +212,7 @@ describe('affected mobile views', () => {
     expect(filterSheet).toContain("presentation = 'popover'")
     expect(filterSheet).toContain('<BottomSheet')
     expect(investmentsCss).toMatch(
-      /\.mk-filter-btn\.is-active::after\s*\{[^}]*background:\s*var\(--accent\)/,
+      /\.mk-filter-btn\.is-active::after\s*\{[^}]*background:\s*var\(--ink\)/,
     )
     // Both groups live in the one sheet.
     expect(sheet).toContain("title: 'Type'")

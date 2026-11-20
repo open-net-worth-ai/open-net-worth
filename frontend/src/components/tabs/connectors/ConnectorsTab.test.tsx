@@ -93,8 +93,8 @@ beforeEach(() => {
           ? PLAID_STATUS
           : url === '/api/accounts'
             ? []
-            : url === '/api/connectors/plaid/accounts'
-              ? { status: 'not_configured', provider_label: 'Plaid', accounts: [] }
+            : /^\/api\/connectors\/[^/]+\/accounts$/.test(url)
+              ? { status: 'not_configured', provider_label: 'Bank', accounts: [] }
               : url.startsWith('/api/account-linking/institutions')
                 ? { institutions: [], providers: [], manual_import: true }
                 : {}
