@@ -490,6 +490,12 @@ function orderColumns(cancel: (id: string) => void): Column<PaperOrder>[] {
       secondary: true,
     },
     {
+      key: 'filled',
+      label: 'Filled',
+      sortValue: (o) => o.fill?.filled_at ?? null,
+      cell: (o) => (o.fill ? fDateTime(o.fill.filled_at) : '—'),
+    },
+    {
       key: 'status',
       label: 'Status',
       primary: true,
