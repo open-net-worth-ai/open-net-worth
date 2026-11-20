@@ -207,6 +207,7 @@ from backend.monitoring.analyst_prompt import (
 from backend.monitoring.text_sanitize import content_tokens, sanitize_untrusted_text, tokenize
 from backend.services import position_verdict, thesis_judgment
 from backend.services.intel_stories import apply_story_change
+from backend.services.trading_agents import take_input
 from backend.services.watchlist import is_topic, read_watchlist
 
 logger = logging.getLogger(__name__)
@@ -1866,6 +1867,21 @@ def _key_issues_stale(brief: dict) -> bool:
     return _freshness_grade(age_days) != "fresh"
 
 
+def _trading_agents_supersedes(brief: dict) -> bool:
+    """True while the take has not seen the ticker's newest usable TradingAgents run — it is stale
+    with respect to it, so the next page open regenerates it (the fallback when the refresh asked
+    for at run finish found a pass already in flight). False on any failure."""
+    try:
+        from backend.db.instrument_store import InstrumentStore
+
+        iid = brief.get("instrument_id") or ""
+        inst = InstrumentStore().find_by_id(iid) or {} if iid else {}
+        return take_input.supersedes(brief, inst.get("price_source_id") or "")
+    except Exception as exc:
+        logger.debug("analyst: TradingAgents staleness check failed: %s", type(exc).__name__)
+        return False
+
+
 def _key_issues_force_stale(brief: dict) -> bool:
     """True when a held-or-watched instrument's key_issues are stale enough to justify an
     on-demand, RIGHT-NOW top-up (`trigger_on_demand_brief_refresh`) rather than waiting for
@@ -1896,6 +1912,8 @@ def _key_issues_force_stale(brief: dict) -> bool:
     filled, narrative empty) read as "has content" here — the 12h cooldown applied — while the
     frontend simultaneously read it as "still generating" forever. Requiring narrative
     specifically closes that mismatch."""
+    if _trading_agents_supersedes(brief):
+        return True
     ts = brief.get("key_issues_synthesized_at")
     if not ts:
         return True
@@ -2167,6 +2185,34 @@ async def trigger_on_demand_brief_refresh(instrument_id: str, *, force: bool = F
     else:
         asset_brief.stamp_key_issues_refresh_stage(iid, "ready")
     return True
+
+
+async def refresh_take_for_run(run_id: str) -> bool:
+    """A TradingAgents run just finished: ask the on-demand synthesis trigger (the page-open path,
+    with its in-flight and failure guards) to rewrite that instrument's take with it. Does nothing
+    when the instrument has no take yet (an unviewed ticker costs nothing), when the take already
+    used this run, or when the run is not an input (feature off, connector paused, REVIEW, too
+    old). Returns True only when a pass was started. If the trigger declines because a pass is
+    already in flight, `_key_issues_force_stale` makes the next page open regenerate the take."""
+    from backend.db.asset_brief_store import AssetBriefStore
+    from backend.db.instrument_store import InstrumentStore
+    from backend.db.trading_agents_run_store import TradingAgentsRunStore
+
+    run = TradingAgentsRunStore().get(run_id)
+    if not run or run["status"] != "done":
+        return False
+    iid = run.get("instrument_id") or (
+        InstrumentStore().find_by_price_source_id(run["ticker"]) or {}
+    ).get("id")
+    if not iid:
+        return False
+    brief = AssetBriefStore().get(iid) or {}
+    if not (brief.get("portfolio_narrative") or "").strip():
+        return False
+    ta = _trading_agents_input(iid)
+    if ta is None or ta.run_id == brief.get("trading_agents_run_id"):
+        return False
+    return await trigger_on_demand_brief_refresh(iid, force=True)
 
 
 async def trigger_on_demand_facts_peers_refresh(instrument_id: str) -> bool:
@@ -2759,7 +2805,13 @@ async def _fetch_analyst_consensus_block(instrument_id: str) -> str:
 
 
 def _write_asset_brief_synthesis(
-    instrument_id: str, parsed: dict, evidence: list[dict], now: str, *, held: bool
+    instrument_id: str,
+    parsed: dict,
+    evidence: list[dict],
+    now: str,
+    *,
+    held: bool,
+    trading_agents: take_input.TakeInput | None = None,
 ) -> None:
     """Write this synthesis call's `key_issues`/`portfolio_narrative` onto the held-or-watched
     instrument's Asset Brief (Problem B point 1, Correction) — the Analyst pipeline's own
@@ -2800,6 +2852,7 @@ def _write_asset_brief_synthesis(
                 source_dicts(evidence),
                 now,
                 verdict=_brief_verdict(instrument_id, parsed, held, now),
+                trading_agents=trading_agents.provenance() if trading_agents else None,
             )
         else:
             asset_brief.stamp_key_issues_checked(instrument_id, now)
@@ -2854,6 +2907,21 @@ def _verdict_context(instrument_id: str, *, held: bool) -> str:
         )
         return ""
     return "".join(f"\n\n{p}" for p in parts)
+
+
+def _trading_agents_input(instrument_id: str) -> take_input.TakeInput | None:
+    """The ticker's TradingAgents digest for the take (``services.trading_agents.take_input``), or
+    None — feature off, no usable run, or ANY failure: the take is then produced as it always was."""
+    try:
+        from backend.db.instrument_store import InstrumentStore
+
+        inst = InstrumentStore().find_by_id(instrument_id) or {}
+        return take_input.latest(inst.get("price_source_id") or "")
+    except Exception as exc:
+        logger.debug(
+            "analyst: TradingAgents input failed for %s: %s", instrument_id, type(exc).__name__
+        )
+        return None
 
 
 def _brief_verdict(instrument_id: str, parsed: dict, held: bool, now: str) -> dict | None:
@@ -3321,8 +3389,12 @@ async def _process_linked_pair(
     brief_instrument_id = held_instrument_id or (
         asset_iid if asset_iid and _is_watched_instrument(asset_iid) else ""
     )
+    trading_agents = None
     if brief_instrument_id:
         position_ctx += _verdict_context(brief_instrument_id, held=bool(held_instrument_id))
+        trading_agents = _trading_agents_input(brief_instrument_id)
+        if trading_agents:
+            position_ctx += f"\n\n{trading_agents.block()}"
     analyst_block = (
         await _fetch_analyst_consensus_block(brief_instrument_id) if brief_instrument_id else ""
     )
@@ -3339,6 +3411,8 @@ async def _process_linked_pair(
     )
     if thesis:
         system_prompt += thesis_judgment.THESIS_RULE
+    if trading_agents:
+        system_prompt += take_input.RULE
     result = await complete_model(
         user_prompt,
         _AnalysisOutput,
@@ -3401,6 +3475,7 @@ async def _process_linked_pair(
             evidence,
             datetime.now(timezone.utc).isoformat(),
             held=bool(held_instrument_id),
+            trading_agents=trading_agents,
         )
 
     # A linked pair is, BY CONSTRUCTION, about the same instrument (that's the definition of
@@ -3646,6 +3721,7 @@ async def _process_row(
         return 0
 
     thesis = None
+    trading_agents = None
     if is_topic:
         position_ctx, profile = topic_analyst.topic_context(payload)
     else:
@@ -3655,6 +3731,9 @@ async def _process_row(
             position_ctx = f"{position_ctx}\n\n{thesis_judgment.prompt_block(thesis, label)}"
         if brief_instrument_id:
             position_ctx += _verdict_context(brief_instrument_id, held=bool(held_instrument_id))
+            trading_agents = _trading_agents_input(brief_instrument_id)
+            if trading_agents:
+                position_ctx += f"\n\n{trading_agents.block()}"
 
     user_prompt, system_prompt = _build_prompts(
         row,
@@ -3669,6 +3748,8 @@ async def _process_row(
     )
     if thesis:
         system_prompt += thesis_judgment.THESIS_RULE
+    if trading_agents:
+        system_prompt += take_input.RULE
     result = await complete_model(
         user_prompt,
         _AnalysisOutput,
@@ -3728,6 +3809,7 @@ async def _process_row(
             evidence,
             datetime.now(timezone.utc).isoformat(),
             held=bool(held_instrument_id),
+            trading_agents=trading_agents,
         )
 
     # Owner override of RFC intel-signals-data-model §4's "NO-GO" —

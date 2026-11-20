@@ -680,6 +680,13 @@ async def lifespan(app: FastAPI):
 
     register_runner(_headless_turn_runner)
 
+    # A finished TradingAgents run refreshes Lucius's take on its ticker (core.take_refresh seam:
+    # ai cannot import monitoring, which reaches api).
+    from backend.core import take_refresh
+    from backend.monitoring.analyst import refresh_take_for_run
+
+    take_refresh.register(refresh_take_for_run)
+
     # Automation Lucius runs are durable conversations. Register the AI-layer adapter on
     # the dependency-inverted core/service seams only after the AI package is initialized.
     from backend.ai.automation_runner_adapter import (

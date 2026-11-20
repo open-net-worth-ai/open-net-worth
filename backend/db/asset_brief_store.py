@@ -32,6 +32,10 @@ Brief schema:
                                   {action, why, held, price_at, at, stop?/trim?/entry?}; shaped by
                                   services.position_verdict (normalize on write, compose on read,
                                   prior_block for the next take's prompt).
+    trading_agents_run_id / trading_agents_signal / trading_agents_trade_date : str  which
+                                  TradingAgents run informed the take above (services.
+                                  trading_agents.take_input); absent when the take was written
+                                  without one.
     key_issues_synthesized_at : ISO|None  when key_issues/portfolio_narrative last landed, OR
                                   the last time a COMPLETED synthesis pass checked and found
                                   nothing to show (H1 fix, security-review 2026-08-29 —

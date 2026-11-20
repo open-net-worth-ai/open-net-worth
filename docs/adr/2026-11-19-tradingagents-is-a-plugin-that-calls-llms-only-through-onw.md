@@ -163,6 +163,36 @@ reach a model **only through an ONW loopback bridge**.
 - Product page `docs/product/features/trading-agents.md`; `NOTICE` carries the Apache-2.0
   attribution.
 
+## Amendment 2026-11-20 — Lucius's take reads the latest run
+
+The asset page's "Lucius's take on your position" now also reads the ticker's TradingAgents
+analysis while the feature is on, combined with Lucius's own analysis and never replacing it
+(spec §16). The decision:
+
+- **Input is a digest, not the run.** The latest `done` run of the ticker, at most 14 days old by
+  `trade_date`, and only while the flag is on and the connector is set up and not paused
+  (`services/trading_agents/take_input.py`): rating, date and age, the decision text capped at
+  1,200 characters and sanitized as third-party output, the context level it was sized against and
+  the model names. The audited `context_sent` amounts and the reports are never read; the store
+  method returns only those columns. A `REVIEW` run (no rating settled) is not an input.
+- **The rating is an input, not an instruction.** A rule appended to the synthesis prompt only
+  when a digest exists tells the model to attribute it, say where it agrees or disagrees, keep its
+  own call and verdict and add no length. `thesis_judgment` / `THESIS_RULE` still own thesis
+  judgment, unchanged. Flag off or no usable run: the prompt and the written brief are identical to
+  before.
+- **Provenance** (`trading_agents_run_id`, `_signal`, `_trade_date`) is recorded on the asset brief
+  (a payload table, no migration) and served as `trading_agents_input`. A take written without a
+  run carries none.
+- **Refresh uses the existing trigger.** A finished run asks `core.take_refresh` (a leaf seam,
+  because `ai` may not import `monitoring`, which reaches `api`) to run
+  `analyst.trigger_on_demand_brief_refresh(force=True)` as a background task: its in-flight and
+  failure guards hold, nothing runs a model inside the run's path, and an instrument with no take
+  yet costs nothing. If that trigger declines, `_key_issues_force_stale` is also true while the
+  newest usable run is not the one the take used, so the next page open regenerates it.
+- **The take never starts a run** (it costs money); it only uses an existing one.
+- **New disclosure.** The decision text (up to 1,200 characters) now also goes to the take's own
+  model provider, the one that already receives the position block. The product page says so.
+
 ## Alternatives considered
 
 - **Import `tradingagents` into ONW's interpreter** — rejected: dependency conflicts (pandas 3) and

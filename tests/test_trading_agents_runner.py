@@ -207,6 +207,40 @@ async def test_a_finished_run_notifies_in_the_app_only(runner_env):
     assert sent == [("TradingAgents finished ACME: Hold", ["in_app"], "TradingAgents")]
 
 
+async def test_a_finished_run_asks_once_for_the_take_on_its_ticker_to_be_refreshed(runner_env):
+    from backend.core import take_refresh
+
+    seen = []
+
+    async def refresher(run_id):
+        seen.append(run_id)
+
+    take_refresh.register(refresher)
+    run_id = await submit()
+    await settle()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    take_refresh.register(None)
+    assert seen == [run_id]
+
+
+async def test_a_run_that_does_not_finish_asks_for_no_refresh(runner_env):
+    from backend.core import take_refresh
+
+    seen = []
+
+    async def refresher(run_id):
+        seen.append(run_id)
+
+    take_refresh.register(refresher)
+    worker("crash", runner_env.tmp)
+    await submit()
+    await settle()
+    await asyncio.sleep(0)
+    take_refresh.register(None)
+    assert seen == []
+
+
 async def test_the_connector_remembers_when_a_run_last_started():
     await submit()
     await settle()

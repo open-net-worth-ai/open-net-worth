@@ -232,6 +232,10 @@ a sentence on why and what would change it. Each new take is shown Lucius's prev
 keeps its levels unless something has changed, and if the price falls through its stop it says so
 plainly: it either calls **Sell**, or says why it's holding.
 
+With [TradingAgents](trading-agents.md) on, the take also reads that stock's latest
+finished analysis, combines it with its own, and shows "Includes TradingAgents" with the rating and
+its age.
+
 Most of the time the call is to do nothing, and then there's nothing to tap. When Lucius decides
 something would help, it adds a few actions under the call (usually no more than three), each a
 button with prices Lucius chose:

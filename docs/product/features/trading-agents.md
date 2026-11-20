@@ -100,6 +100,28 @@ Lucius has four tools for it, available only while it is on and set up:
 
 Reading, listing and cancelling still work after you pause the connector.
 
+## Lucius's take uses it
+
+While TradingAgents is on, **Lucius's take on your position** (the asset page's Analysis tab) also
+reads the stock's latest finished analysis, so you get one combined view. Lucius weighs it against
+its own evidence, says where it agrees or disagrees, and names it ("TradingAgents rated Hold on
+2026-11-17"). The rating is an input: Lucius still makes its own call, and it never becomes an
+order. The take never starts an analysis for you, because that costs money.
+
+- **Which analysis.** The most recent finished run for the stock, at most 14 days old, with a
+  rating. A run that could not settle on one (Unclear) is not used. With the feature off, or the
+  connector paused, there is nothing to include and the take is exactly what it was.
+- **Stale runs.** Past 3 days the take says the analysis may be out of date. Past 14 it is dropped.
+- **It updates itself.** When a run finishes, the take for that stock is rewritten with it in the
+  background, if you already have a take for it. If one is being written at that moment, the next
+  time you open the page it is rewritten.
+- **You can see it.** The take shows "Includes TradingAgents" with the rating and its age, linked
+  to the run. A take written without a run shows nothing.
+- **What is sent.** The rating, the date, the analysis's decision text (up to 1,200 characters),
+  how much of your holdings that run could see (not the amounts) and the model names go to the AI
+  provider that writes the take, the same one that already receives your position for it. The
+  reports and the amounts shared with the run are not sent.
+
 ## What is shared, and with whom
 
 You choose how much of your holdings a run may know. The default is **Investments**.

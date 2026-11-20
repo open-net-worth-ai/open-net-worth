@@ -43,6 +43,7 @@ from backend.services.lots import lots_for_position, realized_pnl
 from backend.services.positions import hydrated as hydrated_positions
 from backend.services.prices import _round_price, resolve_price_quote
 from backend.services.profile import read_profile
+from backend.services.trading_agents import take_input
 from backend.services.watchlist import read_watchlist
 
 logger = logging.getLogger(__name__)
@@ -1335,6 +1336,7 @@ def read_asset_detail(
                 price=price_block.get("last"),
                 currency=price_block.get("currency") or "",
             ),
+            "trading_agents_input": take_input.served(brief),
             "freshness": freshness,
             # Real progress marker for an in-flight refresh ("searching" -> "analysing" ->
             # "ready", written by monitoring.asset_brief._do_refresh as each stage

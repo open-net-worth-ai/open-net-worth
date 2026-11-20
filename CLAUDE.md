@@ -542,3 +542,4 @@ frontend/src/
 | Write hook | `core.io` | `db` triggers checkpoint without importing `ai` |
 | Desktop alert feed | `services/alert_feed.py` | Intel-story alerts (price/crash/watch/analysis) reach the desktop banners by READ — never as a notify channel (its delivery result would defeat `push_retry`'s zero-delivery retry) and never as notification-log rows (Intel is their one in-app surface) |
 | Headless turn / Automation runner | `core.headless_turn` / `core.automation_runner` | Run a turn / Lucius without importing `ai` |
+| Take refresh | `core.take_refresh` | A finished TradingAgents run (`ai`) asks `monitoring.analyst` to rewrite Lucius's take on its ticker, in the background |

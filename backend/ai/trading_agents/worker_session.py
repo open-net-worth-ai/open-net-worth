@@ -25,7 +25,7 @@ from backend.ai.trading_agents.worker_env import (
     secret_values,
     worker_env,
 )
-from backend.core import process_tree
+from backend.core import process_tree, take_refresh
 from backend.core.errors import ConflictError, NotInstalledError, OpenNetWorthError
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
 from backend.services.trading_agents import budget, install, runs, settings
@@ -107,6 +107,7 @@ class RunSession:
         else:
             self._conclude()
             await self._notify_finished()
+            self._refresh_take()
         finally:
             install.remove_run(self.job.run_id)  # its logs and memory hold the portfolio context
             self.finished.set()
@@ -404,6 +405,12 @@ class RunSession:
             )
         except Exception:  # noqa: BLE001
             log.warning("trading_agents_notify_failed run=%s", self.job.run_id)
+
+    def _refresh_take(self) -> None:
+        """A finished run is new input for Lucius's take on its ticker: ask for a rewrite in the
+        background (the model call never runs in the run's own path)."""
+        if self._signal is not None:
+            take_refresh.request(self.job.run_id)
 
 
 def _kill_tree(pid: int) -> None:

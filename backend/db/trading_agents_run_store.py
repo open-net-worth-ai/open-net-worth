@@ -44,6 +44,17 @@ _COST_COLUMNS = (
     "finished_at",
 )
 
+# What Lucius's take reads of a finished run: the rating, its text and what it was sized against.
+_TAKE_COLUMNS = (
+    "id",
+    "ticker",
+    "trade_date",
+    "signal",
+    "decision_text",
+    "context_level",
+    "config_snapshot",
+)
+
 
 def _row(result) -> Optional[dict]:
     row = result.mappings().first()
@@ -96,6 +107,18 @@ class TradingAgentsRunStore:
         stmt = stmt.order_by(runs.c.created_at.desc(), runs.c.id.desc())
         with get_engine().connect() as c:
             return [dict(r) for r in c.execute(stmt.limit(limit).offset(offset)).mappings()]
+
+    def latest_done(self, ticker: str) -> Optional[dict]:
+        """The newest finished run of ``ticker``, the take's columns only: never the reports,
+        the audited context or the progress log."""
+        stmt = (
+            select(*(runs.c[name] for name in _TAKE_COLUMNS))
+            .where(runs.c.ticker == ticker, runs.c.status == "done")
+            .order_by(runs.c.created_at.desc(), runs.c.id.desc())
+            .limit(1)
+        )
+        with get_engine().connect() as c:
+            return _row(c.execute(stmt))
 
     def count(
         self, *, ticker: Optional[str] = None, statuses: Optional[Sequence[str]] = None
