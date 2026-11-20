@@ -112,17 +112,20 @@ export function WealthBriefing({ onChatSuggest, hideTitle }: Props) {
     }
   }
 
-  // The last note is shown the moment the card opens; `/api/briefing` then checks it still
-  // holds (a few seconds: it fingerprints the whole book) and swaps in a rewrite only if not.
+  // One endpoint: `wait=false` answers at once with the saved note. If the server is checking
+  // it against the book behind that answer (`checking`), the card asks again and joins that
+  // same check, swapping in a rewrite only if the book changed.
   const openBriefing = async () => {
     try {
-      const res = await authFetch('/api/briefing/saved')
-      const saved: BriefingData | { note: null } = res.ok ? await res.json() : { note: null }
-      if (saved.note) {
-        setData(saved as BriefingData)
-        setLoading(false)
-        await fetchBriefing(false, true)
-        return
+      const res = await authFetch('/api/briefing?wait=false')
+      if (res.ok) {
+        const quick: BriefingData & { checking?: boolean } = await res.json()
+        if (quick.note && !quick.error) {
+          setData(quick)
+          setLoading(false)
+          if (quick.checking) await fetchBriefing(false, true)
+          return
+        }
       }
     } catch {
       /* fall through to the full load */

@@ -9,7 +9,8 @@ those are already shown in other widgets on the Overview tab.
 Uses web_search to pull current news (up to 3 searches).
 Cached 24h in briefing_cache.json. ?refresh=true forces regeneration.
 
-Response: { note: str, chat_suggestion: str, generated_at: ISO str, is_cached: bool }
+Response: { note: str, chat_suggestion: str, generated_at: ISO str, is_cached: bool,
+            checking?: bool (wait=false only: a freshness check is running behind it) }
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -665,7 +667,8 @@ async def _generate_briefing(total_nw: float) -> dict:
 
 def _saved_note() -> Optional[dict]:
     """The last note written, read straight from its file with no freshness check — what the
-    card shows the moment it opens, while `GET /api/briefing` decides whether it still holds."""
+    card shows the moment it opens (``wait=false``), while a background check decides whether
+    it still holds."""
     try:
         with open(CACHE_FILE, encoding="utf-8") as f:
             data = json.load(f)
@@ -674,17 +677,14 @@ def _saved_note() -> Optional[dict]:
     return data if isinstance(data, dict) and data.get("note") else None
 
 
-@router.get("/api/briefing/saved")
-async def get_saved_briefing():
-    data = await asyncio.to_thread(_saved_note)
-    if not data:
-        return {"note": None}
-    return {**_without_fingerprint(data), "is_cached": True}
-
-
-# One rewrite at a time: two cards opening together (or a reload mid-write) used to start two
-# model calls for the same note. A caller that finds one running waits for it instead.
+# One check-or-rewrite at a time: two cards opening together (or a reload mid-write) used to
+# start two model calls for the same note. A caller that finds one running waits for it instead.
 _inflight: Optional[asyncio.Task] = None
+# When the last freshness check started (monotonic seconds). The check fingerprints the whole
+# book (~350 queries), and the database changes every minute anyway (price polls), so a cheap
+# "did anything change?" counter can't stand in for it: a quick open re-checks at most this often.
+_last_check: Optional[float] = None
+_CHECK_INTERVAL_S = 60.0
 
 
 async def _write_briefing(current_nw: Optional[float], fingerprint, activity) -> dict:
@@ -710,23 +710,53 @@ async def _write_briefing(current_nw: Optional[float], fingerprint, activity) ->
     return {**_without_fingerprint(data), "is_cached": False}
 
 
-@router.get("/api/briefing")
-async def get_briefing(
-    refresh: bool = Query(False),
-    current_nw: Optional[float] = Query(None),
-):
-    global _inflight
-    if _inflight is not None and not _inflight.done():
-        return await asyncio.shield(_inflight)
+async def _check_then_write(current_nw: Optional[float], refresh: bool) -> dict:
     # Taken BEFORE the note is written: a change landing mid-generation then marks it stale
     # rather than being silently folded into a fingerprint the note never saw.
     fingerprint = await asyncio.to_thread(_current_fingerprint)
     activity = await asyncio.to_thread(_current_activity)
     if not refresh:
-        cached = _load_cache(fingerprint, activity)
+        cached = await asyncio.to_thread(_load_cache, fingerprint, activity)
         if cached:
             return {**_without_fingerprint(cached), "is_cached": True}
-    # Checked again: another request may have started a rewrite while this one fingerprinted.
+    return await _write_briefing(current_nw, fingerprint, activity)
+
+
+def _start(current_nw: Optional[float], refresh: bool) -> asyncio.Task:
+    """The running check-or-rewrite, starting one if none is. Runs on even if every caller
+    leaves (a quick open does not wait for it)."""
+    global _inflight, _last_check
     if _inflight is None or _inflight.done():
-        _inflight = asyncio.create_task(_write_briefing(current_nw, fingerprint, activity))
-    return await asyncio.shield(_inflight)
+        _last_check = time.monotonic()
+        _inflight = asyncio.create_task(_check_then_write(current_nw, refresh))
+        _inflight.add_done_callback(_log_failure)
+    return _inflight
+
+
+def _log_failure(task: asyncio.Task) -> None:
+    if not task.cancelled() and task.exception() is not None:
+        logger.warning("briefing check failed", exc_info=task.exception())
+
+
+def _checked_recently() -> bool:
+    return _last_check is not None and time.monotonic() - _last_check < _CHECK_INTERVAL_S
+
+
+@router.get("/api/briefing")
+async def get_briefing(
+    refresh: bool = Query(False),
+    current_nw: Optional[float] = Query(None),
+    wait: bool = Query(True),
+):
+    """The note, checked against the book. ``wait=false`` (the card on open) answers at once
+    with the saved note and ``checking: true`` while a check runs behind it; the card then asks
+    again with the default ``wait=true``, which joins that same check instead of starting one."""
+    if not wait and not refresh:
+        saved = await asyncio.to_thread(_saved_note)
+        if saved is not None:
+            running = _inflight is not None and not _inflight.done()
+            if running or not _checked_recently():
+                _start(current_nw, refresh=False)
+                return {**_without_fingerprint(saved), "is_cached": True, "checking": True}
+            return {**_without_fingerprint(saved), "is_cached": True, "checking": False}
+    return await asyncio.shield(_start(current_nw, refresh))
