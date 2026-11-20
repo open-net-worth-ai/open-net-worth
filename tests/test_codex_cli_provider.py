@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import stat
 import textwrap
 
 import pytest
@@ -23,6 +22,7 @@ from backend.ai.models.cli_tool_protocol import ToolCallScanner
 from backend.ai.models.codex_cli_provider import CodexCliProvider, build_prompt, cost_basis_for
 from backend.core.errors import ConfigurationError, ExternalServiceError, ValidationError
 from backend.db.model_telemetry_store import ModelTelemetryStore
+from tests.fake_exe import python_cli
 
 MODEL = "gpt-5.1-codex"
 
@@ -105,7 +105,8 @@ def _fake_cli(tmp_path, events: list[dict], *, exit_code: int = 0):
     """
     script = tmp_path / "codex"
     payload = "\n".join(json.dumps(e) for e in events)
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             f"""
             #!/usr/bin/env python3
@@ -129,9 +130,8 @@ def _fake_cli(tmp_path, events: list[dict], *, exit_code: int = 0):
             sys.stdout.flush()
             sys.exit({exit_code})
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
 
@@ -148,7 +148,8 @@ def _fake_cli_sequence(tmp_path, calls: list[list[dict]]):
     exactly how many times the CLI was actually re-spawned.
     """
     script = tmp_path / "codex"
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             f"""
             #!/usr/bin/env python3
@@ -167,9 +168,8 @@ def _fake_cli_sequence(tmp_path, calls: list[list[dict]]):
             sys.stdout.flush()
             sys.exit(0)
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
 
@@ -688,8 +688,7 @@ async def test_a_hung_cli_is_killed_and_reported_rather_than_hanging_the_turn(
     tmp_path, monkeypatch
 ):
     script = tmp_path / "codex"
-    script.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n")
-    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    script = python_cli(script, "#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n")
     monkeypatch.setenv("ONW_CODEX_CLI_TIMEOUT", "5")  # clamped to the 5s floor
     with pytest.raises(ExternalServiceError, match="timed out"):
         await CodexCliProvider(cli_path=str(script)).complete("hi", model=MODEL)
@@ -703,7 +702,8 @@ async def test_abandoning_the_stream_kills_the_subprocess_and_cleans_up(tmp_path
     the generator — otherwise every cancelled Telegram turn leaks a `codex` process.
     """
     script = tmp_path / "codex"
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             """
             #!/usr/bin/env python3
@@ -713,9 +713,8 @@ async def test_abandoning_the_stream_kills_the_subprocess_and_cleans_up(tmp_path
             sys.stdout.flush()
             time.sleep(60)
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
     # Keep the scratch dirs inside tmp_path so the cleanup is observable.
     monkeypatch.setattr(ccp.tempfile, "mkdtemp", lambda **kw: str(tmp_path / "workdir"))
@@ -765,7 +764,8 @@ async def test_abandoning_a_stream_cleans_up_a_materialized_image_too(tmp_path, 
 
     workdir = tmp_path / "workdir-with-image"
     script = tmp_path / "codex"
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             """
             #!/usr/bin/env python3
@@ -775,9 +775,8 @@ async def test_abandoning_a_stream_cleans_up_a_materialized_image_too(tmp_path, 
             sys.stdout.flush()
             time.sleep(60)
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
     def make_workdir(**_kwargs):
         workdir.mkdir()

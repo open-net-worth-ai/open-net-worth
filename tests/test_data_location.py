@@ -62,7 +62,9 @@ def test_a_folder_that_does_not_exist_yet_is_fine_if_its_parent_is_writable(tmp_
 
 
 def test_an_uncreatable_path_is_reported_before_the_user_commits_to_it(tmp_path):
-    r = inspect("/proc/definitely/not/writable/here")
+    blocker = tmp_path / "a-file-not-a-folder"
+    blocker.write_text("x")
+    r = inspect(str(blocker / "not" / "writable" / "here"))
     assert r.exists is False
     assert r.writable is False
 

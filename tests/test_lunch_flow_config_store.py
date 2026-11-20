@@ -256,6 +256,7 @@ def test_set_tokens_and_a_refresh_write_the_right_columns(store):
     assert store.access_token() == "tok-2"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_secrets_persisted_with_owner_only_perms(store, db_isolated):
     from backend.db.engine import resolved_sqlite_path
 

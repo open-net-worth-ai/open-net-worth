@@ -7,12 +7,12 @@ The fake answers exactly like Codex 0.164.0 did on 2026-11-11: an `initialize` r
 from __future__ import annotations
 
 import os
-import sys
 import textwrap
 
 import pytest
 
 from backend.ai.models import codex_model_list as ml
+from tests.fake_exe import python_cli
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="the fake CLI is a POSIX script")
 
@@ -58,8 +58,12 @@ def fake_cli(tmp_path):
 
     def make(mode: str) -> str:
         launcher = tmp_path / f"codex-{mode}"
-        launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" {mode}\n')
-        launcher.chmod(0o755)
+        launcher = python_cli(
+            launcher,
+            "import runpy, sys\n"
+            f"sys.argv = [{str(script)!r}, {mode!r}]\n"
+            f"runpy.run_path({str(script)!r}, run_name='__main__')\n",
+        )
         return str(launcher)
 
     return make

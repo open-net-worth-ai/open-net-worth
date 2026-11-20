@@ -454,7 +454,7 @@ def test_fix5_only_the_engine_reads_the_flag_below_the_api():
     backend = pathlib.Path(__file__).resolve().parents[1] / "backend"
     readers = set()
     for path in backend.rglob("*.py"):
-        rel = str(path.relative_to(backend))
+        rel = path.relative_to(backend).as_posix()
         if rel.startswith(("core/feature_flags", "services/feature_flags")):
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))

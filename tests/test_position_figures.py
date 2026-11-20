@@ -405,7 +405,7 @@ def test_a_dated_opening_lot_enters_returns_at_market_value(isolated, monkeypatc
 def test_only_position_figures_writes_the_figures():
     backend = pathlib.Path(__file__).resolve().parents[1] / "backend"
     writers = sorted(
-        str(path.relative_to(backend))
+        path.relative_to(backend).as_posix()
         for path in backend.rglob("*.py")
         if re.search(r"\.write_figures\(", path.read_text()) and path.name != "position_store.py"
     )
@@ -415,7 +415,7 @@ def test_only_position_figures_writes_the_figures():
 def test_only_the_position_service_creates_position_rows():
     backend = pathlib.Path(__file__).resolve().parents[1] / "backend"
     creators = sorted(
-        str(path.relative_to(backend))
+        path.relative_to(backend).as_posix()
         for path in backend.rglob("*.py")
         if re.search(r"PositionStore\(\)\.create\(", path.read_text())
     )

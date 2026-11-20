@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import stat
 import sys
 import textwrap
 from pathlib import Path
@@ -26,13 +25,15 @@ from backend.ai.models import codex_cli_provider as ccp
 from backend.ai.models.claude_cli_provider import _cli_failure
 from backend.api.chat import _friendly_error
 from backend.core.errors import CliNotSignedInError, ExternalServiceError
+from tests.fake_exe import python_cli
 
 
 def _cli(tmp_path: Path, *, stdout: str = "", stderr: str = "", code: int = 0, sleep: float = 0):
     """A stand-in binary that prints fixed output and counts how often it ran."""
     count = tmp_path / "runs"
     exe = tmp_path / "fake-cli"
-    exe.write_text(
+    exe = python_cli(
+        exe,
         textwrap.dedent(
             f"""
             #!{sys.executable}
@@ -44,9 +45,8 @@ def _cli(tmp_path: Path, *, stdout: str = "", stderr: str = "", code: int = 0, s
             sys.stderr.write({stderr!r})
             sys.exit({code})
             """
-        ).strip()
+        ).strip(),
     )
-    exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
     return str(exe), count
 
 
@@ -138,11 +138,11 @@ def test_fresh_skips_the_cache_for_an_explicit_test_connection(tmp_path):
 def test_codex_is_asked_about_the_home_turns_actually_run_in(tmp_path):
     """Asking about ~/.codex could say yes for a login no turn would see."""
     exe = tmp_path / "fake-cli"
-    exe.write_text(
+    exe = python_cli(
+        exe,
         f'#!{sys.executable}\nimport os\nprint(os.environ["CODEX_HOME"])\n'
-        f'open({str(tmp_path / "home")!r}, "w").write(os.environ["CODEX_HOME"])\n'
+        f'open({str(tmp_path / "home")!r}, "w").write(os.environ["CODEX_HOME"])\n',
     )
-    exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
     cli_sign_in.check("codex_cli", str(exe), has_api_key=False)
     assert (tmp_path / "home").read_text() == codex_home.isolated_home()
 
@@ -151,11 +151,11 @@ def test_the_probe_gets_the_same_scrubbed_environment_as_a_turn(tmp_path, monkey
     """An env key the turn will never see must not make the probe say "signed in"."""
     monkeypatch.setenv("OPENAI_API_KEY", "synthetic-not-a-key")
     exe = tmp_path / "fake-cli"
-    exe.write_text(
+    exe = python_cli(
+        exe,
         f"#!{sys.executable}\nimport os\n"
-        f'open({str(tmp_path / "env")!r}, "w").write(os.environ.get("OPENAI_API_KEY", "absent"))\n'
+        f'open({str(tmp_path / "env")!r}, "w").write(os.environ.get("OPENAI_API_KEY", "absent"))\n',
     )
-    exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
     cli_sign_in.check("codex_cli", str(exe), has_api_key=False)
     assert (tmp_path / "env").read_text() == "absent"
 
@@ -263,8 +263,7 @@ def _server(tmp_path: Path) -> str:
     py = tmp_path / "server.py"
     py.write_text(_SERVER)
     exe = tmp_path / "codex"
-    exe.write_text(f'#!/bin/sh\nexec {sys.executable} "{py}"\n')
-    exe.chmod(0o755)
+    exe = python_cli(exe, f"import runpy\nrunpy.run_path({str(py)!r}, run_name='__main__')\n")
     return str(exe)
 
 
@@ -361,8 +360,9 @@ def test_a_private_copy_refreshed_by_codex_is_not_overwritten(tmp_path):
 @pytest.mark.asyncio
 async def test_a_failed_handshake_quotes_what_the_child_printed(tmp_path):
     exe = tmp_path / "codex"
-    exe.write_text("#!/bin/sh\necho 'cannot load libwhatever.so' >&2\nexit 7\n")
-    exe.chmod(0o755)
+    exe = python_cli(
+        exe, "import sys\nsys.stderr.write('cannot load libwhatever.so\\n')\nsys.exit(7)\n"
+    )
     client = cas.AppServerClient(str(exe))
     with pytest.raises(ExternalServiceError, match="cannot load libwhatever.so"):
         await client.ensure_started()
@@ -371,11 +371,13 @@ async def test_a_failed_handshake_quotes_what_the_child_printed(tmp_path):
 @pytest.mark.asyncio
 async def test_handshake_output_is_bounded_and_redacted(tmp_path):
     exe = tmp_path / "codex"
-    exe.write_text(
-        "#!/bin/sh\necho 'token sk-abcdefghijklmnopqrstuvwxyz0123456789' >&2\n"
-        f"{sys.executable} -c \"print('y' * 5000)\" >&2\nexit 7\n"
+    exe = python_cli(
+        exe,
+        "import sys\n"
+        "sys.stderr.write('token sk-abcdefghijklmnopqrstuvwxyz0123456789\\n')\n"
+        "sys.stderr.write('y' * 5000 + '\\n')\n"
+        "sys.exit(7)\n",
     )
-    exe.chmod(0o755)
     client = cas.AppServerClient(str(exe))
     with pytest.raises(ExternalServiceError) as err:
         await client.ensure_started()

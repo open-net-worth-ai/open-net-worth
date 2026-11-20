@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import stat
 import textwrap
 import time
 
@@ -21,6 +20,7 @@ from backend.ai.models import claude_cli_provider as ccp
 from backend.ai.models import claude_live_session as cls
 from backend.ai.models.claude_cli_provider import ClaudeCliProvider
 from backend.core.errors import ProviderTimeoutError
+from tests.fake_exe import python_cli
 
 _CALL_A = '<tool_call>{"name": "update_run_task", "input": {"id": "1"}}</tool_call>'
 _CALL_B = '<tool_call>{"name": "email_search_messages", "input": {"since": "1d"}}</tool_call>'
@@ -57,7 +57,8 @@ def _fake_cli(tmp_path, steps: list, tail: str):
     """Per stdin line: play ``steps`` (an event, or a float = sleep), then ``tail``:
     ``runaway`` streams text forever, ``silent`` says nothing, ``none`` waits for input."""
     script = tmp_path / "claude"
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             f"""
             #!/usr/bin/env python3
@@ -78,9 +79,8 @@ def _fake_cli(tmp_path, steps: list, tail: str):
                 elif {tail!r} == "silent":
                     time.sleep(60)
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
 

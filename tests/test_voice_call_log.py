@@ -171,17 +171,18 @@ def test_him_speaking_stops_the_count(monkeypatch):
 
 def test_their_words_count_from_when_they_came(monkeypatch):
     desk_, went = _quiet_desk(monkeypatch)
-    desk_.AWAY_S = 0.06
+    # Wide margins: Windows timers tick every ~16 ms, so short sleeps overshoot by a whole tick.
+    desk_.AWAY_S = 0.4
 
     async def steps():
         import asyncio
 
         desk_.voice_stopped()
-        await asyncio.sleep(0.04)
+        await asyncio.sleep(0.25)
         desk_.heard("Let me think")
-        await asyncio.sleep(0.04)
+        await asyncio.sleep(0.25)
         assert went == []  # counting from their words, not from his voice
-        await asyncio.sleep(0.06)
+        await asyncio.sleep(0.3)
 
     import asyncio
 

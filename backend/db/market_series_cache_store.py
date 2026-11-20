@@ -58,13 +58,18 @@ class MarketSeriesCacheStore(NamespacedSettingsStore):
     def _cap(cls, entries: list[dict]) -> list[dict]:
         if len(entries) <= _MAX_ENTRIES:
             return entries
-        return sorted(
-            entries,
-            key=lambda entry: (
-                _parse(entry.get("last_accessed_at")) or datetime.min.replace(tzinfo=timezone.utc)
+        # Position breaks a tie: entries are appended as written, and a coarse clock (Windows)
+        # stamps a burst of writes identically — the newest must still outrank the oldest.
+        ranked = sorted(
+            enumerate(entries),
+            key=lambda pair: (
+                _parse(pair[1].get("last_accessed_at"))
+                or datetime.min.replace(tzinfo=timezone.utc),
+                pair[0],
             ),
             reverse=True,
-        )[:_MAX_ENTRIES]
+        )
+        return [entry for _, entry in ranked[:_MAX_ENTRIES]]
 
     def put(self, canonical_id: str, currency: str, timeframe: str, result: dict) -> dict | None:
         """Persist only a newer valid success; no failure may poison last-good data."""

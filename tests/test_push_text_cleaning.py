@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import time
+import zlib
 
 import pytest
 
@@ -159,6 +160,8 @@ def test_a_handle_is_removed(bad):
         "[x](" * 2000,
         "[x](" + "(" * 8000,
     ],
+    # PYTEST_CURRENT_TEST embeds the id, and Windows caps an environment variable at 32767 chars.
+    ids=lambda hostile: f"{len(hostile)}-chars-{zlib.crc32(hostile.encode()):08x}",
 )
 def test_no_input_can_stall_the_event_loop(hostile):
     started = time.monotonic()

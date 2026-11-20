@@ -9,7 +9,6 @@ transcript we no longer hold. See ADR 2026-08-01-claude-cli-live-sessions.
 from __future__ import annotations
 
 import json
-import stat
 import sys
 import textwrap
 
@@ -17,6 +16,7 @@ import pytest
 
 from backend.ai.models import claude_live_session as cls
 from backend.ai.models import cli_live_session
+from tests.fake_exe import python_cli
 
 USER = {"role": "user", "content": "what did I spend?"}
 REPLY = {"role": "assistant", "content": "You spent $10."}
@@ -128,7 +128,8 @@ def _fake_cli(tmp_path, reply_text="hi"):
         },
     ]
     payload = "\n".join(json.dumps(e) for e in events)
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             f"""
             #!/usr/bin/env python3
@@ -141,9 +142,8 @@ def _fake_cli(tmp_path, reply_text="hi"):
                 sys.stdout.write({payload!r} + "\\n")
                 sys.stdout.flush()
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
 
@@ -324,7 +324,8 @@ def _cumulative_cost_cli(tmp_path, step=0.01):
     (and ``modelUsage``) is the running total since the process started.
     """
     script = tmp_path / "claude"
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             f"""
             #!/usr/bin/env python3
@@ -342,9 +343,8 @@ def _cumulative_cost_cli(tmp_path, step=0.01):
                     sys.stdout.write(json.dumps(ev) + "\\n")
                 sys.stdout.flush()
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
 

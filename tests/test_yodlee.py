@@ -11,6 +11,7 @@ All HTTP calls are mocked (no real network). Covers:
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -150,6 +151,7 @@ class TestYodleeConfigStore:
         assert pub["last_status"] == "auth_error"
         assert pub["last_error"] == "bad creds"
 
+    @pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
     def test_chmod_applied(self, store, db_isolated):
         """No more per-store _path to chmod — the DB engine restricts the WHOLE
         sqlite file (+ wal/shm) to 0600 on every connect (db.engine._restrict_sqlite_modes),

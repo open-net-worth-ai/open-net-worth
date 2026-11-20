@@ -27,7 +27,7 @@ def test_the_title_is_channel_then_start_time():
     when = datetime(2026, 8, 22, 6, 29, tzinfo=timezone.utc).astimezone()
     title = connector_session_title("telegram", when)
     assert title.startswith("Telegram • ")
-    assert when.strftime("%-d %b %Y, %H:%M") in title
+    assert f"{when.day} {when.strftime('%b %Y, %H:%M')}" in title
 
 
 def test_the_title_never_contains_the_chat_id():

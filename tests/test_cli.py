@@ -108,7 +108,14 @@ def test_systemd_unit_quotes_values_with_spaces(tmp_path):
 # ── autostart: install / stop / status ────────────────────────────────────────
 
 
-def test_install_on_macos_writes_the_plist_then_bootstraps_it(tmp_path):
+@pytest.fixture
+def launchd_uid(monkeypatch):
+    """The launchd path names the user's uid, which Windows has no notion of."""
+    if not hasattr(os, "getuid"):
+        monkeypatch.setattr(os, "getuid", lambda: 501, raising=False)
+
+
+def test_install_on_macos_writes_the_plist_then_bootstraps_it(tmp_path, launchd_uid):
     runner = Recorder()
 
     assert auto.install("Darwin", tmp_path, runner) == 0
@@ -131,14 +138,14 @@ def test_install_on_linux_enables_the_unit_and_tries_linger(tmp_path):
     assert runner.calls[2][:2] == ["loginctl", "enable-linger"]
 
 
-def test_install_reports_a_bootstrap_failure(tmp_path, capsys):
+def test_install_reports_a_bootstrap_failure(tmp_path, capsys, launchd_uid):
     runner = Recorder(fail={"launchctl bootstrap"})
 
     assert auto.install("Darwin", tmp_path, runner) == 1
     assert "bootstrap failed" in capsys.readouterr().err
 
 
-def test_stop_removes_the_unit_file_so_it_cannot_return_at_next_login(tmp_path):
+def test_stop_removes_the_unit_file_so_it_cannot_return_at_next_login(tmp_path, launchd_uid):
     runner = Recorder()
     auto.install("Darwin", tmp_path, runner)
 

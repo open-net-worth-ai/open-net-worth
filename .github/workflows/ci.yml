@@ -261,8 +261,9 @@ jobs:
   test-windows-full:
     # Sharded: in one runner it reached 93% in 50 min and was cut off (a timeout reads as a
     # CANCELLED run, even with continue-on-error).
+    # A PR labelled `windows-full` runs it too, to prove a Windows fix before it merges.
     name: test (windows, full suite ${{ matrix.shard }}/3, informational)
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'windows-full') }}
     runs-on: windows-latest
     timeout-minutes: 40
     continue-on-error: true

@@ -9,7 +9,6 @@ failure is a plain sentence.
 
 from __future__ import annotations
 
-import stat
 import textwrap
 
 import pytest
@@ -18,6 +17,7 @@ from backend.ai.models import claude_live_session as cls
 from backend.ai.models.claude_cli_provider import ClaudeCliProvider
 from backend.api.chat import _error_event
 from backend.core.errors import ProviderTimeoutError
+from tests.fake_exe import python_cli
 
 
 @pytest.fixture(autouse=True)
@@ -50,7 +50,8 @@ def _result(text: str) -> dict:
 def _fake_cli(tmp_path, spawns: list[dict]):
     """Spawn N prints ``spawns[N]['events']`` then, if ``stall``, goes silent for good."""
     script = tmp_path / "claude"
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             f"""
             #!/usr/bin/env python3
@@ -69,9 +70,8 @@ def _fake_cli(tmp_path, spawns: list[dict]):
                 if spec.get("exit"):
                     sys.exit(0)
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
 
