@@ -261,7 +261,7 @@ describe('ActualSection', () => {
     form()
     const picker = (await screen.findByLabelText(/^Budget/)) as HTMLSelectElement
     await waitFor(() => expect(picker.value).toBe('b1'))
-    expect(canSave()).toBe(true)
+    await waitFor(() => expect(canSave()).toBe(true))
     cleanup()
     clearQueryCache()
     budgets = { budgets: [VAULT] }
