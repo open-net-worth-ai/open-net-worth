@@ -290,6 +290,23 @@ describe('Paper Trading', () => {
       (screen.getByRole('button', { name: 'Place paper buy' }) as HTMLButtonElement).disabled,
     ).toBe(true)
   })
+  it('keeps the open tab across a reload: it lives in ?tab=, and closing clears it', async () => {
+    render(<PaperTab />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Buy-zone strategy' }))
+    fireEvent.click(await screen.findByRole('tab', { name: /Activity/ }))
+    expect(router.get()).toMatchObject({ paper: 'ppf_1', tab: 'activity' })
+    cleanup()
+    // A reload: the same address, a fresh mount.
+    render(<PaperTab />)
+    const tab = await screen.findByRole('tab', { name: /Activity/ })
+    expect(tab.getAttribute('aria-selected')).toBe('true')
+    act(() => router.navigate({ search: { paper: undefined, tab: 'bogus' } }))
+    act(() => router.navigate({ search: { paper: 'ppf_1', tab: 'bogus' } }))
+    expect(
+      (await screen.findByRole('tab', { name: /Holdings/ })).getAttribute('aria-selected'),
+    ).toBe('true')
+  })
+
   it('renames a portfolio from its Edit dialog', async () => {
     render(<PaperTab />)
     fireEvent.click(await screen.findByRole('button', { name: 'Open Buy-zone strategy' }))

@@ -55,7 +55,8 @@ says what happens next ("Fills nowâ€¦", "Market closed. Fills at the next openâ€
 **Place paper buy** or **Place paper sell**.
 
 An order that waits shows under **Orders** with what it waits for, and you can cancel it there.
-Each order shows when it was **Placed** and, once it fills, when it **Filled**.
+Each order shows when it was **Placed**; one that filled later (an order placed after the close
+fills at the open) shows its fill time under its status.
 The page picks up a fill on its own, without a reload.
 
 The page shows your **Paper value** (holdings plus cash) and **Cash left** (not yet invested),

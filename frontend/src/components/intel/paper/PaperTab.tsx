@@ -41,7 +41,11 @@ export function PaperTab({ onAskLucius }: { onAskLucius?: (text: string) => void
   const setOpenId = (id: string | null) =>
     void navigate({
       to: '/intel',
-      search: ((prev: Record<string, unknown>) => ({ ...prev, paper: id ?? undefined })) as never,
+      search: ((prev: Record<string, unknown>) => ({
+        ...prev,
+        paper: id ?? undefined,
+        tab: undefined,
+      })) as never,
     } as never)
   const [creating, setCreating] = useState(false)
   const [showArchived, setShowArchived] = useState(false)

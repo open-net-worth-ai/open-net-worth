@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ActionMenu, Button, ConfirmDialog, ErrorState, PageTabs, TabSkeleton, Tag } from '../../ui'
 import { AutopilotTag } from './AutopilotTag'
 import { Spark } from '../../../lucius/identity'
@@ -29,6 +30,7 @@ import { PaperSource } from './PaperSource'
 import { usePaperPage } from './usePaper'
 
 type Tab = 'holdings' | 'orders' | 'activity' | 'mandate' | 'autopilot'
+const TABS: readonly Tab[] = ['holdings', 'orders', 'activity', 'mandate', 'autopilot']
 
 const assetOfHolding = (h: PaperHolding): PaperAsset => ({
   asset_key: h.asset_key,
@@ -52,7 +54,19 @@ export function PaperPortfolioPage({
   onOpen: (id: string) => void
   onAskLucius?: (text: string) => void
 }) {
-  const [tab, setTab] = useState<Tab>('holdings')
+  // The open tab lives in the address (?tab=), as on Copy Trading: a reload keeps it.
+  const navigate = useNavigate()
+  const search = useSearch({ strict: false }) as { tab?: string }
+  const tab: Tab = TABS.find((t) => t === search.tab) ?? 'holdings'
+  const setTab = (next: Tab) =>
+    void navigate({
+      to: '/intel',
+      search: ((prev: Record<string, unknown>) => ({
+        ...prev,
+        tab: next === 'holdings' ? undefined : next,
+      })) as never,
+      replace: true,
+    } as never)
   const [ticket, setTicket] = useState<{ asset?: PaperAsset; side?: OrderSide } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<'over' | 'delete' | null>(null)
@@ -442,6 +456,16 @@ function holdingColumns(
   return cols
 }
 
+/** When a fill came later than its order (one placed after the close fills at the open): the
+ *  fill's time, shown under the status. An order that filled as it was placed shows none. */
+function filledLater(o: PaperOrder): string | null {
+  if (!o.fill) return null
+  const placed = Date.parse(o.placed_at)
+  const filled = Date.parse(o.fill.filled_at)
+  if (Number.isNaN(placed) || Number.isNaN(filled) || filled - placed < 60_000) return null
+  return fDateTime(o.fill.filled_at)
+}
+
 function orderStatus(o: PaperOrder): string {
   if (o.status === 'filled' && o.fill) return `Filled ${o.fill.price.toFixed(2)}`
   if (o.status !== 'open') return o.status.charAt(0).toUpperCase() + o.status.slice(1)
@@ -490,17 +514,19 @@ function orderColumns(cancel: (id: string) => void): Column<PaperOrder>[] {
       secondary: true,
     },
     {
-      key: 'filled',
-      label: 'Filled',
-      sortValue: (o) => o.fill?.filled_at ?? null,
-      cell: (o) => (o.fill ? fDateTime(o.fill.filled_at) : '—'),
-    },
-    {
       key: 'status',
       label: 'Status',
       primary: true,
       // A short status; the server's full sentence (why it waits, until when) is its tooltip.
-      cell: (o) => <span title={o.state_reason ?? undefined}>{orderStatus(o)}</span>,
+      cell: (o) => {
+        const late = filledLater(o)
+        return (
+          <span title={o.state_reason ?? undefined}>
+            {orderStatus(o)}
+            {late && <span className="paper-fill-when">{late}</span>}
+          </span>
+        )
+      },
     },
     {
       key: 'act',

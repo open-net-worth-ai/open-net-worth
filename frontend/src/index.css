@@ -21521,6 +21521,11 @@ body.hide-amounts .mf-lbl-amt {
   font-size: var(--text-sm);
   margin-top: var(--space-0);
 }
+.paper-fill-when {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
 .paper-feed-item .when {
   color: var(--muted);
   font-size: var(--text-sm);
