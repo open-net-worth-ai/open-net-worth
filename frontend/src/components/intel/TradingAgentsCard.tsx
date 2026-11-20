@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useFlag } from '../../hooks/useFlag'
 import { TradingAgentsPanel } from './TradingAgentsPanel'
-import type { TaFocus } from './useTaPanel'
+import type { TaFocus, TaTakeView } from './useTaPanel'
 
 /** The Analysis-tab card for one equity: ask for a multi-agent research run, watch it, and read
  *  the rating and the reports behind it. Gated by the `trading_agents` flag: off (or not loaded
@@ -10,11 +10,13 @@ import type { TaFocus } from './useTaPanel'
 export function TradingAgentsCard({
   ticker,
   focus = null,
+  takeView = null,
   onFocusHandled,
 }: {
   instrumentId: string
   ticker: string
   focus?: TaFocus | null
+  takeView?: TaTakeView | null
   onFocusHandled?: () => void
 }) {
   const enabled = useFlag('trading_agents')
@@ -28,7 +30,7 @@ export function TradingAgentsCard({
   if (enabled !== true) return null
   return (
     <div ref={root}>
-      <TradingAgentsPanel key={ticker} ticker={ticker} focus={focus} />
+      <TradingAgentsPanel key={ticker} ticker={ticker} focus={focus} takeView={takeView} />
     </div>
   )
 }

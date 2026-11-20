@@ -335,6 +335,11 @@ export interface TradingAgentsInput {
   signal: TaSignal
   trade_date: string
   age_days: number
+  /** The server's one-line plain-language reading of the signal for this position (held or not);
+   *  absent when it has none — the browser never derives one. */
+  view?: string
+  held?: boolean
+  allowed_actions?: string[]
 }
 
 export interface AssetDetail {

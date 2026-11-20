@@ -125,12 +125,15 @@ function Decision({ text }: { text: string | null }) {
  *  open state is the caller's. */
 export function TradingAgentsReport({
   run,
+  view = null,
   onDelete,
   open,
   onToggle,
   history,
 }: {
   run: TaRun
+  /** The server's one-line reading of the rating for this position, when the take used the run. */
+  view?: string | null
   onDelete: () => void
   open: boolean
   onToggle: () => void
@@ -159,6 +162,7 @@ export function TradingAgentsReport({
           </span>
         )}
       </div>
+      {view && <Text size="sm">{view}</Text>}
       <Cluster gap="--space-3">
         <Text size="xs" tone="faint">
           {run.ticker} · as of {fDate(run.trade_date)} · run {timeAgo(when)}

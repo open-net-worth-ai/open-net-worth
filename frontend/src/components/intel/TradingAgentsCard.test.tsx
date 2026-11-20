@@ -104,7 +104,7 @@ describe.each([false, true])('with the trading_agents flag %s', (on) => {
     restore()
     restore = overrideFlagsForTests({ trading_agents: on })
     const { container } = mount()
-    if (on) expect(screen.getByText('TradingAgents · research only')).toBeTruthy()
+    if (on) expect(screen.getByText('Research view · TradingAgents')).toBeTruthy()
     else expect(container.innerHTML).toBe('')
   })
 })
@@ -393,6 +393,33 @@ describe('running', () => {
 })
 
 describe('done', () => {
+  it("shows the server's reading of the rating under it when the take used this run", () => {
+    setup({ runs: [makeSummary()], run: makeRun() })
+    render(
+      <TradingAgentsCard
+        instrumentId="inst_acme"
+        ticker="ACME"
+        takeView={{ runId: 'tar_000000000001', view: 'negative outlook, not a buy now' }}
+      />,
+    )
+    expect(screen.getByText('negative outlook, not a buy now')).toBeTruthy()
+  })
+
+  it('shows no reading for a run the take did not use, or when the server sent none', () => {
+    setup({ runs: [makeSummary()], run: makeRun() })
+    const { unmount } = render(
+      <TradingAgentsCard
+        instrumentId="inst_acme"
+        ticker="ACME"
+        takeView={{ runId: 'tar_other', view: 'steady outlook' }}
+      />,
+    )
+    expect(screen.queryByText('steady outlook')).toBeNull()
+    unmount()
+    mount()
+    expect(screen.queryByText('negative outlook, not a buy now')).toBeNull()
+  })
+
   it('shows only the rating, the decision and the disclaimer until the full analysis is opened', () => {
     setup({ runs: [makeSummary()], run: makeRun() })
     const { container } = mount()

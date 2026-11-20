@@ -111,7 +111,8 @@ While TradingAgents is on, **Lucius's take on your position** (the asset page's 
 reads the stock's latest finished analysis, so you get one combined view. Lucius weighs it against
 its own evidence, says where it agrees or disagrees, and names it ("TradingAgents rated Hold on
 2026-11-17"). The rating is an input: Lucius still makes its own call, and it never becomes an
-order. The take never starts an analysis for you, because that costs money.
+order. The take never starts an analysis for you, because that costs money; it offers one in a
+single row under the take, and the run starts only when you click it.
 
 - **Which analysis.** The most recent finished run for the stock, at most 14 days old, with a
   rating. A run that could not settle on one (Unclear) is not used. With the feature off, or the
@@ -123,10 +124,17 @@ order. The take never starts an analysis for you, because that costs money.
   and a retry for the same run waits at least 12 hours). If a take was being written at that
   moment, the next time you open the page it is rewritten. Only the take's own refresh reads the
   analysis, so a price or news alert never includes it.
-- **You can see it.** The take shows "Includes TradingAgents" with the rating and its age ("today",
-  "3 days ago"), plus "may be outdated" past 3 days. Select it to open that run's full analysis on
-  the Analysis tab. A take written without a run shows nothing, and the chip is hidden while
-  TradingAgents is off or after you delete that run. It appears on its own once the take is rewritten after a run finishes.
+- **You can see it.** Under the take's verdict, one row shows the TradingAgents research as
+  supporting evidence, not a second verdict: "Research view: Sell · today", then a plain-language
+  reading of that rating for your position (held or not), plus "may be outdated" past 3 days. Select
+  it to open that run's full analysis on the Analysis tab, where the same reading sits under the
+  rating. The row is hidden while TradingAgents is off, and for crypto and holdings with no ticker.
+- **Add it from the take.** With no usable analysis, the row offers **Add TradingAgents research**
+  with what it would cost ("about $0.42", or "uses your Claude Code plan") and a **What's shared**
+  disclosure. It uses your configured analysts and context level and starts only when you click.
+  While it runs the row shows the stage, the time and **Cancel**, with **View** to open the card;
+  when it finishes the take updates by itself (**Refresh this take** appears if that takes more than
+  two minutes). If TradingAgents is not ready, the row says why and links **Set up TradingAgents**.
 - **What is sent.** The rating, the date, the analysis's decision text (up to 1,200 characters),
   how much of your holdings that run could see (not the amounts) and the model names go to the AI
   provider that writes the take, the same one that already receives your position for it. The

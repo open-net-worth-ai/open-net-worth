@@ -21679,18 +21679,15 @@ body.hide-amounts .mf-lbl-amt {
   margin-top: var(--space-4);
 }
 .ta-chip {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
+  display: block;
   margin-top: var(--space-3);
-  padding: var(--space-1) var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--surface2);
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--muted);
   font: inherit;
   font-size: var(--text-xs);
+  text-align: start;
   cursor: pointer;
 }
 .ta-chip:hover {
@@ -21700,13 +21697,25 @@ body.hide-amounts .mf-lbl-amt {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.ta-chip .ta-rating {
-  padding: 0 var(--space-3);
-  font-size: var(--text-xs);
-}
 .ta-chip__stale {
   color: var(--warn);
   font-weight: 600;
+}
+.ta-take-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.ta-take-row__error {
+  flex-basis: 100%;
+  color: var(--warn);
+}
+.ta-take-row__shared[open] {
+  flex-basis: 100%;
 }
 .ta-history {
   border-top: 1px solid var(--line);

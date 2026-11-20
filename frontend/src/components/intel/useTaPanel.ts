@@ -20,6 +20,13 @@ export interface TaFocus {
   seq: number
 }
 
+/** What the take said about the run it used: the run's id and the server's one-line reading of
+ *  its rating, which the card shows under that run's rating. */
+export interface TaTakeView {
+  runId: string
+  view: string | null
+}
+
 // Whether "Show full analysis" is open, per ticker, for this page load only — not stored.
 const fullOpenByTicker = new Map<string, boolean>()
 

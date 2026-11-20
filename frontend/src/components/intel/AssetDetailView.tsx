@@ -35,7 +35,7 @@ import { QuoteStats } from './QuoteStats'
 import { MarketStatusChip } from './MarketStatusChip'
 import { AnalystConsensus, AnalystConsensusRailCard } from './AnalystConsensus'
 import { TradingAgentsCard } from './TradingAgentsCard'
-import { TradingAgentsInputChip } from './TradingAgentsInputChip'
+import { TradingAgentsTakeRow } from './TradingAgentsTakeRow'
 import type { TaFocus } from './useTaPanel'
 import { NewsCardGrid } from './NewsCardGrid'
 import { LatestDevelopments } from './LatestDevelopments'
@@ -1045,10 +1045,12 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                               ticker={asset.ticker}
                             />
                           )}
-                          {data.trading_agents_input && (
-                            <TradingAgentsInputChip
-                              input={data.trading_agents_input}
+                          {data.has_ticker && asset.asset_class === 'equity' && asset.ticker && (
+                            <TradingAgentsTakeRow
+                              ticker={asset.ticker}
+                              input={data.trading_agents_input ?? null}
                               onOpen={openTaRun}
+                              onRefresh={refetch}
                             />
                           )}
                           <p className="asd-pi-disclaimer">
@@ -1203,6 +1205,14 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                   instrumentId={instrumentId}
                   ticker={asset.ticker}
                   focus={taFocus}
+                  takeView={
+                    data.trading_agents_input
+                      ? {
+                          runId: data.trading_agents_input.run_id,
+                          view: data.trading_agents_input.view ?? null,
+                        }
+                      : null
+                  }
                   onFocusHandled={taFocusHandled}
                 />
               )}

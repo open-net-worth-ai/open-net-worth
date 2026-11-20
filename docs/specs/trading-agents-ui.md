@@ -1041,3 +1041,46 @@ export interface TradingAgentsInput {
 Vitest: condensing helper (3 sentences, 400 cap, no punctuation, markdown stripped of headings),
 card collapsed/expanded states, chip present/absent/stale, both flag values, `npm run lint:classes`
 for `ta-chip`.
+
+## 11. WP11: one view, and the way to run it from the take (frontend)
+
+Owner feedback after 10: the take did not offer a run (the Analysis tab was the only door), and
+"Lucius's take: Hold" beside "TradingAgents: Sell" read as two opinions. TradingAgents is the
+stock research; Lucius's take is the position overlay on it. One view.
+
+### 11.1 The take's row
+
+`TradingAgentsTakeRow` replaces the chip in the take section (under `PositionVerdictLine`, above
+the not-advice line). Shown only for an equity with a ticker and the flag on; one row, at most two
+lines on a phone. Reads `useTaStatus`, `useTaRuns(ticker, 5)` (the card's own cache entries), and
+`trading_agents_input`. First match wins:
+
+| | State | Row |
+|---|---|---|
+| a | newest run for the ticker is queued/running | "TradingAgents research · {stage} · {elapsed}", **Cancel**, **View** (focuses the card). Cancel failure shows the server sentence |
+| b | a usable run exists (done, rated, trade date at most 14 days) and the take used it (`trading_agents_input.run_id`) | the research line, 11.2 |
+| c | a usable run exists the take has not used | "TradingAgents result ready — updating this take…" (status, no button); after 2 minutes **Refresh this take**, which only revalidates the asset detail |
+| d | availability ready, notice accepted, no usable run | **Add TradingAgents research** (secondary, small), cost hint from `/estimate` ("about $0.42", "uses your Claude Code plan", "cost unknown"), a **What's shared** disclosure (`TradingAgentsShared`, `context-preview`). The click calls `startTaRun(ticker, status.analysts, status.context_level)`: the configured defaults, never a level chosen in the browser. A refusal (budget, queue, unpriced model) shows inline; success shows (a) |
+| e | not ready (connector off/paused, not installed, needs reinstall, model unavailable, notice not accepted) | one quiet line from the availability, with **Set up TradingAgents** to `/connectors?connector=trading_agents`; installing has no link |
+
+Usable and "used" are the server's: the browser only compares ids and the 14-day window.
+
+### 11.2 One view, not two verdicts
+
+- State (b) is `Research view: {Label} · {age}`, then ` — {view}` when the server sent `view`, then
+  "may be outdated" past 3 days. Muted small text on the take, no rating pill, no colour per
+  rating; the take's own call (Hold, Wait, Trim) stays the one large element. It opens the card.
+- `trading_agents_input` gains `view?`, `held?`, `allowed_actions?`. `view` is the server's
+  one-line reading of the signal for this position ("negative outlook, not a buy now"). Absent, the
+  browser derives nothing: the line is `Research view: Sell · today`.
+- The card's title is "Research view · TradingAgents". Under the rating it shows `view` (held or
+  not) when the take used that run. The full rating pill lives on the card only; the take never
+  repeats it, so nothing shouts the rating twice.
+
+### 11.3 Tests
+
+`TradingAgentsTakeRow.test.tsx` (states a to e, flag on/off, start called once with the configured
+analysts and level and not before the click, Cancel, inline errors, stale and 14-day windows, the
+two-minute refresh, one row only), `AssetDetailView.taInput.test.tsx` (the line with/without `view`,
+stale suffix, ages, crypto and no-ticker hidden, `view` reaching the card),
+`TradingAgentsCard.test.tsx` (the reading under the rating).
