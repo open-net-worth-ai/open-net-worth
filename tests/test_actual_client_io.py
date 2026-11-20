@@ -501,10 +501,13 @@ def test_sweep_leaves_what_changed_lately_it_may_be_a_sibling_workers(work):
 def test_a_copy_that_couldnt_be_deleted_goes_at_the_next_copy(store, work, fake, monkeypatch):
     real = shutil.rmtree
     stuck = []
+    released = []
 
     def held_open(path, *args, **kwargs):
         if not stuck:
             stuck.append(Path(path))
+        # Held for every retry (Windows tries ten times) until the scanner lets go.
+        if stuck and Path(path) == stuck[0] and not released:
             raise PermissionError("a scanner has it open")
         real(path, *args, **kwargs)
 
@@ -513,6 +516,7 @@ def test_a_copy_that_couldnt_be_deleted_goes_at_the_next_copy(store, work, fake,
     with client.open_copy(store, "f1"):
         pass
     assert stuck[0].is_dir(), "the delete failed, and the run goes on"
+    released.append(True)
     with client.open_copy(store, "f1") as copy:
         assert not stuck[0].exists(), "though it changed moments ago: it's this process's own"
         assert copy.directory.is_dir()

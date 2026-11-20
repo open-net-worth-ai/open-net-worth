@@ -25,6 +25,7 @@ Test groups:
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -371,6 +372,10 @@ class _FakePaths:
 # ── 3. boot_app.sh — bash syntax check ───────────────────────────────────────
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="boot_app.sh is a bash QA script; on a Windows PATH `bash` is the WSL stub",
+)
 def test_boot_app_sh_bash_syntax():
     """boot_app.sh passes `bash -n` (no syntax errors)."""
     boot_script = Path(__file__).resolve().parent.parent / "qa" / "browser-use" / "boot_app.sh"

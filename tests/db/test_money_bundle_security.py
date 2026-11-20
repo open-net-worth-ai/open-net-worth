@@ -90,6 +90,7 @@ def _build_bundle(files: dict[str, bytes]) -> bytes:
 # ── FR-C1 layer 1 — the hard stop in money_io._statement_row ─────────────────────────
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_traversal_statement_id_refused_auth_untouched(isolated_parsed_dir, db_isolated):
     """The reviewer's primary exploit: id ``"../auth"`` with ``parsed_rows`` -> rewrite
     auth.json. import_statements must REFUSE; auth.json stays byte-identical AND mode 0600;
@@ -151,6 +152,7 @@ def test_unsafe_statement_ids_rejected_before_any_write(bad_id, isolated_parsed_
     assert not escape_target.exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_legit_statement_id_round_trips(isolated_parsed_dir, db_isolated):
     """A legit id still imports and round-trips (parsed_rows re-inlined verbatim), and its
     sidecar lands mode 0600 (FR-I3)."""

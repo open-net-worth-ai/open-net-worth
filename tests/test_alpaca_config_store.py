@@ -148,6 +148,7 @@ def test_record_status_persists_error_without_cash(store):
     assert pub["buying_power"] is None
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_keys_persisted_with_owner_only_perms(store, db_isolated):
     """No more per-store file to chmod — the DB engine restricts the WHOLE sqlite
     file (+ wal/shm) to 0600 on every connect (db.engine._restrict_sqlite_modes)."""

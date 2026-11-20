@@ -9,6 +9,7 @@ str() — that string reaches both the LLM context (ai/assistant.py) and the boo
 Isolated tmp database throughout — the live tree is never touched.
 """
 
+import os
 import stat
 
 import pytest
@@ -16,6 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_sqlite_db_file_is_owner_only_after_connect(tmp_path, monkeypatch):
     """A fresh engine, once connected, leaves its sqlite file at mode 0o600 (FR-I3). The
     connect event fires the chmod; -wal/-shm are checked too when a write created them."""

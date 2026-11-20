@@ -54,8 +54,8 @@ def connector_session_title(connector: str, started: Optional[datetime] = None) 
     their wall clock, not UTC.
     """
     when = (started or user_now()).astimezone(user_zone())
-    # %-d (no zero pad) is a glibc/BSD extension; both platforms this ships on have it.
-    return f"{connector.title()} • {when.strftime('%-d %b %Y, %H:%M')}"
+    # %-d (no zero pad) is a glibc/BSD extension that raises on Windows, so the day is formatted by hand.
+    return f"{connector.title()} • {when.day} {when.strftime('%b %Y, %H:%M')}"
 
 
 def ensure_session_titled(connector: str, session_id: str) -> None:

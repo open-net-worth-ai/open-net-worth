@@ -7,6 +7,8 @@ record_status(status, error=) is the uniform surface connector_fetch.fetch() cal
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 
@@ -104,6 +106,7 @@ def test_record_status_persists_error(tmp_store):
     assert pub["last_error"] == "bad flex token"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_chmod_600_applied(tmp_store, db_isolated):
     """The sqlite DATABASE FILE — not a per-store path, since ibkr_config is a
     connectors/connector_secrets rows now — must be owner-read-only after any

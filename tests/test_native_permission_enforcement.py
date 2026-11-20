@@ -329,7 +329,7 @@ def test_every_dispatch_site_consults_the_permission_store():
     }
     callers: dict[str, set[str]] = {}
     for path in backend.rglob("*.py"):
-        rel = str(path.relative_to(backend))
+        rel = path.relative_to(backend).as_posix()
         if rel in not_a_dispatch_site:
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):

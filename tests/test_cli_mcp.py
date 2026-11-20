@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 import urllib.request
 
@@ -124,9 +125,10 @@ def test_installed_launch_prefers_the_onw_beside_the_interpreter(root, tmp_path,
     monkeypatch.setattr(sys, "executable", str(bindir / "python3"))
     info = mcp_connect.connect_info()
     assert (info["command"], info["args"], info["command_found"]) == ("onw", ["mcp"], False)
-    (bindir / "onw").write_text("#!/bin/sh\n")
+    launcher = bindir / ("onw.exe" if os.name == "nt" else "onw")
+    launcher.write_text("#!/bin/sh\n")
     info = mcp_connect.connect_info()
-    assert (info["command"], info["command_found"]) == (str(bindir / "onw"), True)
+    assert (info["command"], info["command_found"]) == (str(launcher), True)
     assert info["desktop"] is False and info["root"] is None
     assert info["container"] is False
 

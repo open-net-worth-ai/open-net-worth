@@ -162,7 +162,10 @@ def test_unsafe_blob_names_are_refused(trees, name):
     ):
         for n in src.namelist():
             dst.writestr(n, src.read(n))
-        dst.writestr(name, b"evil")
+        # ZipInfo's constructor rewrites os.sep to "/", which would launder "a\\b" into "a/b" on Windows.
+        evil = zipfile.ZipInfo("evil")
+        evil.filename = name
+        dst.writestr(evil, b"evil")
     report = svc.inspect_bundle(bundle.getvalue())
     assert not report["ok"]
 

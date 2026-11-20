@@ -97,6 +97,11 @@ def reset_data_dir() -> Path:
     """
     import shutil
 
+    from backend.db.engine import dispose_engine
+
+    # Windows refuses to unlink a file a connection still holds open (rmtree below uses
+    # ignore_errors, so the stale onw.db would silently survive with its rows).
+    dispose_engine()
     for var in ("DATA_DIR", "CACHE_DIR"):
         path = Path(os.environ[var])
         if _LIVE_MARKER in str(path):  # pragma: no cover - defensive, belt and braces

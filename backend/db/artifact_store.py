@@ -76,7 +76,7 @@ class ArtifactStore(PayloadTableStore):
         # docs/adr/2026-08-21-unify-raw-file-storage-across-blob-stores.md), matching the
         # identical fix in statement_store.py's own create().
         try:
-            rel = str(disk.relative_to(DATA_DIR))
+            rel = disk.relative_to(DATA_DIR).as_posix()
         except ValueError:
             rel = f"files/artifacts/{aid}{ext}"
 

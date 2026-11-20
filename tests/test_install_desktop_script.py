@@ -101,7 +101,8 @@ def test_installs_the_verified_appimage_with_launcher_entry_and_icon(release, ho
     assert installed(home).read_bytes() == fake_appimage("1")
     assert os.access(installed(home), os.X_OK)
     entry = (home / ".local/share/applications/open-net-worth.desktop").read_text()
-    assert f'Exec="{installed(home)}"' in entry
+    # The POSIX script appends "/.local/bin/..." to a Windows-style $HOME, so compare slash-insensitively.
+    assert f'Exec="{installed(home).as_posix()}"' in entry.replace("\\", "/")
     assert "Icon=open-net-worth" in entry
     assert (
         home / ".local/share/icons/hicolor/512x512/apps/open-net-worth.png"

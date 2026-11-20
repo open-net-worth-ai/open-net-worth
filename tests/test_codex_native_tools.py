@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import sys
 
 import pytest
 
@@ -23,6 +22,7 @@ from backend.ai.models import codex_app_server as cas
 from backend.ai.models import codex_cli_provider as ccp
 from backend.ai.models import codex_live_turn as clt
 from backend.ai.models.cli_tool_protocol import NATIVE_TOOLS_NOTE
+from tests.fake_exe import python_cli
 
 THREAD_ID = "019fbbae-29a8-7c73-821d-aef48de1a574"
 TURN_ID = "019fbbae-29cf-7991-8ee7-c323140a9b42"
@@ -122,12 +122,9 @@ def _server(tmp_path, rounds, *, version="0.160.0", reject=False, host=True, aft
         encoding="utf-8",
     )
     exe = tmp_path / "codex"
-    exe.write_text(f'#!/bin/sh\nexec {sys.executable} "{py}"\n', encoding="utf-8")
-    exe.chmod(0o755)
+    exe = python_cli(exe, f"import runpy\nrunpy.run_path({str(py)!r}, run_name='__main__')\n")
     if host:
-        sibling = tmp_path / "codex-code-mode-host"
-        sibling.write_text("#!/bin/sh\n", encoding="utf-8")
-        sibling.chmod(0o755)
+        python_cli(tmp_path / "codex-code-mode-host", "")
     return str(exe), record
 
 

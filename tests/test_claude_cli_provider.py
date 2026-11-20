@@ -13,7 +13,6 @@ import asyncio
 import json
 import os
 import pathlib
-import stat
 import textwrap
 
 import pytest
@@ -35,6 +34,7 @@ from backend.core.errors import (
     ValidationError,
 )
 from backend.db.model_telemetry_store import ModelTelemetryStore
+from tests.fake_exe import python_cli
 
 
 def _spy_on_telemetry(monkeypatch) -> list[tuple[str, bool]]:
@@ -99,7 +99,8 @@ def _fake_cli(tmp_path, events: list[dict], *, exit_code: int = 0):
     """
     script = tmp_path / "claude"
     payload = "\n".join(json.dumps(e) for e in events)
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             f"""
             #!/usr/bin/env python3
@@ -131,9 +132,8 @@ def _fake_cli(tmp_path, events: list[dict], *, exit_code: int = 0):
                     break
             sys.exit({exit_code})
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
 
@@ -163,7 +163,8 @@ def _fake_cli_sequence(
     codes = exit_codes or [0]
     errs = stderr_texts or [""]
     script = tmp_path / "claude"
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             f"""
             #!/usr/bin/env python3
@@ -199,9 +200,8 @@ def _fake_cli_sequence(
                     break
             sys.exit(exit_code)
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
 
@@ -1555,8 +1555,7 @@ async def test_a_hung_cli_is_killed_and_reported_rather_than_hanging_the_turn(
     tmp_path, monkeypatch
 ):
     script = tmp_path / "claude"
-    script.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n")
-    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    script = python_cli(script, "#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n")
     monkeypatch.setenv("ONW_CLAUDE_CLI_TIMEOUT", "5")  # clamped to the 5s floor
     with pytest.raises(ExternalServiceError, match="timed out"):
         await ClaudeCliProvider(cli_path=str(script)).complete("hi", model="haiku")
@@ -1576,7 +1575,8 @@ async def test_abandoning_the_stream_kills_the_subprocess_and_cleans_up(tmp_path
     """
     monkeypatch.setenv("ONW_CLAUDE_CLI_SESSIONS", "0")
     script = tmp_path / "claude"
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             """
             #!/usr/bin/env python3
@@ -1586,9 +1586,8 @@ async def test_abandoning_the_stream_kills_the_subprocess_and_cleans_up(tmp_path
             sys.stdout.flush()
             time.sleep(60)
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
     # Keep the scratch dirs inside tmp_path so the cleanup is observable.
     monkeypatch.setattr(ccp.tempfile, "mkdtemp", lambda **kw: str(tmp_path / "workdir"))

@@ -331,7 +331,7 @@ def test_dead_connection_is_detected_and_reconnected_on_next_call(manager, stub_
     text1, _, _images = asyncio.run(mgr.call_external_tool("mcp__local__get_pid", {}))
     pid1 = _pid_of(text1)
 
-    os.kill(pid1, signal.SIGKILL)
+    os.kill(pid1, getattr(signal, "SIGKILL", signal.SIGTERM))  # SIGTERM is a hard kill on Windows
     conn = mgr._server_conns["local"]
     for _ in range(50):
         if not conn.is_alive():

@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import sys
 from pathlib import Path
 
 import pytest
@@ -18,6 +17,7 @@ import pytest
 from backend.ai.models import codex_app_server as cas
 from backend.ai.models import codex_cli_provider as ccp
 from backend.core.errors import CliNotSignedInError, ExternalServiceError
+from tests.fake_exe import python_cli
 
 THREAD_ID = "019fbbae-29a8-7c73-821d-aef48de1a574"
 TURN_ID = "019fbbae-29cf-7991-8ee7-c323140a9b42"
@@ -251,11 +251,7 @@ def _fake_server(tmp_path, script: list, name: str = "codex"):
         encoding="utf-8",
     )
     exe = tmp_path / name
-    exe.write_text(
-        f'#!/bin/sh\nexec {sys.executable} "{py}"\n',
-        encoding="utf-8",
-    )
-    exe.chmod(0o755)
+    exe = python_cli(exe, f"import runpy\nrunpy.run_path({str(py)!r}, run_name='__main__')\n")
     return str(exe), record
 
 
@@ -612,8 +608,7 @@ async def test_a_failing_app_server_retries_then_raises_instead_of_using_exec(
     `codex exec` — which streams nothing — with a single WARNING as the only trace.
     """
     exe = tmp_path / "codex"
-    exe.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
-    exe.chmod(0o755)
+    exe = python_cli(exe, "import sys\nsys.exit(2)\n")
 
     attempts = {"n": 0}
 
@@ -655,8 +650,7 @@ async def test_a_transient_app_server_failure_is_retried_not_surfaced(tmp_path, 
     """Two of three attempts may fail without the user ever seeing it — that's the point of
     retrying rather than failing on the first hiccup."""
     exe = tmp_path / "codex"
-    exe.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
-    exe.chmod(0o755)
+    exe = python_cli(exe, "import sys\nsys.exit(2)\n")
 
     attempts = {"n": 0}
 
@@ -684,8 +678,7 @@ async def test_a_transient_app_server_failure_is_retried_not_surfaced(tmp_path, 
 async def test_a_failure_after_content_reached_the_user_is_never_retried(tmp_path, monkeypatch):
     """Retrying a half-streamed turn would repeat the text the user already read."""
     exe = tmp_path / "codex"
-    exe.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
-    exe.chmod(0o755)
+    exe = python_cli(exe, "import sys\nsys.exit(2)\n")
 
     attempts = {"n": 0}
 

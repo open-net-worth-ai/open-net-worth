@@ -59,7 +59,7 @@ def test_exactly_one_production_reader():
                 and isinstance(node.func, ast.Name)
                 and node.func.id == "is_unattended"
             ):
-                readers.add(str(path.relative_to(_BACKEND)))
+                readers.add(path.relative_to(_BACKEND).as_posix())
     assert readers == {"ai/tools/scripts.py"}, (
         f"core.unattended must have exactly one production reader; found {sorted(readers)}"
     )

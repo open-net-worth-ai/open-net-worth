@@ -39,6 +39,7 @@ _log = logging.getLogger(__name__)
 # bounds the OTHER native failure mode a subprocess contains but an exception handler does
 # not: a C-level infinite loop, which no Python timeout could interrupt in-process.
 _EXTRACT_TIMEOUT_S = 30
+_NTSTATUS_ERROR = 0xC0000000
 
 # The child program, as a literal. Reads {"html","url"} from stdin, writes {"text"} to
 # stdout. Deliberately tiny: everything it needs arrives as data, so there is no format
@@ -91,13 +92,16 @@ def extract_main_content(html: str, url: str, timeout_s: float = _EXTRACT_TIMEOU
 
     if proc.returncode != 0:
         # A NEGATIVE returncode is a signal, and it is the case this module was built for:
-        # -6 is SIGABRT, i.e. libxml2 aborted and would have taken the server with it.
+        # -6 is SIGABRT, i.e. libxml2 aborted and would have taken the server with it. Windows
+        # reports a crash as an NTSTATUS error code (0xC0000409 for an abort) instead.
         # Logged loudly because it is a real crash that just happened to be survivable.
         _log.warning(
             "html extraction child exited %s (url=%s) — falling back to raw text%s",
             proc.returncode,
             url,
-            " [NATIVE CRASH — contained]" if proc.returncode < 0 else "",
+            " [NATIVE CRASH — contained]"
+            if proc.returncode < 0 or proc.returncode >= _NTSTATUS_ERROR
+            else "",
         )
         return None
 

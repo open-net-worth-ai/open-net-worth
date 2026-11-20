@@ -80,10 +80,14 @@ def _entry(path: Path) -> dict:
 
 def _signed_inputs(directory: Path) -> list[Path]:
     """Every release file except the checksum list itself and signatures."""
+    # By name: sorting Paths folds case on Windows, which would reorder the signed list per OS.
     return sorted(
-        p
-        for p in directory.iterdir()
-        if p.is_file() and p.name != SUMS and not p.name.endswith(SIGNATURE_SUFFIX)
+        (
+            p
+            for p in directory.iterdir()
+            if p.is_file() and p.name != SUMS and not p.name.endswith(SIGNATURE_SUFFIX)
+        ),
+        key=lambda p: p.name,
     )
 
 
@@ -122,7 +126,7 @@ def build_manifest(directory: Path, version: str, commit: str, image_digest: str
 
 def write_sums(directory: Path) -> str:
     text = "".join(f"{sha256_of(p)}  {p.name}\n" for p in _signed_inputs(directory))
-    (directory / SUMS).write_text(text)
+    (directory / SUMS).write_text(text, newline="\n")
     return text
 
 

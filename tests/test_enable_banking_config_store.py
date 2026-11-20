@@ -5,6 +5,8 @@ own module docstring. Mirrors tests/test_yodlee.py::TestYodleeConfigStore. No ne
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 _PEM = "-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----"
@@ -133,6 +135,7 @@ def test_env_is_ignored(monkeypatch):
     assert cfg["private_key"] == ""
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_chmod_applied(db_isolated):
     """No more per-store file to chmod — the DB engine restricts the WHOLE sqlite file
     (+ wal/shm) to 0600 on every connect (db.engine._restrict_sqlite_modes), the DB-era
