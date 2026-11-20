@@ -114,6 +114,13 @@ The **Autopilot** tab's switch sets who trades a paper portfolio:
 
 Autopilot needs a mandate: it is what you approve in advance. Every review:
 
+- starts from its track record, worked out fresh from the portfolio's own history: its last five
+  reviews and what it said it was watching, how each paper buy has done since, and how each stock
+  it sold has moved since the sale (whether selling avoided a drop or left money behind). It
+  checks what it was watching first, and says in the memo where the record changed a decision;
+- writes a one-sentence **lesson** on each stock it has fully sold, and reads its last five
+  lessons back in later reviews, marked as its earlier opinion rather than fact. **History** shows
+  a review's lessons under its memo;
 - reads the portfolio, then checks the last two weeks' headlines for each holding (the same
   stories its asset page shows), your investment thesis for each one that has it, and the chart
   and company figures of anything that moved a lot or is near a limit, before it decides

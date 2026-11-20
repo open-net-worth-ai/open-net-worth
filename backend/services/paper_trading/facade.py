@@ -68,10 +68,13 @@ def news(pid: str) -> dict:
     }
 
 
-def record_memo(pid: str, memo: str, watching: str | None) -> dict:
-    """The running autopilot review's memo, recorded by Lucius."""
+def record_memo(
+    pid: str, memo: str, watching: str | None, lessons: list[dict] | None = None
+) -> dict:
+    """The running autopilot review's memo, recorded by Lucius, with any lessons on stocks it
+    fully sold."""
     service.apply_paper_change(
-        {"op": "autopilot_memo", "id": pid, "memo": memo, "watching": watching}
+        {"op": "autopilot_memo", "id": pid, "memo": memo, "watching": watching, "lessons": lessons}
     )
     return {"ok": True, **SIMULATED}
 

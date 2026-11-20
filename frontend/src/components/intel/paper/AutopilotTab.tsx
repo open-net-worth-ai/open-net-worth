@@ -427,6 +427,11 @@ function History({ runs, auto }: { runs: AutopilotRun[]; auto: boolean }) {
                     Looked up: {(r.looked_up ?? []).map(lookupLabel).join('; ')}
                   </p>
                 )}
+                {(r.lessons ?? []).map((l) => (
+                  <p key={l.symbol} className="paper-ap-watching">
+                    Lesson on {l.symbol}: {l.lesson}
+                  </p>
+                ))}
                 <div className="a3-muted">
                   {r.trigger ? `Started by: ${r.trigger}` : 'Started on schedule'} • Ran on{' '}
                   {modelLabel(r.model)} • {effortLabel(r.effort)}

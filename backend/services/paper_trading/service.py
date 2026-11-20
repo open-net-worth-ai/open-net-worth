@@ -764,7 +764,7 @@ def apply_paper_change(change: dict) -> dict:
 
         return {
             "portfolio": autopilot.save_memo(
-                change.get("id"), change.get("memo"), change.get("watching")
+                change.get("id"), change.get("memo"), change.get("watching"), change.get("lessons")
             )
         }
     if op == "autopilot_trigger":

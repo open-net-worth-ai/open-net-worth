@@ -268,6 +268,9 @@ def finish(pid: str, record: dict) -> dict:
             "orders": record.get("orders") or [],
             # What it looked up off the machine (searches, price histories), in order.
             "looked_up": record.get("looked_up") or [],
+            # One sentence each on stocks it fully sold: later reviews read them as its earlier
+            # opinion (autopilot_memory), kept apart from the facts.
+            "lessons": (draft.get("lessons") or []) if status == "done" else [],
             "error": error,
         }
         failures = a["failures"] + 1 if status == "failed" else 0
@@ -285,9 +288,10 @@ def finish(pid: str, record: dict) -> dict:
         return _save(row, a, conn=conn)
 
 
-def save_memo(pid: str, memo: str, watching: str | None) -> dict:
+def save_memo(pid: str, memo: str, watching: str | None, lessons: list | None = None) -> dict:
     """Record the running review's memo (op "autopilot_memo"). Only during a review; a second
-    call replaces the first, so the memo is his final word."""
+    call replaces the first, so the memo is his final word. ``lessons``: one sentence each on
+    stocks it fully sold, read back by later reviews as its earlier opinion."""
     from backend.services.paper_trading import service
 
     text = str(memo or "").strip()
@@ -295,6 +299,7 @@ def save_memo(pid: str, memo: str, watching: str | None) -> dict:
         raise ValidationError("Write the memo: what you checked, what you did and why.")
     if len(text) > MAX_MEMO:
         raise ValidationError(f"Keep the memo under {MAX_MEMO} characters.")
+    clean_lessons = _clean_lessons(lessons)
     with locked_unit_of_work(*ALL_TABLES) as conn:
         row = service.portfolio(pid, conn=conn)
         a = of(row)
@@ -303,8 +308,29 @@ def save_memo(pid: str, memo: str, watching: str | None) -> dict:
         a["memo_draft"] = {
             "memo": text,
             "watching": str(watching or "").strip()[:MAX_WATCHING] or None,
+            "lessons": clean_lessons,
         }
         return _save(row, a, conn=conn)
+
+
+def _clean_lessons(lessons: list | None) -> list[dict]:
+    from backend.services.paper_trading.autopilot_memory import MAX_LESSON, MAX_LESSONS
+
+    items = list(lessons or [])
+    if len(items) > MAX_LESSONS:
+        raise ValidationError(f"Write at most {MAX_LESSONS} lessons a review.")
+    out = []
+    for item in items:
+        symbol = str((item or {}).get("symbol") or "").strip().upper()[:20]
+        lesson = str((item or {}).get("lesson") or "").strip()
+        if not symbol:
+            raise ValidationError("A lesson names the symbol of the stock it is about.")
+        if not lesson:
+            raise ValidationError(f"Write the lesson on {symbol}: one sentence.")
+        if len(lesson) > MAX_LESSON:
+            raise ValidationError(f"Keep each lesson under {MAX_LESSON} characters.")
+        out.append({"symbol": symbol, "lesson": lesson})
+    return out
 
 
 def run_started_at(row: dict) -> str | None:

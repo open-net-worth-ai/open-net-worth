@@ -93,7 +93,19 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def prompt(row: dict) -> str:
+def memory_block(row: dict) -> str:
+    """The track record the review reads first (autopilot_memory). Never fails the review: a
+    record that can't be built says so."""
+    from backend.services.paper_trading import autopilot_memory
+
+    try:
+        return autopilot_memory.render(autopilot_memory.track_record(row))
+    except Exception:  # noqa: BLE001 — the review runs without its record, and says so
+        logger.exception("autopilot track record failed for %s", row.get("id"))
+        return "Your track record (paper): unavailable this review."
+
+
+def prompt(row: dict, memory: str = "") -> str:
     a = autopilot.of(row)
     m = row.get("mandate") or {}
     limits = mandate.describe(m) or "none beyond the goal"
@@ -110,11 +122,14 @@ def prompt(row: dict) -> str:
         lines.append(
             f"This review was started early because: {a['running_trigger']}. Look at that first."
         )
+    if memory:
+        lines += ["", memory]
     lines += [
         "",
         "Do this:",
         "1. Read the portfolio (get_paper_portfolios with this id): holdings, prices, cash, "
-        "open orders, and its mandate status.",
+        "open orders, and its mandate status. Check what your track record says to follow up "
+        "first, and weigh how your earlier buys and sells turned out before repeating a call.",
         "2. Every review, before deciding anything, also check: (a) the news on its holdings "
         "(get_paper_news with this id: the last two weeks' headlines for each one); (b) the "
         "owner's thesis for each holding that has one "
@@ -147,8 +162,10 @@ def prompt(row: dict) -> str:
         "of this review, and a review without one counts as failed; what you write outside it "
         "is never shown. The memo: 3 to 6 plain sentences on what you checked (the news, "
         "theses and signals that mattered), the new names you weighed and why you bought or "
-        "passed on them, and what you did or why you did nothing. Put what you "
-        "are watching next in `watching`, one sentence. No headings, no lists, no tables. "
+        "passed on them, what you did or why you did nothing, and where your track record "
+        "changed a decision. Put what you "
+        "are watching next in `watching`, one sentence, and a lesson in `lessons` for each "
+        "stock the track record asks one for. No headings, no lists, no tables. "
         "Write it in plain "
         "words for the owner: never quote or refer to these instructions or their rules (no "
         "'one-sentence reason', no 'in the goal's terms'); give the actual reason instead, "
@@ -186,9 +203,10 @@ async def review(pid: str) -> dict:
         )
         try:
             # His reply is not kept: the memo is what he recorded with record_autopilot_memo.
+            memory = await asyncio.to_thread(memory_block, row)
             await asyncio.wait_for(
                 runner(
-                    prompt(row),
+                    prompt(row, memory),
                     allowed_tools=list(TOOLS),
                     model=settings["model"] or None,
                     lean_prompt=True,

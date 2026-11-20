@@ -61,6 +61,8 @@ export interface AutopilotRun {
   orders: { id: string; label: string; status: string }[]
   /** What it looked up off the machine, in order: web and X searches, price histories. */
   looked_up?: { tool: string; query: string }[]
+  /** One sentence each on stocks it fully sold; later reviews read them as its earlier read. */
+  lessons?: { symbol: string; lesson: string }[]
   error: string | null
   /** What it ran on: '' is the app's default model. */
   model?: string

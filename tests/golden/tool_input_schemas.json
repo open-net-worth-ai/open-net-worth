@@ -11370,12 +11370,30 @@
     "additionalProperties": false,
     "properties": {
       "memo": {
-        "description": "What the owner reads: 3 to 6 plain sentences on what you checked, what you did or why you did nothing (1,200 characters at most).",
+        "description": "What the owner reads: what you checked, did and why (1,200 characters at most).",
         "type": "string"
       },
       "watching": {
         "type": "string",
         "description": "What you are watching before the next review, one sentence."
+      },
+      "lessons": {
+        "items": {
+          "properties": {
+            "symbol": {
+              "type": "string"
+            },
+            "lesson": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "symbol",
+            "lesson"
+          ],
+          "type": "object"
+        },
+        "type": "array"
       }
     },
     "required": [

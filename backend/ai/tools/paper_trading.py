@@ -271,14 +271,21 @@ async def get_paper_news(input_data: dict):
         return _dump({"error": _err(exc), "simulated": True})
 
 
+class AutopilotLessonInput(NestedInput):
+    symbol: str
+    lesson: str
+
+
 class RecordAutopilotMemoInput(ToolInput):
     memo: str = Field(
-        description="What the owner reads: 3 to 6 plain sentences on what you checked, what "
-        "you did or why you did nothing (1,200 characters at most)."
+        description="What the owner reads: what you checked, did and why (1,200 characters "
+        "at most)."
     )
     watching: Optional[str] = Field(
         default=None, description="What you are watching before the next review, one sentence."
     )
+    # Which stocks need one, and how to write it, is in the review's own prompt.
+    lessons: Optional[list[AutopilotLessonInput]] = None
 
 
 def _record_memo(input_data: dict) -> dict:
@@ -287,15 +294,20 @@ def _record_memo(input_data: dict) -> dict:
     ctx = get_automation_approval()
     if ctx is None or not ctx.automation_id.startswith("autopilot:") or not ctx.paper_portfolio_id:
         raise ConflictError("record_autopilot_memo is only for a paper autopilot review.")
-    facade.record_memo(ctx.paper_portfolio_id, input_data["memo"], input_data.get("watching"))
+    facade.record_memo(
+        ctx.paper_portfolio_id,
+        input_data["memo"],
+        input_data.get("watching"),
+        input_data.get("lessons"),
+    )
     return {"ok": True, "simulated": True}
 
 
 @tool(
     "record_autopilot_memo",
     description=(
-        "Inside a paper portfolio's autopilot review only: record the review's memo, the one "
-        "thing the owner reads. Call it once, last; a later call replaces the memo. A review "
+        "Inside a paper portfolio's autopilot review only: record the review's memo. Call it "
+        "once, last; a later call replaces the memo. A review "
         "that ends without it counts as failed."
     ),
     input_schema=schema_of(RecordAutopilotMemoInput, tool_name="record_autopilot_memo"),
