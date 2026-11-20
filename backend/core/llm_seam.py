@@ -7,7 +7,8 @@ This mirrors the existing inversions (``core.io.register_write_hook``,
 ``core.agent_runner.register_runner``): ``ai`` registers its provider here at import time,
 and a downstream module calls ``complete(...)`` / ``parse_json(...)`` through this seam. So
 the edges are ``services → core`` and ``ai → core`` — both downward; no ``services → ai``
-import. This module imports nothing internal.
+import. The only internal import is its stdlib-only sibling ``core.background_ai_health``,
+which records each background call's outcome for Settings → AI.
 
 Two capabilities are exposed because the two real consumers (``services.reconcile`` and the
 email ingest adapter) both need them:
@@ -48,6 +49,8 @@ import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, List, Optional, Union
+
+from backend.core import background_ai_health
 
 logger = logging.getLogger(__name__)
 
@@ -293,18 +296,23 @@ async def complete_json(
     turn_tokens = max_tokens
     last_err = "no attempts"
     for _ in range(max_reasks + 1):
-        text = await complete(
-            turn_prompt,
-            system=sys,
-            model=model,
-            max_tokens=turn_tokens,
-            source=source,
-            response_format=response_format,
-            effort=effort,
-        )
+        try:
+            text = await complete(
+                turn_prompt,
+                system=sys,
+                model=model,
+                max_tokens=turn_tokens,
+                source=source,
+                response_format=response_format,
+                effort=effort,
+            )
+        except Exception as exc:
+            _note_outcome(source, exc)
+            raise
         obj = parse_json(text)
         err = "reply was not valid JSON" if obj is None else (validate(obj) if validate else None)
         if err is None:
+            _note_outcome(source, None)
             return obj
         last_err = err
         # A parse failure is often TRUNCATION (the reply hit max_tokens mid-JSON — invalid
@@ -325,7 +333,25 @@ async def complete_json(
         max_reasks + 1,
         last_err,
     )
+    _note_outcome(source, NO_USABLE_ANSWER)
     return None
+
+
+NO_USABLE_ANSWER = ("no_usable_answer", "")
+
+
+def _note_outcome(source: str, failure: BaseException | tuple[str, str] | None) -> None:
+    """Record one call's outcome for Settings → AI (`core.background_ai_health`). Never lets a
+    recording problem change what the call returns or raises."""
+    try:
+        if failure is None:
+            background_ai_health.record_success(source)
+        elif isinstance(failure, BaseException):
+            background_ai_health.record_failure(source, background_ai_health.classify(failure))
+        else:
+            background_ai_health.record_failure(source, failure)
+    except Exception:
+        logger.debug("background_ai_health: could not record an outcome", exc_info=True)
 
 
 def parse_json(text: str) -> Any:

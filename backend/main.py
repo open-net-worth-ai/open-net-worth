@@ -98,6 +98,7 @@ from backend.api.artifacts import router as artifacts_router
 from backend.api.assets_api import router as assets_router
 from backend.api.auth import router as auth_router
 from backend.api.automations import router as automations_router
+from backend.api.background_ai_health import router as background_ai_health_router
 from backend.api.backup import router as backup_router
 from backend.api.bank_sync_api import router as bank_sync_router
 from backend.api.briefing import router as briefing_router
@@ -1231,6 +1232,7 @@ app.include_router(portfolio_history_router)
 app.include_router(preferred_models_router)
 app.include_router(cost_router)
 app.include_router(model_telemetry_router)
+app.include_router(background_ai_health_router)
 app.include_router(backup_router)
 app.include_router(builder_router)
 app.include_router(checkpoints_router)

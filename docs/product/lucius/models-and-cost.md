@@ -122,6 +122,14 @@ message. There's nothing to set. This is separate from [Memory](memory.md), whic
   write-ups. Below it, **Search &
   fetch** shows estimated charges from web-search providers, and **Model performance** shows
   each model's speed and reliability.
+- **Background AI tasks** (same page, at the bottom): the work the AI does on its own —
+  Intel analysis, news screening, briefings and the rest. Each task shows **Working**,
+  **Recovering** (it failed in the last 24 hours but has since succeeded) or **Failing**, how
+  many of its calls failed in the last 24 hours, when it last succeeded, and the last problem
+  in plain words — for example *The AI provider declined the request* or *The AI provider
+  rate-limited the request*. A failing task skips its work until the AI answers again, so this
+  is where to look when Intel takes or briefings stop updating. It counts from when the server
+  last started; a restart clears it.
 
 Prices are calculated from each provider's published rates. With the Claude Code CLI on a
 Claude plan, the figure is what that usage would cost at list price — your plan covers it, and

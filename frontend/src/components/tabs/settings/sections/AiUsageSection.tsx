@@ -7,6 +7,7 @@ import { ChevronDown, Check } from '../../../../ui/icons'
 import { fDate } from '../../../../utils/format'
 import { Panel } from '../ds'
 import type { SectionProps } from '../ds'
+import { BackgroundAiHealthPanel } from './BackgroundAiHealthPanel'
 import { ModelTelemetryPanel } from './ModelTelemetryPanel'
 import { SearchFetchCostPanel } from './SearchFetchCostPanel'
 
@@ -362,6 +363,8 @@ export function AiUsageSection(props: SectionProps) {
       <SearchFetchCostPanel rows={searchFetch} formatCost={trendUsd} periodLabel={windowLabel} />
 
       <ModelTelemetryPanel />
+
+      <BackgroundAiHealthPanel />
     </>
   )
 }
