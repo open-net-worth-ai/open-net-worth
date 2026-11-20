@@ -12,8 +12,12 @@ text derived from the portfolio context, so it is deleted when the run ends or i
 and ``remove_environment`` deletes the whole tree. Run rows are kept (the owner deletes them from
 the UI).
 
-When ``worker/requirements.lock`` is present the install is two steps: every dependency from that
-hash-locked file (``--require-hashes --no-deps``), then the pinned commit with ``--no-deps``.
+The install is three steps, and a missing ``worker/requirements.lock`` FAILS it (it never falls
+back to unpinned dependencies): every dependency from that hash-locked file (``--require-hashes
+--no-deps``, wheels only), then the pinned commit with ``--no-deps``, then a ``pip check``. The
+installer and the worker's self-test run in the worker's redirected environment (HOME and every
+XDG/AppData folder a scratch folder, which is also their working directory). Building the pinned
+commit's own sdist still fetches its build backend unpinned — an accepted residual.
 
 An install writes its progress to the connector's app-written ``state`` (``install_status``,
 ``installed_version``, ``install_error``); a failure's log tail is redacted before it is stored.
@@ -68,6 +72,18 @@ class Scratch(NamedTuple):
 
 
 _RUN_ID = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+# Where a library looks for per-user config and caches: for the worker and the installer, every
+# one of them is a scratch folder, never the owner's real home.
+HOME_VARIABLES = (
+    "HOME",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_STATE_HOME",
+)
 
 
 def _no_runs() -> int:
@@ -122,6 +138,25 @@ def scratch(run_id: str) -> Scratch:
         folder.mkdir(parents=True, exist_ok=True)
         platform_fs.restrict_to_owner(folder)
     return folders
+
+
+def redirected_environ(home: Path) -> dict[str, str]:
+    """The scrubbed environment with every per-user folder pointed at ``home`` and ``.env``
+    loading switched off — what third-party code runs under here."""
+    env = scrubbed_environ()
+    env.update(dict.fromkeys(HOME_VARIABLES, str(home)))
+    for name in ("HOMEDRIVE", "HOMEPATH"):
+        env.pop(name, None)
+    env["PYTHON_DOTENV_DISABLED"] = "1"
+    return env
+
+
+def install_scratch() -> Path:
+    """The folder the installer and the self-test run in (owner-only), as their home and cwd."""
+    folder = root() / "install"
+    folder.mkdir(parents=True, exist_ok=True)
+    platform_fs.restrict_to_owner(folder)
+    return folder
 
 
 def remove_run(run_id: str) -> None:
@@ -196,15 +231,18 @@ def _stop(process: asyncio.subprocess.Process) -> None:
 
 
 async def _run(command: list[str], *, cwd: Optional[Path] = None) -> tuple[int, str]:
-    """Run ``command`` in its own process tree with the scrubbed environment; ``(exit code,
-    bounded output tail)``. Cancelling (a timeout above) kills the whole tree."""
+    """Run ``command`` in its own process tree, in the redirected environment and (unless ``cwd``
+    says otherwise) the install scratch folder, so no ``.env`` or config of the server's own folder
+    or the owner's home is in reach; ``(exit code, bounded output tail)``. Cancelling (a timeout
+    above) kills the whole tree."""
+    scratch_dir = install_scratch()
     process = await asyncio.create_subprocess_exec(
         *command,
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
-        cwd=cwd,
-        env=scrubbed_environ(),
+        cwd=cwd or scratch_dir,
+        env=redirected_environ(scratch_dir),
         **process_tree.spawn_kwargs(),
     )
     tail = ""
@@ -234,27 +272,32 @@ def _installer() -> Optional[str]:
 
 
 async def _create_environment() -> None:
+    if not lock_file().is_file():
+        raise ExternalServiceError(
+            f"The dependency lock {lock_file().name} is missing from this Open Net Worth "
+            "installation, so TradingAgents will not install unpinned dependencies. Reinstall "
+            "Open Net Worth."
+        )
     shutil.rmtree(venv_dir(), ignore_errors=True)
     root().mkdir(parents=True, exist_ok=True)
     uv = _installer()
     python = str(venv_python())
-    locked = lock_file().is_file()
     if uv is not None:
         await _checked(
             [uv, "venv", str(venv_dir()), "--python", sys.executable], "Creating the environment"
         )
         pip = [uv, "pip", "install", "--python", python]
+        wheels_only, check = ["--no-build"], [uv, "pip", "check", "--python", python]
     else:
         await _checked([sys.executable, "-m", "venv", str(venv_dir())], "Creating the environment")
         pip = [python, "-m", "pip", "install", "--no-input"]
-    if locked:
-        await _checked(
-            [*pip, "--require-hashes", "--no-deps", "-r", str(lock_file())],
-            "Installing the locked dependencies",
-        )
-        await _checked([*pip, "--no-deps", TA_PIN], "Installing")
-        return
-    await _checked([*pip, TA_PIN], "Installing")
+        wheels_only, check = ["--only-binary", ":all:"], [python, "-m", "pip", "check"]
+    await _checked(
+        [*pip, "--require-hashes", "--no-deps", *wheels_only, "-r", str(lock_file())],
+        "Installing the locked dependencies",
+    )
+    await _checked([*pip, "--no-deps", TA_PIN], "Installing")
+    await _checked(check, "Checking the installed dependencies")
 
 
 async def _selftest() -> str:
@@ -268,12 +311,15 @@ async def _selftest() -> str:
     if code != 0 or not report.get("ok"):
         raise ExternalServiceError(f"The install check failed: {_failure_text(tail)}")
     commit = str(report.get("ta_commit") or "")
-    if commit and commit != TA_COMMIT:
+    if not commit:
+        raise ExternalServiceError(
+            "The install check could not read which commit TradingAgents was installed from, so "
+            "it cannot be verified against the pin."
+        )
+    if commit != TA_COMMIT:
         raise ExternalServiceError(
             f"The install check found TradingAgents at {commit[:12]}, not the pinned {TA_COMMIT[:12]}."
         )
-    if not commit:
-        log.warning("trading_agents_install_commit_unverified")
     return str(report.get("ta_version") or "")
 
 
@@ -305,6 +351,8 @@ async def install() -> None:
     else:
         log.info("trading_agents_installed commit=%s version=%s", TA_COMMIT[:8], version)
         _set_state(install_status=READY, installed_version=TA_COMMIT, install_error=None)
+    finally:
+        shutil.rmtree(root() / "install", ignore_errors=True)
 
 
 def _fail(reason: str) -> None:

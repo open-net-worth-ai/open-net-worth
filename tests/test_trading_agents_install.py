@@ -35,6 +35,9 @@ def _state() -> dict:
     return TradingAgentsConfigStore().read()["state"]
 
 
+SELFTEST_OK = json.dumps({"ok": True, "ta_version": "0.7.1", "ta_commit": install.TA_COMMIT}) + "\n"
+
+
 class Commands:
     """Records the commands an install runs and answers each from a script."""
 
@@ -46,7 +49,7 @@ class Commands:
     async def run(self, command, cwd=None):
         self.seen.append(list(command))
         if command[-1] == "--selftest":
-            return 0, '{"ok": true, "ta_version": "0.7.1"}\n'
+            return 0, SELFTEST_OK
         if self.fail_on and self.fail_on in command:
             return 1, self.tail
         return 0, self.tail
@@ -125,13 +128,20 @@ async def test_with_uv_it_makes_a_venv_installs_the_pin_and_runs_the_selftest(mo
     commands = Commands()
     _install_with(monkeypatch, commands)
     await install.install()
-    venv, deps, pin, check = commands.seen
+    venv, deps, pin, pip_check, check = commands.seen
     assert venv[:3] == ["/bin/uv", "venv", str(install.venv_dir())]
     assert deps[:3] == ["/bin/uv", "pip", "install"]
     assert deps[deps.index("--python") + 1] == str(install.venv_python())
-    assert deps[-4:] == ["--require-hashes", "--no-deps", "-r", str(install.lock_file())]
+    assert deps[-5:] == [
+        "--require-hashes",
+        "--no-deps",
+        "--no-build",
+        "-r",
+        str(install.lock_file()),
+    ]
     assert pin[:3] == ["/bin/uv", "pip", "install"] and pin[-1] == install.TA_PIN
     assert "--no-deps" in pin and "--require-hashes" not in pin
+    assert pip_check == ["/bin/uv", "pip", "check", "--python", str(install.venv_python())]
     assert check[:2] == [str(install.venv_python()), "-I"] and check[-1] == "--selftest"
     assert _state()["install_status"] == "ready"
     assert _state()["installed_version"] == install.TA_COMMIT
@@ -145,8 +155,16 @@ async def test_without_uv_it_falls_back_to_venv_and_pip(monkeypatch):
     assert commands.seen[0][1:3] == ["-m", "venv"]
     assert commands.seen[1][1:4] == ["-m", "pip", "install"]
     assert "--require-hashes" in commands.seen[1] and "--no-deps" in commands.seen[1]
+    assert commands.seen[1][-6:-1] == [
+        "--require-hashes",
+        "--no-deps",
+        "--only-binary",
+        ":all:",
+        "-r",
+    ]
     assert commands.seen[2][1:4] == ["-m", "pip", "install"]
     assert commands.seen[2][-1] == install.TA_PIN
+    assert commands.seen[3][1:] == ["-m", "pip", "check"]
     assert _state()["install_status"] == "ready"
 
 
@@ -165,18 +183,43 @@ def test_the_shipped_lock_is_fully_hashed_and_leaves_out_the_pin_itself():
     assert all(any("--hash=sha256:" in ln for ln in lines) for lines in requirements.values())
 
 
-async def test_with_no_lock_file_it_installs_the_pin_with_its_own_dependencies(
+async def test_with_no_lock_file_the_install_fails_naming_it_and_installs_nothing(
     monkeypatch, tmp_path
 ):
     monkeypatch.setattr(install, "lock_file", lambda: tmp_path / "absent.lock")
     commands = Commands()
     _install_with(monkeypatch, commands)
     await install.install()
-    assert [c[3:] if c[1] == "pip" else c[1] for c in commands.seen[:2]] == [
-        "venv",
-        ["--python", str(install.venv_python()), install.TA_PIN],
-    ]
-    assert len(commands.seen) == 3
+    assert commands.seen == []
+    assert _state()["install_status"] == "failed"
+    assert "absent.lock" in _state()["install_error"] and "unpinned" in _state()["install_error"]
+    assert not install.venv_dir().exists()
+
+
+async def test_a_dependency_problem_found_by_pip_check_fails_the_install(monkeypatch):
+    commands = Commands(
+        fail_on="check", tail="langgraph 1.2 requires langchain-core, not installed"
+    )
+    _install_with(monkeypatch, commands)
+    await install.install()
+    assert _state()["install_status"] == "failed"
+    assert "Checking the installed dependencies failed" in _state()["install_error"]
+    assert "langchain-core" in _state()["install_error"]
+    assert "check" in commands.seen[-1]  # the self-test never ran
+
+
+async def test_an_install_with_no_recorded_commit_fails_instead_of_warning(monkeypatch):
+    async def run(command, cwd=None):
+        if command[-1] == "--selftest":
+            return 0, '{"ok": true, "ta_version": "0.7.1"}'
+        return 0, ""
+
+    monkeypatch.setattr(install, "_run", run)
+    monkeypatch.setattr(install, "_installer", lambda: "/bin/uv")
+    await install.install()
+    assert _state()["install_status"] == "failed"
+    assert "could not read which commit" in _state()["install_error"]
+    assert _state().get("installed_version") is None
 
 
 async def test_an_install_that_is_not_the_pinned_commit_fails_the_check(monkeypatch):
@@ -248,7 +291,7 @@ async def test_start_install_marks_it_installing_at_once_and_refuses_a_second(mo
 
     async def slow(command, cwd=None):
         await gate.wait()
-        return 0, '{"ok": true, "ta_version": "0.7.1"}'
+        return 0, SELFTEST_OK
 
     monkeypatch.setattr(install, "_run", slow)
     monkeypatch.setattr(install, "_installer", lambda: "/bin/uv")
@@ -317,3 +360,23 @@ def test_removing_the_connector_deletes_the_environment_and_every_scratch_folder
 def test_removal_with_nothing_installed_is_a_no_op():
     install.remove_environment()
     assert not install.root().exists()
+
+
+async def test_the_installer_and_selftest_run_in_the_redirected_environment(monkeypatch, tmp_path):
+    """The child sees the install scratch folder as its home and its working directory, never the
+    server's own folder or the owner's home, and no ``.env`` loading."""
+    monkeypatch.setenv("HOME", "/real/owner/home")
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/real/owner/config")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("SERVER_FOLDER_SECRET=1\n")
+    probe = (
+        "import json,os;print(json.dumps({'cwd': os.getcwd(), 'home': os.environ['HOME'], "
+        "'xdg': os.environ['XDG_CONFIG_HOME'], 'dotenv': os.environ['PYTHON_DOTENV_DISABLED'], "
+        "'env_file': os.path.exists('.env')}))"
+    )
+    code, tail = await install._run([sys.executable, "-c", probe])
+    seen = json.loads(tail)
+    scratch = str(install.root() / "install")
+    assert code == 0 and not seen["env_file"]
+    assert os.path.realpath(seen["cwd"]) == os.path.realpath(scratch)
+    assert seen["home"] == seen["xdg"] == scratch and seen["dotenv"] == "1"

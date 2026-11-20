@@ -21,6 +21,7 @@ import json
 import os
 import sys
 import threading
+import types
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -54,6 +55,21 @@ _DEBATE_TEXT = {
     "risk_debate_state": ("aggressive_history", "conservative_history", "neutral_history"),
 }
 _MAX_MESSAGE_CHARS = 500
+# What the library loads lazily, so a half-installed environment fails the self-test and not a run.
+# Importing them reaches no network.
+_LAZY_MODULES = (
+    "langchain_core",
+    "langchain_openai",
+    "langgraph",
+    "langgraph.checkpoint.sqlite",
+    "pandas",
+    "yfinance",
+    "stockstats",
+    "requests",
+    "pytz",
+    "markdown_it",
+    "cryptography",
+)
 _CALL_ID_PREFIX = "onwcall_"
 
 _emit_lock = threading.Lock()
@@ -82,6 +98,44 @@ def emit(payload: dict) -> None:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# ── environment ──────────────────────────────────────────────────────────────────────────
+
+
+def disable_dotenv() -> None:
+    """Turn ``.env`` loading into a no-op BEFORE ``tradingagents`` is imported: it calls
+    ``load_dotenv()``, which walks up from its caller's folder and would read any ``.env`` there
+    into the environment. The environment variable ``PYTHON_DOTENV_DISABLED`` is only honoured by
+    some python-dotenv versions, so the functions themselves are replaced too — on the real module
+    when it is installed (names imported afterwards get the no-ops), else by a stand-in."""
+    os.environ["PYTHON_DOTENV_DISABLED"] = "1"
+
+    def load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
+        return False
+
+    def find_dotenv(*_args: Any, **_kwargs: Any) -> str:
+        return ""
+
+    def dotenv_values(*_args: Any, **_kwargs: Any) -> dict:
+        return {}
+
+    try:
+        import dotenv
+        import dotenv.main
+    except ImportError:
+        stub = types.ModuleType("dotenv")
+        stub.load_dotenv, stub.find_dotenv, stub.dotenv_values = (  # type: ignore[attr-defined]
+            load_dotenv,
+            find_dotenv,
+            dotenv_values,
+        )
+        sys.modules["dotenv"] = stub
+        return
+    for module in (dotenv, dotenv.main):
+        module.load_dotenv = load_dotenv  # type: ignore[attr-defined]
+        module.find_dotenv = find_dotenv  # type: ignore[attr-defined]
+        module.dotenv_values = dotenv_values  # type: ignore[attr-defined]
 
 
 # ── request → TradingAgents config ───────────────────────────────────────────────────────
@@ -236,6 +290,7 @@ def run_analysis(request: dict) -> None:
         raise WorkerError("config", "The request names an unknown analyst.")
     overlay = _require(request, "config", dict)
 
+    disable_dotenv()
     from tradingagents.default_config import DEFAULT_CONFIG
     from tradingagents.graph.trading_graph import TradingAgentsGraph
     from tradingagents.portfolio import PortfolioContext
@@ -266,12 +321,17 @@ def installed_commit() -> str:
 
 def selftest() -> int:
     try:
+        disable_dotenv()
+        import importlib
+
         import tradingagents
         from tradingagents.default_config import DEFAULT_CONFIG
         from tradingagents.graph.trading_graph import TradingAgentsGraph  # noqa: F401
         from tradingagents.portfolio import PortfolioContext  # noqa: F401
 
         build_config(DEFAULT_CONFIG, {}, {v: "x" for v in _PATH_ENV.values()})
+        for name in _LAZY_MODULES:
+            importlib.import_module(name)
     except Exception as exc:  # noqa: BLE001 — the report is the whole point
         emit({"ok": False, "error": f"{type(exc).__name__}: {exc}"[:_MAX_MESSAGE_CHARS]})
         return 1

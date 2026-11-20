@@ -9,6 +9,7 @@ import ast
 import importlib.util
 import io
 import json
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,6 +27,19 @@ ENV = {
     "TRADINGAGENTS_CACHE_DIR": "/scratch/cache",
     "TRADINGAGENTS_MEMORY_LOG_PATH": "/scratch/memory/log.md",
 }
+
+
+@pytest.fixture(autouse=True)
+def dotenv_restored(monkeypatch):
+    """``disable_dotenv`` patches the real python-dotenv of this process: put it back after."""
+    import dotenv
+    import dotenv.main
+
+    for module in (dotenv, dotenv.main):
+        for name in ("load_dotenv", "find_dotenv", "dotenv_values"):
+            monkeypatch.setattr(module, name, getattr(module, name))
+    monkeypatch.setitem(sys.modules, "dotenv", dotenv)
+    monkeypatch.delenv("PYTHON_DOTENV_DISABLED", raising=False)
 
 
 @pytest.fixture(scope="module")
@@ -226,6 +240,7 @@ def test_the_installed_commit_is_read_from_the_distribution_record(ta, monkeypat
 
 
 def test_the_selftest_reports_the_installed_commit(ta, monkeypatch):
+    monkeypatch.setattr(ta, "_LAZY_MODULES", ("json",))
     monkeypatch.setitem(sys.modules, "tradingagents", SimpleNamespace(__version__="9.9"))
     monkeypatch.setattr(ta, "installed_commit", lambda: "d" * 40)
     monkeypatch.setitem(sys.modules, "tradingagents.graph", SimpleNamespace())
@@ -241,6 +256,58 @@ def test_the_selftest_reports_the_installed_commit(ta, monkeypatch):
     code, out, _ = _run_main(ta, monkeypatch, ["--selftest"])
     assert code == 0
     assert json.loads(out) == {"ok": True, "ta_version": "9.9", "ta_commit": "d" * 40}
+
+
+def test_the_selftest_imports_what_the_library_loads_lazily(ta, monkeypatch):
+    assert {"langchain_openai", "langgraph", "yfinance", "pandas"} <= set(ta._LAZY_MODULES)
+    monkeypatch.setitem(sys.modules, "tradingagents", SimpleNamespace(__version__="9.9"))
+    monkeypatch.setitem(sys.modules, "tradingagents.graph", SimpleNamespace())
+    monkeypatch.setitem(
+        sys.modules, "tradingagents.default_config", SimpleNamespace(DEFAULT_CONFIG=_defaults())
+    )
+    monkeypatch.setitem(
+        sys.modules, "tradingagents.graph.trading_graph", SimpleNamespace(TradingAgentsGraph=object)
+    )
+    monkeypatch.setitem(
+        sys.modules, "tradingagents.portfolio", SimpleNamespace(PortfolioContext=object)
+    )
+    monkeypatch.setattr(ta, "_LAZY_MODULES", ("json", "a_dependency_that_is_not_installed"))
+    code, out, _ = _run_main(ta, monkeypatch, ["--selftest"])
+    report = json.loads(out)
+    assert code == 1 and report["ok"] is False
+    assert "a_dependency_that_is_not_installed" in report["error"]
+
+
+def test_a_dotenv_file_in_a_parent_folder_is_not_loaded(ta, monkeypatch, tmp_path):
+    import dotenv
+
+    (tmp_path / ".env").write_text("ONW_TEST_DOTENV_LEAK=leaked\n")
+    nested = tmp_path / "a" / "b"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+    monkeypatch.delenv("ONW_TEST_DOTENV_LEAK", raising=False)
+
+    assert dotenv.load_dotenv(dotenv.find_dotenv(usecwd=True)) is True  # the real one reads it
+    assert os.environ.pop("ONW_TEST_DOTENV_LEAK") == "leaked"
+
+    ta.disable_dotenv()
+    assert dotenv.load_dotenv() is False
+    assert dotenv.load_dotenv(dotenv.find_dotenv(usecwd=True)) is False
+    assert dotenv.dotenv_values(tmp_path / ".env") == {}
+    from dotenv import load_dotenv  # a name imported AFTER the patch is the no-op too
+
+    assert load_dotenv(tmp_path / ".env") is False
+    assert "ONW_TEST_DOTENV_LEAK" not in os.environ
+    assert os.environ["PYTHON_DOTENV_DISABLED"] == "1"
+
+
+def test_without_python_dotenv_a_stand_in_makes_the_loader_a_no_op(ta, monkeypatch):
+    monkeypatch.setitem(sys.modules, "dotenv", None)
+    monkeypatch.setitem(sys.modules, "dotenv.main", None)
+    ta.disable_dotenv()
+    from dotenv import find_dotenv, load_dotenv
+
+    assert load_dotenv() is False and find_dotenv() == ""
 
 
 def _run_main(ta, monkeypatch, argv, stdin=""):
@@ -327,7 +394,7 @@ def _imported_modules(path: Path) -> set[str]:
 
 
 def test_the_worker_imports_only_the_standard_library_and_the_installed_packages():
-    allowed = {"tradingagents", "langchain_core"}
+    allowed = {"tradingagents", "langchain_core", "dotenv"}
     roots = {name.split(".")[0] for name in _imported_modules(WORKER_PATH)}
     assert roots - set(sys.stdlib_module_names) - allowed == set()
 

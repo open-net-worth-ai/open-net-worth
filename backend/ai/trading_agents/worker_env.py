@@ -3,21 +3,10 @@ fields a run keeps out of its final state."""
 
 from __future__ import annotations
 
-from backend.core.child_env import scrubbed_environ
 from backend.services.trading_agents import install, runs, settings
 
 _ENV_NO_PROXY = ("127.0.0.1", "localhost")
-# Where a library looks for per-user config and caches: every one of them is the run's own folder.
-HOME_VARIABLES = (
-    "HOME",
-    "USERPROFILE",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "XDG_CONFIG_HOME",
-    "XDG_DATA_HOME",
-    "XDG_CACHE_HOME",
-    "XDG_STATE_HOME",
-)
+HOME_VARIABLES = install.HOME_VARIABLES
 
 
 def worker_env(token: str, sec_user_agent: str, run_id: str) -> dict[str, str]:
@@ -27,13 +16,9 @@ def worker_env(token: str, sec_user_agent: str, run_id: str) -> dict[str, str]:
     habit points at the owner's real home: HOME and every XDG/AppData variable are the run's own
     folder, and ``.env`` loading is switched off."""
     folders = install.scratch(run_id)
-    env = scrubbed_environ()
-    env.update(dict.fromkeys(HOME_VARIABLES, str(folders.home)))
-    for name in ("HOMEDRIVE", "HOMEPATH"):
-        env.pop(name, None)
+    env = install.redirected_environ(folders.home)
     env.update(
         {
-            "PYTHON_DOTENV_DISABLED": "1",
             "OPENAI_COMPATIBLE_API_KEY": token,
             "TRADINGAGENTS_RESULTS_DIR": str(folders.results),
             "TRADINGAGENTS_CACHE_DIR": str(folders.cache),
