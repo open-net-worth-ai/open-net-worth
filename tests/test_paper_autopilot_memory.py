@@ -102,6 +102,15 @@ def test_a_stock_with_no_price_now_says_so_and_stays_listed(paper_db, monkeypatc
     assert "no price now" in autopilot_memory.render(_record(pid))
 
 
+def test_a_buy_of_a_stock_since_sold_says_so(paper_db):
+    pid = _new()["id"]
+    _trade(pid, "buy", 10)
+    assert _record(pid)["buys"][0]["held"] is True
+    _trade(pid, "sell", 10)
+    assert _record(pid)["buys"][0]["held"] is False
+    assert "since sold" in autopilot_memory.render(_record(pid))
+
+
 def test_a_partly_sold_stock_needs_no_lesson_a_fully_sold_one_does(paper_db):
     pid = _new()["id"]
     _trade(pid, "buy", 20)

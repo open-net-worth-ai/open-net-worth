@@ -35,12 +35,17 @@ def track_record(row: dict, now: datetime | None = None) -> dict:
     price_now = _prices({f["asset_key"] for f in buys + sells}, now)
     lessons = _lessons(runs)
     done = [r for r in reversed(runs) if r.get("status") == "done"]
+    book = service.derive(row["id"])
     return {
         "reviews": [_review(r) for r in list(reversed(runs))[:MAX_REVIEWS]],
-        "buys": [_since(f, price_now, "change_pct") for f in buys],
+        # A buy whose stock has since been fully sold is not a live loss or gain: it says so.
+        "buys": [
+            {**_since(f, price_now, "change_pct"), "held": book.quantity(f["asset_key"]) > 0}
+            for f in buys
+        ],
         "sells": [_since(f, price_now, "move_since_pct") for f in sells],
         "lessons": lessons[:MAX_LESSONS],
-        "lesson_due": _lesson_due(row["id"], fills, lessons),
+        "lesson_due": _lesson_due(book, fills, lessons),
         "follow_up": done[0].get("watching") if done else None,
     }
 
@@ -114,9 +119,8 @@ def _lessons(runs: list[dict]) -> list[dict]:
     return out
 
 
-def _lesson_due(pid: str, fills: list[dict], lessons: list[dict]) -> list[str]:
+def _lesson_due(book, fills: list[dict], lessons: list[dict]) -> list[str]:
     """Stocks fully sold whose last sale has no lesson written after it, newest first."""
-    book = service.derive(pid)
     last_lesson: dict[str, str] = {}
     for item in lessons:
         last_lesson.setdefault(item["symbol"], str(item["at"]))
@@ -173,9 +177,10 @@ def render(rec: dict) -> str:
 
 def _buy_line(b: dict) -> str:
     head = f"{b['symbol']} bought {_when(b['at'])} at {b['price']:.2f}"
+    sold = "" if b.get("held", True) else ", since sold"
     if b["now"] is None:
-        return f"{head}, no price now"
-    return f"{head}, {b['now']:.2f} now ({b['change_pct']:+.1%})"
+        return f"{head}, no price now{sold}"
+    return f"{head}, {b['now']:.2f} now ({b['change_pct']:+.1%}){sold}"
 
 
 def _sell_line(s: dict) -> str:
