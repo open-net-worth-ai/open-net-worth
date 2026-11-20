@@ -23,6 +23,7 @@ import time
 from typing import AsyncGenerator, Callable, Optional
 
 from backend.core.errors import ExternalServiceError, ProviderTimeoutError
+from backend.core.process_tree import kill_and_reap, spawn_kwargs
 
 from .cli_exit import describe_exit
 from .cli_tool_protocol import _content_to_text, flatten_messages_with_images
@@ -144,6 +145,7 @@ class LiveSession:
             cwd=self.workdir,
             env=self.env,
             limit=STDOUT_LIMIT,
+            **spawn_kwargs(),
         )
         asyncio.ensure_future(_drain(self.proc.stderr, self.LOG_PREFIX, self.stderr_tail))
         self.started_at = self.last_used = time.monotonic()
@@ -289,11 +291,7 @@ class LiveSession:
         proc, self.proc = self.proc, None
         self.consumed = []
         if proc is not None and proc.returncode is None:
-            try:
-                proc.kill()
-                await asyncio.wait_for(proc.wait(), timeout=5.0)
-            except (ProcessLookupError, OSError, asyncio.TimeoutError):
-                pass
+            await kill_and_reap(proc)
         shutil.rmtree(self.workdir, ignore_errors=True)
 
 

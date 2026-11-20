@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sys
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -148,7 +149,9 @@ def _fake_cli(tmp_path, reply_text="hi"):
 
 
 def _argv(cli):
-    return [sys.executable, str(cli)]
+    # Run the fake's Python source directly: on Windows `cli` is its `.cmd` launcher.
+    cli = Path(cli)
+    return [sys.executable, str(cli.with_suffix(".py") if cli.suffix == ".cmd" else cli)]
 
 
 @pytest.fixture(autouse=True)

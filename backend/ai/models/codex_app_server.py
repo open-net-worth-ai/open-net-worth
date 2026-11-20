@@ -48,6 +48,7 @@ from typing import AsyncGenerator, Optional
 
 from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConfigurationError, ExternalServiceError
+from backend.core.process_tree import kill_and_reap, spawn_kwargs
 from backend.core.report_redact import redact_text
 
 from . import cli_exit
@@ -290,6 +291,7 @@ class AppServerClient:
                 stderr=asyncio.subprocess.PIPE,
                 env=child_env(self.api_key, native_tools=self.native_tools),
                 limit=_STDOUT_LIMIT,
+                **spawn_kwargs(),
             )
             self._login_stale = not self._has_login()
             self._reader = asyncio.ensure_future(self._read_loop())
@@ -354,11 +356,7 @@ class AppServerClient:
             self._reader = None
         proc, self._proc = self._proc, None
         if proc is not None and proc.returncode is None:
-            try:
-                proc.kill()
-                await asyncio.wait_for(proc.wait(), timeout=5.0)
-            except (ProcessLookupError, OSError, asyncio.TimeoutError):
-                pass
+            await kill_and_reap(proc)
         self._fail_pending(ExternalServiceError("Codex app-server stopped"))
         self._queues.clear()
 

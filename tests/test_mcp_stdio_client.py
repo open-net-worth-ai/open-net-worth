@@ -25,6 +25,15 @@ from backend.db.mcp_client_store import McpClientStore
 from backend.mcp.claude_desktop import parse_claude_desktop_config
 from backend.mcp.stdio_client import StdioMcpClientConnection, _scrubbed_env
 from backend.models.mcp_client import McpServerConfig
+from tests.pid_alive import pid_is_alive
+
+
+def _is_taskkill(popen_args: tuple) -> bool:
+    """On Windows stopping a tree runs ``taskkill`` through ``subprocess.Popen`` too, so a spawn
+    counter patched onto it must not count that as a second server."""
+    argv = popen_args[0] if popen_args else ()
+    return isinstance(argv, (list, tuple)) and bool(argv) and str(argv[0]).lower() == "taskkill"
+
 
 # ── a trivial inline NDJSON MCP server (stdio) ─────────────────────────────────
 #
@@ -522,16 +531,6 @@ def test_stdio_normal_small_reply_still_works(manager, stub_path):
 # ── probe deadline + cancellation: no orphaned process tree, ever ──────────────
 
 
-def _pid_is_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:  # alive, just not ours to signal
-        return True
-    return True
-
-
 def _wait_for_pid_file(pidfile, timeout=10.0):
     import time as _time
 
@@ -568,10 +567,10 @@ def test_a_timed_out_stdio_probe_reaps_the_child(manager, hanging_stub, monkeypa
     pid = int(pidfile.read_text().strip())
     # The spawned child is GONE — killed by the watchdog / teardown, not left running.
     for _ in range(50):
-        if not _pid_is_alive(pid):
+        if not pid_is_alive(pid):
             break
         time.sleep(0.1)
-    assert not _pid_is_alive(pid), f"orphaned stdio child {pid} survived an aborted probe"
+    assert not pid_is_alive(pid), f"orphaned stdio child {pid} survived an aborted probe"
     # ...and an unreached server is still never persisted.
     assert s.all() == []
 
@@ -594,14 +593,14 @@ def test_the_connection_context_manager_kills_the_child_on_an_exception(hanging_
     with pytest.raises(_Boom):
         with make_connection(cfg):  # entering spawns the child; exiting must reap it
             pid = _wait_for_pid_file(pidfile)
-            assert _pid_is_alive(pid)
+            assert pid_is_alive(pid)
             raise _Boom()
 
     for _ in range(50):
-        if not _pid_is_alive(pid):
+        if not pid_is_alive(pid):
             break
         time.sleep(0.1)
-    assert not _pid_is_alive(pid), "the child survived an exception inside the with-block"
+    assert not pid_is_alive(pid), "the child survived an exception inside the with-block"
 
 
 def test_one_stdio_child_serves_the_whole_probe(manager, stub_path, monkeypatch):
@@ -616,7 +615,8 @@ def test_one_stdio_child_serves_the_whole_probe(manager, stub_path, monkeypatch)
     real_popen = subprocess.Popen
 
     def counting_popen(*a, **kw):
-        spawns["n"] += 1
+        if not _is_taskkill(a):
+            spawns["n"] += 1
         return real_popen(*a, **kw)
 
     monkeypatch.setattr("backend.mcp.stdio_client.subprocess.Popen", counting_popen)
@@ -642,7 +642,8 @@ def test_dispatch_still_spawns_per_call_without_a_with_block(manager, stub_path,
     real_popen = subprocess.Popen
 
     def counting_popen(*a, **kw):
-        spawns["n"] += 1
+        if not _is_taskkill(a):
+            spawns["n"] += 1
         return real_popen(*a, **kw)
 
     monkeypatch.setattr("backend.mcp.stdio_client.subprocess.Popen", counting_popen)
@@ -833,10 +834,10 @@ def test_a_timed_out_probe_quotes_what_the_child_was_saying(manager, tmp_path, m
     # ...and the child that was still "downloading" is gone, not orphaned.
     pid = int(pidfile.read_text().strip())
     for _ in range(50):
-        if not _pid_is_alive(pid):
+        if not pid_is_alive(pid):
             break
         time.sleep(0.1)
-    assert not _pid_is_alive(pid), f"orphaned stdio child {pid} survived a timed-out probe"
+    assert not pid_is_alive(pid), f"orphaned stdio child {pid} survived a timed-out probe"
     assert store.all() == []  # an unreached server is still never persisted
 
 
@@ -889,10 +890,10 @@ def test_a_stderr_flood_neither_deadlocks_the_child_nor_grows_unbounded(
     assert len(result["error"]) < 600, result["error"][:200]
     pid = int(pidfile.read_text().strip())
     for _ in range(50):
-        if not _pid_is_alive(pid):
+        if not pid_is_alive(pid):
             break
         time.sleep(0.1)
-    assert not _pid_is_alive(pid), "the flooding child was not reaped"
+    assert not pid_is_alive(pid), "the flooding child was not reaped"
 
 
 def test_fence_glyphs_in_stderr_do_not_survive_into_the_error(manager, tmp_path, monkeypatch):

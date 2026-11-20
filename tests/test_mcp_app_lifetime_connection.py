@@ -34,6 +34,7 @@ from backend.db.pending_plan_store import PendingPlanStore
 from backend.mcp.client_manager import McpClientManager
 from backend.models.mcp_client import McpServerConfig, mcp_connector_id
 from backend.services import tool_permissions
+from tests.pid_alive import pid_is_alive
 
 
 def _redeem_and_apply(mgr, tool_use_id, name):
@@ -195,9 +196,7 @@ def _pid_of(fenced_text: str) -> int:
 
 def _assert_dead(pid: int) -> None:
     for _ in range(50):
-        try:
-            os.kill(pid, 0)
-        except OSError:
+        if not pid_is_alive(pid):
             return
         time.sleep(0.05)
     pytest.fail(f"child pid {pid} is still alive")

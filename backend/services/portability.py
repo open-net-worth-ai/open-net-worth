@@ -461,6 +461,9 @@ def inspect_bundle(source: BundleSource, *, verify_blobs: bool = True) -> dict:
             }
 
         names = zf.namelist()
+        # zipfile turns os.sep into "/" when it reads a name, so on Windows "a\\b" arrives as
+        # "a/b"; the name as written in the bundle is what a refusal has to judge.
+        backslashed = {zi.filename for zi in zf.infolist() if "\\" in zi.orig_filename}
         if _MANIFEST_NAME not in names:
             return {
                 "ok": False,
@@ -495,7 +498,7 @@ def inspect_bundle(source: BundleSource, *, verify_blobs: bool = True) -> dict:
         for name in names:
             if name == _MANIFEST_NAME or name.endswith("/"):
                 continue
-            if not _is_safe_name(name):
+            if name in backslashed or not _is_safe_name(name):
                 errors.append(f"rejected unsafe / unknown entry: {name!r}")
                 continue
 
