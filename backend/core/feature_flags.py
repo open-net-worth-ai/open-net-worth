@@ -276,14 +276,15 @@ FLAGS: tuple[Flag, ...] = (
     ),
     Flag(
         name="autopilot_committee",
-        title="Autopilot proposes, the app sizes",
+        title="Autopilot committee",
         description=(
             "Paper Trading's Autopilot stops placing orders itself. Each review proposes "
             "trades with a conviction (low, medium, high) and the app sizes them: 4%, 7% or "
             "10% of the portfolio, kept under the mandate's cap and above its cash floor. A "
-            "stock it already holds competes with new ones for the same cash. History shows "
-            "every proposal and what happened to it. Off: the review places its own orders, "
-            "as before."
+            "stock it already holds competes with new ones for the same cash. Before any buy, "
+            "a challenge argues against it (keep, shrink or drop) and a risk review checks the "
+            "buys as a set (approve or trim). History shows every proposal and what happened "
+            "to it. Off: the review places its own orders, as before."
         ),
         default=False,
         owner="owner",

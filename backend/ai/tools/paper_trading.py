@@ -365,6 +365,75 @@ async def propose_paper_orders(input_data: dict):
         return _dump({"error": _err(exc), "simulated": True})
 
 
+class ChallengeVerdictInput(NestedInput):
+    asset: str
+    verdict: Literal["keep", "shrink", "drop"]
+    against: str
+
+
+class RecordChallengeInput(ToolInput):
+    verdicts: list[ChallengeVerdictInput]
+
+
+class RiskVerdictInput(NestedInput):
+    asset: str
+    verdict: Literal["approve", "trim"]
+    reason: str
+
+
+class RecordRiskReviewInput(ToolInput):
+    verdicts: list[RiskVerdictInput]
+
+
+def _in_review(tool_name: str) -> str:
+    from backend.core.errors import ConflictError
+
+    ctx = get_automation_approval()
+    if ctx is None or not ctx.automation_id.startswith("autopilot:") or not ctx.paper_portfolio_id:
+        raise ConflictError(f"{tool_name} is only for a paper autopilot review.")
+    return ctx.paper_portfolio_id
+
+
+@tool(
+    "record_challenge",
+    description="Inside a paper autopilot review's challenge only: your verdict on each buy.",
+    input_schema=schema_of(RecordChallengeInput, tool_name="record_challenge"),
+    mutates=("paper",),
+)
+async def record_challenge(input_data: dict):
+    if refused := _refusal():
+        return refused
+
+    def _run() -> dict:
+        pid = _in_review("record_challenge")
+        return facade.record_challenge(pid, input_data.get("verdicts") or [])
+
+    try:
+        return _dump(await asyncio.to_thread(_run))
+    except OpenNetWorthError as exc:
+        return _dump({"error": _err(exc), "simulated": True})
+
+
+@tool(
+    "record_risk_review",
+    description="Inside a paper autopilot review's risk review only: your verdict on each buy.",
+    input_schema=schema_of(RecordRiskReviewInput, tool_name="record_risk_review"),
+    mutates=("paper",),
+)
+async def record_risk_review(input_data: dict):
+    if refused := _refusal():
+        return refused
+
+    def _run() -> dict:
+        pid = _in_review("record_risk_review")
+        return facade.record_risk_review(pid, input_data.get("verdicts") or [])
+
+    try:
+        return _dump(await asyncio.to_thread(_run))
+    except OpenNetWorthError as exc:
+        return _dump({"error": _err(exc), "simulated": True})
+
+
 # ── orders ─────────────────────────────────────────────────────────────────────────────────
 
 

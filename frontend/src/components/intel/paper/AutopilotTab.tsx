@@ -456,6 +456,16 @@ function History({ runs, auto }: { runs: AutopilotRun[]; auto: boolean }) {
                       <li key={p.asset}>
                         {proposalLine(p)}
                         <span className="paper-ap-why">Why: {p.why}</span>
+                        {p.challenge && (
+                          <span className="paper-ap-why">
+                            Against ({p.challenge.verdict}): {p.challenge.against}
+                          </span>
+                        )}
+                        {p.risk && (
+                          <span className="paper-ap-why">
+                            Risk ({p.risk.verdict}): {p.risk.reason}
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>

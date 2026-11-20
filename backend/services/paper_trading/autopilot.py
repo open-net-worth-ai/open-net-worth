@@ -51,6 +51,9 @@ DEFAULT = {
     # What he proposed with propose_paper_orders (flag autopilot_committee): placed by code
     # once his turn ends (autopilot_proposals).
     "proposals_draft": None,
+    # The challenge and risk turns' verdicts on those proposals (autopilot_committee).
+    "challenge_draft": None,
+    "risk_draft": None,
     # Why the next review runs early ("Review now", "ACME fell 6.1% today"), and why the running
     # one is running; None = its schedule.
     "pending_trigger": None,
@@ -287,6 +290,8 @@ def finish(pid: str, record: dict) -> dict:
             running_trigger=None,
             memo_draft=None,
             proposals_draft=None,
+            challenge_draft=None,
+            risk_draft=None,
             failures=failures,
             paused_reason=paused,
             runs=[*a["runs"], entry][-MAX_RUNS_KEPT:],
@@ -316,6 +321,20 @@ def save_memo(pid: str, memo: str, watching: str | None, lessons: list | None = 
             "watching": str(watching or "").strip()[:MAX_WATCHING] or None,
             "lessons": clean_lessons,
         }
+        return _save(row, a, conn=conn)
+
+
+def save_draft(pid: str, key: str, value, *, what: str) -> dict:
+    """Record one of the running review's drafts (the committee's verdicts). Only during a
+    review; a later call replaces the earlier one."""
+    from backend.services.paper_trading import service
+
+    with locked_unit_of_work(*ALL_TABLES) as conn:
+        row = service.portfolio(pid, conn=conn)
+        a = of(row)
+        if not a["running_since"]:
+            raise ConflictError(f"{what} is recorded only during an autopilot review.")
+        a[key] = value
         return _save(row, a, conn=conn)
 
 

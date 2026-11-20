@@ -48,6 +48,8 @@ FLAGGED_TOOLS: dict[str, frozenset[str]] = {
             "preview_paper_orders",
             "propose_paper_orders",
             "record_autopilot_memo",
+            "record_challenge",
+            "record_risk_review",
             "record_paper_marks",
             "update_paper_portfolios",
         }

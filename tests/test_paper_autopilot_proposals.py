@@ -38,12 +38,28 @@ def lucius(monkeypatch):
     seen: dict = {}
 
     def install(proposals=None):
+        """The research turn proposes; the challenge keeps and the risk review approves every
+        buy, so these tests measure sizing alone (test_paper_autopilot_committee covers them)."""
+        from backend.services.paper_trading import autopilot_committee
+
+        buys = [p["asset"] for p in proposals or [] if p.get("action") == "buy"]
+
         async def runner(prompt, **kw):
-            ctx = get_automation_approval()
+            pid = get_automation_approval().paper_portfolio_id
+            if autopilot_committee.CHALLENGE_MARK in prompt:
+                facade.record_challenge(
+                    pid, [{"asset": a, "verdict": "keep", "against": "Weak."} for a in buys]
+                )
+                return "done"
+            if autopilot_committee.RISK_MARK in prompt:
+                facade.record_risk_review(
+                    pid, [{"asset": a, "verdict": "approve", "reason": "Fine."} for a in buys]
+                )
+                return "done"
             seen.update(prompt=prompt, **kw)
             if proposals is not None:
-                facade.record_proposals(ctx.paper_portfolio_id, proposals)
-            facade.record_memo(ctx.paper_portfolio_id, "Proposed what the record shows.", None)
+                facade.record_proposals(pid, proposals)
+            facade.record_memo(pid, "Proposed what the record shows.", None)
             return "done"
 
         monkeypatch.setattr(headless_turn, "_runner", runner)

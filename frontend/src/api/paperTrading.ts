@@ -55,11 +55,16 @@ export interface AutopilotProposal {
   conviction: 'low' | 'medium' | 'high' | null
   why: string
   case?: string | null
-  /** placed: an order went in; skipped: nothing to do (detail says why); refused: it failed. */
-  status: 'placed' | 'skipped' | 'refused'
+  /** placed: an order went in; skipped: nothing to do (detail says why); refused: it failed;
+   *  dropped: the challenge or the risk review stopped it. */
+  status: 'placed' | 'skipped' | 'refused' | 'dropped'
   detail: string
   /** The order's own line, when one was placed ("Paper buy filled: 98 ACME at 100.05"). */
   order: string | null
+  /** A buy's challenge: the case against it, and keep / shrink / drop. */
+  challenge?: { verdict: 'keep' | 'shrink' | 'drop'; against: string }
+  /** A buy's risk review: approve / trim (or drop, when the review didn't finish). */
+  risk?: { verdict: 'approve' | 'trim' | 'drop'; reason: string }
 }
 
 /** One autopilot review: what Lucius wrote, and the paper orders it placed. */

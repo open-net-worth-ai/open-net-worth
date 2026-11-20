@@ -1,8 +1,8 @@
 # Paper Autopilot upgrades — plan
 
-Status: step 1 (memory, with lessons) built 2026-11-21; step 2 (propose, the app sizes) built
-behind `autopilot_committee` 2026-11-21 (ADR `2026-11-21-autopilot-proposes-the-app-sizes`);
-steps 3–4 in progress.
+Status: all four steps built 2026-11-21. Step 1 (memory, with lessons) ships unflagged; steps 2–4
+(propose and the app sizes, challenge, risk review) ship behind `autopilot_committee`, off by
+default (ADR `2026-11-21-autopilot-proposes-the-app-sizes`).
 
 ## Why
 

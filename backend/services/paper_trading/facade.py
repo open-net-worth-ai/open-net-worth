@@ -90,6 +90,18 @@ def record_proposals(pid: str, proposals: list[dict]) -> dict:
     return {"proposals": autopilot.of(out["portfolio"]).get("proposals_draft") or [], **SIMULATED}
 
 
+def record_challenge(pid: str, verdicts: list[dict]) -> dict:
+    """The challenge turn's verdict on each proposed buy: keep, shrink or drop."""
+    service.apply_paper_change({"op": "autopilot_challenge", "id": pid, "verdicts": verdicts})
+    return {"ok": True, **SIMULATED}
+
+
+def record_risk_review(pid: str, verdicts: list[dict]) -> dict:
+    """The risk turn's verdict on each buy left: approve or trim."""
+    service.apply_paper_change({"op": "autopilot_risk", "id": pid, "verdicts": verdicts})
+    return {"ok": True, **SIMULATED}
+
+
 def run_autopilot_now(pid: str) -> dict:
     """Review now: the scheduler's next pass (within a minute) runs it."""
     from backend.services.paper_trading import autopilot

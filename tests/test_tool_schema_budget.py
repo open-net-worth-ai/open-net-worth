@@ -300,7 +300,10 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # 2026-11-21: 498_700 -> 499_800. propose_paper_orders (flag autopilot_committee) measured
     # 499,669: a paper autopilot review proposes orders and the app sizes them. Flag-hidden and
     # offered only inside a review, never in a chat's default offer. Not CORE.
-    budget = 499_800
+    # 2026-11-21: 499_800 -> 500_800. record_challenge + record_risk_review (same flag) measured
+    # 500,626: the committee's challenge and risk turns record their verdicts. Same gating as
+    # propose_paper_orders: flag-hidden, offered only inside their own review turn. Not CORE.
+    budget = 500_800
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

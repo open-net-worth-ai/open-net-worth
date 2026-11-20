@@ -62,6 +62,17 @@ const withProposals: PaperAutopilot = {
           detail: 'no cash above the mandate floor',
           order: null,
         },
+        {
+          asset: 'GC=F',
+          symbol: 'GC=F',
+          action: 'buy',
+          conviction: 'medium',
+          why: 'A hedge.',
+          status: 'dropped',
+          detail: 'Dropped by the challenge: it is already priced for a crisis.',
+          order: null,
+          challenge: { verdict: 'drop', against: 'It is already priced for a crisis.' },
+        },
       ],
     },
   ],
@@ -88,6 +99,9 @@ describe('AutopilotTab proposals', () => {
       screen.getByText(/Buy ACOIN \(low\): skipped, no cash above the mandate floor/),
     ).toBeTruthy()
     expect(screen.getByText('Why: A small second bet.')).toBeTruthy()
+    // A buy the challenge stopped says so, with its case against.
+    expect(screen.getByText(/Buy GC=F \(medium\): dropped, Dropped by the challenge/)).toBeTruthy()
+    expect(screen.getByText('Against (drop): It is already priced for a crisis.')).toBeTruthy()
     // The proposals replace the plain order list: each order shows once, inside its proposal.
     expect(screen.queryByText('Paper buy filled: 98 ACME at 100.05')).toBeNull()
   })

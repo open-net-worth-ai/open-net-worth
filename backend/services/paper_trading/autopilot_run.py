@@ -74,7 +74,14 @@ TOOLS_COMMITTEE = (*(t for t in TOOLS if t != "place_paper_orders"), "propose_pa
 # The paper writes run without a card: nobody is there to tap one, and the mandate is what the
 # owner approved in advance.
 _ALLOWED_WRITES = frozenset(
-    {"place_paper_orders", "cancel_paper_orders", "record_autopilot_memo", "propose_paper_orders"}
+    {
+        "place_paper_orders",
+        "cancel_paper_orders",
+        "record_autopilot_memo",
+        "propose_paper_orders",
+        "record_challenge",
+        "record_risk_review",
+    }
 )
 _COMMITTEE_DECIDE = (
     " A holding with room under its cap is a candidate too: adding to it competes with a new "
@@ -251,7 +258,10 @@ async def review(pid: str) -> dict:
             )
             record = {"status": "done"}
             if committee:
-                record["proposals"] = await asyncio.to_thread(_place_proposals, pid)
+                from backend.services.paper_trading import autopilot_committee
+
+                # Challenge, risk-review, then size and place: the same bound paper-only context.
+                record["proposals"] = await autopilot_committee.decide(pid, row, runner, settings)
         except asyncio.TimeoutError:
             record = {"status": "failed", "error": "The review took too long and was stopped."}
         except Exception as exc:  # noqa: BLE001 — any failure is a logged run, never a crash
@@ -264,17 +274,6 @@ async def review(pid: str) -> dict:
     record.update(model=settings["model"], effort=settings["effort"])
     autopilot.finish(pid, record)
     return record
-
-
-def _place_proposals(pid: str) -> list[dict]:
-    """Size and place what the review proposed — only when it finished with its memo: a review
-    that failed places nothing."""
-    from backend.services.paper_trading import autopilot_proposals, service
-
-    a = autopilot.of(service.portfolio(pid))
-    if not (a.get("memo_draft") or {}).get("memo"):
-        return []
-    return autopilot_proposals.execute(pid, list(a.get("proposals_draft") or []))
 
 
 def _orders_since(pid: str, started: datetime) -> list[dict]:

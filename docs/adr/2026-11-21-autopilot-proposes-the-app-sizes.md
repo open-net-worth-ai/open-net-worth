@@ -41,6 +41,16 @@ before, from the same code):
   choke's reason). One failing never stops the others. History shows them.
 - A ticker the app already knows resolves locally first, so a proposal never mints a duplicate
   instrument; only an unseen one goes through the instrument front door.
+- **Two checks before any buy** (`autopilot_committee.py`), each its own turn with its own small
+  tool offer and budget, at low effort, inside the same paper-only context:
+  - a **challenge** argues the strongest honest case against each buy and records keep, shrink
+    (one conviction step: high → medium → low → dropped) or drop, with the case against;
+  - a **risk review** judges the buys left as a set, with what the portfolio holds, and records
+    approve or trim (one step), with the reason.
+  Neither can add an order or raise a size, and neither touches a sell or a trim. **Fail-safe,
+  never fail-open:** a challenge that doesn't finish shrinks every buy, a buy it gives no verdict
+  is shrunk; a risk review that doesn't finish drops every buy, a buy it gives no verdict is
+  trimmed. Each turn is skipped when there are no buys left to judge.
 
 ## Consequences
 
@@ -50,7 +60,9 @@ before, from the same code):
   catalyst trade) gets at most 10%, or the mandate's cap if lower.
 - Orders are placed after the turn, so the model can't read a fill and react within the same
   review; the next review sees the result in its track record.
-- The tool-schema budget rises by the new tool's size (flag-hidden, review-only, not in a chat's
-  default offer).
-- Steps 3 (challenge) and 4 (risk review) slot in between the turn and `execute`, acting on the
-  same proposals.
+- The tool-schema budget rises by the three new tools' size (flag-hidden, review-only, not in a
+  chat's default offer).
+- A review that proposes a buy costs up to three model turns instead of one; the two checks run
+  at low effort on the review's model. A review that only holds or sells costs one.
+- Every buy carries its case for (why, case), its case against and the risk note into History,
+  so a reader can see why it was bought, shrunk or dropped.

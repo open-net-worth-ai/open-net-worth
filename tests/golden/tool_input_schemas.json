@@ -11603,5 +11603,76 @@
       "proposals"
     ],
     "type": "object"
+  },
+  "record_challenge": {
+    "additionalProperties": false,
+    "properties": {
+      "verdicts": {
+        "items": {
+          "properties": {
+            "asset": {
+              "type": "string"
+            },
+            "verdict": {
+              "enum": [
+                "keep",
+                "shrink",
+                "drop"
+              ],
+              "type": "string"
+            },
+            "against": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "asset",
+            "verdict",
+            "against"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "verdicts"
+    ],
+    "type": "object"
+  },
+  "record_risk_review": {
+    "additionalProperties": false,
+    "properties": {
+      "verdicts": {
+        "items": {
+          "properties": {
+            "asset": {
+              "type": "string"
+            },
+            "verdict": {
+              "enum": [
+                "approve",
+                "trim"
+              ],
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "asset",
+            "verdict",
+            "reason"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "verdicts"
+    ],
+    "type": "object"
   }
 }
