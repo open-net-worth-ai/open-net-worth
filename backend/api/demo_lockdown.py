@@ -113,8 +113,6 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/automations(/.*)?$",
         # A paper portfolio's autopilot runs Lucius on a schedule: model spend, like an Automation.
         r"^/api/paper/portfolios/[^/]+/autopilot(/.*)?$",
-        # TradingAgents runs a subprocess of its own venv and spends model tokens per run.
-        r"^/api/trading-agents(/.*)?$",
         r"^/api/memory(/.*)?$",
         r"^/api/channels(/.*)?$",
         r"^/api/chat-pairing(/.*)?$",
@@ -129,8 +127,9 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/watchlist/config$",
         r"^/api/matches/config$",
     ),
-    # TradingAgents' spend, caps and run list are the operator's, and read on a GET too.
-    *_rules(_ANY, r"^/api/cost/trading-agents$"),
+    # TradingAgents runs a subprocess of its own venv and spends model tokens per run; its spend,
+    # caps, settings and run reports (portfolio text) are the operator's, and read on a GET too.
+    *_rules(_ANY, r"^/api/cost/trading-agents$", r"^/api/trading-agents(/.*)?$"),
     *_rules(frozenset({"PUT", "PATCH", "DELETE"}), r"^/api/voice/call$"),
     *_rules(_ANY, r"^/api/lunch-flow/oauth(/.*)?$"),
     # Actual reads a saved server on a GET too: a budget list signs in and answers with names.

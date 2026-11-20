@@ -441,8 +441,9 @@ def test_the_demo_refuses_every_mutating_route(method, path):
         f"{BASE}/runs/tar_x",
     ],
 )
-def test_the_demo_still_reads(path):
-    assert not is_demo_locked("GET", path)
+def test_the_demo_cannot_read_a_trading_agents_route_either(path):
+    """A run's reports and context-preview carry portfolio text, and its settings are the operator's."""
+    assert is_demo_locked("GET", path) and is_demo_locked("HEAD", path)
 
 
 def test_the_demo_cannot_read_the_spend_panel():
