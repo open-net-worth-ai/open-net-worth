@@ -19,7 +19,12 @@ from typing import Any, Optional
 
 from backend.ai.trading_agents import llm_bridge
 from backend.ai.trading_agents.llm_bridge import LlmBridge, RunLimits
-from backend.ai.trading_agents.worker_env import reports_of, worker_env
+from backend.ai.trading_agents.worker_env import (
+    reports_of,
+    scrub_secrets,
+    secret_values,
+    worker_env,
+)
 from backend.core import process_tree
 from backend.core.errors import ConflictError, NotInstalledError, OpenNetWorthError
 from backend.db.trading_agents_config_store import TradingAgentsConfigStore
@@ -78,6 +83,7 @@ class RunSession:
         self._signal: Optional[str] = None
         self._worker_error: Optional[str] = None
         self._stderr = ""
+        self._secrets: list[str] = []
 
     # ── lifecycle ────────────────────────────────────────────────────────────────────────
 
@@ -125,8 +131,12 @@ class RunSession:
     def _kill(self) -> None:
         """Kill the worker's tree, off the event loop (on Windows that is a process of its own)."""
         proc = self._proc
-        if proc is not None and proc.returncode is None:
+        if proc is None or proc.returncode is not None:
+            return
+        try:
             asyncio.get_running_loop().run_in_executor(None, _kill_tree, proc.pid)
+        except RuntimeError:  # the executor is already shut down (the app is stopping)
+            _kill_tree(proc.pid)
 
     # ── the process ──────────────────────────────────────────────────────────────────────
 
@@ -187,6 +197,7 @@ class RunSession:
 
     async def _converse(self, bridge: LlmBridge) -> None:
         env = worker_env(bridge.token, self.job.cfg.sec_edgar_user_agent, self.job.run_id)
+        self._secrets = secret_values(bridge.token, self.job.models)
         try:
             proc = await asyncio.create_subprocess_exec(
                 *self._command,
@@ -256,7 +267,9 @@ class RunSession:
         elif kind == "result" and isinstance(message.get("final_state"), dict):
             self._result = message
         elif kind == "error":
-            self._worker_error = str(message.get("message") or "The worker failed.")
+            self._worker_error = scrub_secrets(
+                str(message.get("message") or "The worker failed."), self._secrets
+            )
 
     def _progress(self, message: dict) -> None:
         """A stage change, only for a node TradingAgents is known to have and only when it
@@ -356,7 +369,7 @@ class RunSession:
         if self._worker_error:
             return runs.FAILED, self._worker_error
         code = self._proc.returncode if self._proc is not None else None
-        detail = " ".join(self._stderr.split())[-_ERROR_DETAIL_CHARS:]
+        detail = " ".join(scrub_secrets(self._stderr, self._secrets).split())[-_ERROR_DETAIL_CHARS:]
         return runs.FAILED, f"The worker stopped without a result (exit {code}). {detail}".strip()
 
     def _finish(self, message: dict) -> None:

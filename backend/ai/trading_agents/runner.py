@@ -22,7 +22,8 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from backend.ai.models.pricing import list_price_rates
-from backend.ai.trading_agents import worker_session
+from backend.ai.trading_agents import billing, worker_session
+from backend.ai.trading_agents.llm_bridge import STOP_BOUND_SECONDS
 from backend.ai.trading_agents.worker_session import Job, RunSession
 from backend.core.config import get_settings
 from backend.core.errors import (
@@ -39,7 +40,8 @@ log = logging.getLogger(__name__)
 
 MAX_PENDING = 3
 _CANCEL_WAIT_SECONDS = 15.0
-_SHUTDOWN_WAIT_SECONDS = 10.0
+# The bridge may take its whole stop bound to give up on a call; the shutdown waits for that.
+_SHUTDOWN_WAIT_SECONDS = STOP_BOUND_SECONDS + 5.0
 
 _queue: deque[Job] = deque()
 _submitting = 0
@@ -78,6 +80,7 @@ def pending_count() -> int:
 
 
 install.set_busy_probe(pending_count)
+settings.set_cli_billing_probe(billing.cli_is_plan_included)
 
 
 def _require_runnable() -> None:

@@ -86,6 +86,12 @@ def _models(deep: FakeProvider, quick: FakeProvider | None = None, transport="an
     }
 
 
+@pytest.fixture(autouse=True)
+def cheap_models(monkeypatch):
+    """A price so low that a call's worst case never decides a test that is about something else."""
+    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: (0.001, 0.001))
+
+
 def _body(model=ALIAS_QUICK, content=SECRET_PROMPT, **extra):
     return {"model": model, "messages": [{"role": "user", "content": content}], **extra}
 
@@ -309,10 +315,11 @@ async def test_a_malformed_request_does_not_use_up_a_call(db_isolated):
 
 
 async def test_concurrent_calls_cannot_overshoot_the_cap(db_isolated, monkeypatch):
-    """Each call reserves its worst case first: with the limit at a little over one call's cost,
-    three at once are not three calls in flight — they go one at a time, each waiting for the
-    last one's real cost, so the cap is passed by one call at most and the third is refused."""
-    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: (1000.0, 1000.0))
+    """Each call reserves its worst case first: at 200 USD per million output tokens one call is
+    reserved at 6.4 against a limit of 10, so three at once are not three calls in flight. The
+    first runs and costs 6.0; what is left (4.0) is less than the next call's worst case, so the
+    other two are refused rather than let through to overshoot."""
+    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: (200.0, 200.0))
     provider = FakeProvider(_answer("ok", cost=6.0), delay=0.05)
     bridge = LlmBridge(
         run_id=RUN_ID,
@@ -324,9 +331,10 @@ async def test_concurrent_calls_cannot_overshoot_the_cap(db_isolated, monkeypatc
         responses = await asyncio.gather(
             *[client.post("/v1/chat/completions", json=_body()) for _ in range(3)]
         )
-    assert sorted(r.status_code for r in responses) == [200, 200, 400]
-    assert len(provider.calls) == 2 and provider.peak == 1
-    assert bridge.metered_usd == pytest.approx(12.0)
+    assert sorted(r.status_code for r in responses) == [200, 400, 400]
+    assert len(provider.calls) == 1 and provider.peak == 1
+    assert bridge.metered_usd == pytest.approx(6.0)
+    assert bridge.refusal_kind == "budget"
 
 
 async def test_a_call_that_fits_beside_the_one_in_flight_runs_alongside_it(
@@ -563,3 +571,147 @@ async def test_starting_a_bridge_does_not_take_the_process_signal_handlers(db_is
     bridge, _ = _bridge()
     async with bridge:
         assert signal.getsignal(signal.SIGINT) is before
+
+
+# ── the reservation is the provider's own ceiling, never the worker's ─────────────────────
+
+
+async def test_a_workers_own_max_tokens_never_lowers_the_reservation(db_isolated, monkeypatch):
+    """At 100 USD per million output tokens the Anthropic ceiling (32,000) is 3.2 USD, over a limit
+    of 1.0 — so the call is refused even though the worker claimed a reply of one token."""
+    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: (0.0, 100.0))
+    bridge, provider = _bridge(limits=RunLimits(max_metered_usd=1.0))
+    for key in ("max_tokens", "max_completion_tokens"):
+        response = await _post(bridge, _body(**{key: 1}))
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "run_cap_reached"
+    assert provider.calls == [] and bridge.calls_admitted == 0
+
+
+def test_the_worst_case_ignores_the_request_and_follows_the_providers_ceiling(monkeypatch):
+    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: (0.0, 100.0))
+    anthropic = _models(FakeProvider())[ALIAS_DEEP]
+    other = replace(anthropic, transport="openai_compatible")
+    assert anthropic.worst_case_usd(0) == pytest.approx(3.2)
+    assert other.worst_case_usd(0) == pytest.approx(6.4)
+    assert anthropic.worst_case_usd(0) == anthropic.worst_case_usd(0)
+
+
+async def test_a_single_call_that_cannot_be_afforded_is_refused_even_with_nothing_outstanding(
+    db_isolated, monkeypatch
+):
+    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: (0.0, 100.0))
+    bridge, provider = _bridge(limits=RunLimits(max_metered_usd=5.0, month_remaining_usd=3.0))
+    response = await _post(bridge, _body())
+    assert response.status_code == 400 and "monthly cap" in response.json()["error"]["message"]
+    assert provider.calls == []
+    roomy, provider = _bridge(limits=RunLimits(max_metered_usd=5.0))
+    assert (await _post(roomy, _body())).status_code == 200
+
+
+# ── a local endpoint is still held to the call cap and to what a proxy reports ────────────
+
+
+def _local_models(provider, url="http://127.0.0.1:11434/v1", transport="openai_compatible"):
+    return {
+        alias: replace(model, base_url=url, transport=transport)
+        for alias, model in _models(provider).items()
+    }
+
+
+async def test_a_local_model_is_still_held_to_the_call_cap(db_isolated):
+    provider = FakeProvider()
+    bridge = LlmBridge(
+        run_id=RUN_ID, models=_local_models(provider), concurrency=2, limits=RunLimits(max_calls=2)
+    )
+    codes = [(await _post(bridge, _body())).status_code for _ in range(3)]
+    assert codes == [200, 200, 400] and len(provider.calls) == 2
+
+
+async def test_a_loopback_proxy_that_reports_a_cost_is_held_to_the_dollar_limit(
+    db_isolated, monkeypatch
+):
+    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: None)
+    provider = FakeProvider(_answer("ok", cost=0.02))
+    bridge = LlmBridge(
+        run_id=RUN_ID,
+        models=_local_models(provider),
+        concurrency=2,
+        limits=RunLimits(max_metered_usd=0.03),
+    )
+    codes = [(await _post(bridge, _body())).status_code for _ in range(3)]
+    assert codes == [200, 200, 400] and bridge.metered_usd == pytest.approx(0.04)
+
+
+async def test_an_unpriced_model_on_loopback_is_allowed_but_on_a_lookalike_host_it_is_not(
+    db_isolated, monkeypatch
+):
+    monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: None)
+    limits = RunLimits(max_metered_usd=1.0)
+    loopback = LlmBridge(
+        run_id=RUN_ID, models=_local_models(FakeProvider()), concurrency=2, limits=limits
+    )
+    assert (await _post(loopback, _body())).status_code == 200
+    provider = FakeProvider()
+    lookalike = LlmBridge(
+        run_id=RUN_ID,
+        models=_local_models(provider, "http://localhost.evil.example:11434/v1"),
+        concurrency=2,
+        limits=limits,
+    )
+    assert (await _post(lookalike, _body())).status_code == 400
+    assert provider.calls == []
+
+
+# ── a hung provider never holds the run open ──────────────────────────────────────────────
+
+
+class DeafProvider:
+    """A provider (or CLI child) that swallows every cancel and never answers."""
+
+    def __init__(self):
+        self.started = asyncio.Event()
+        self.released = False  # the test lets go at its end, so no task outlives it
+
+    async def stream_chat(self, messages, tools, system, model, effort="medium"):
+        self.started.set()
+        while not self.released:
+            try:
+                await asyncio.sleep(0.02)
+            except asyncio.CancelledError:
+                continue
+        yield {"type": "done"}
+
+
+async def test_stop_gives_up_on_a_provider_that_ignores_cancel(db_isolated, monkeypatch):
+    monkeypatch.setattr(llm_bridge, "_INFLIGHT_WAIT_SECONDS", 0.1)
+    monkeypatch.setattr(llm_bridge, "_CANCEL_WAIT_SECONDS", 0.1)
+    seen: list[CallRecord] = []
+    provider = DeafProvider()
+    bridge = LlmBridge(run_id=RUN_ID, models=_models(provider), concurrency=2, on_call=seen.append)
+    try:
+        async with _client(bridge) as client:
+            pending = asyncio.create_task(client.post("/v1/chat/completions", json=_body()))
+            await asyncio.wait_for(provider.started.wait(), 5)
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+            await asyncio.wait_for(bridge.stop(), 5)
+        assert bridge._inflight == set()
+        assert [r.failed for r in seen] == [True]
+    finally:
+        provider.released = True
+
+
+async def test_a_call_past_its_overall_timeout_is_a_failed_call_not_a_hang(
+    db_isolated, monkeypatch
+):
+    monkeypatch.setattr(llm_bridge, "_CALL_TIMEOUT_SECONDS", 0.1)
+    seen: list[CallRecord] = []
+    provider = DeafProvider()
+    bridge = LlmBridge(run_id=RUN_ID, models=_models(provider), concurrency=2, on_call=seen.append)
+    try:
+        response = await asyncio.wait_for(_post(bridge, _body()), 5)
+        assert response.status_code == 502
+        assert [r.failed for r in seen] == [True] and bridge._reserved_usd == 0
+    finally:
+        provider.released = True

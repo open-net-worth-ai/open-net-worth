@@ -3,9 +3,13 @@ fields a run keeps out of its final state."""
 
 from __future__ import annotations
 
+from typing import Iterable
+
+from backend.core.redact_error import REDACTED, redact_error
 from backend.services.trading_agents import install, runs, settings
 
 _ENV_NO_PROXY = ("127.0.0.1", "localhost")
+_MIN_SECRET = 6  # a shorter "secret" would mangle ordinary words
 HOME_VARIABLES = install.HOME_VARIABLES
 
 
@@ -34,6 +38,20 @@ def worker_env(token: str, sec_user_agent: str, run_id: str) -> dict[str, str]:
             hosts = [h for h in env.get(name, "").split(",") if h.strip()]
             env[name] = ",".join([*hosts, *(h for h in _ENV_NO_PROXY if h not in hosts)])
     return env
+
+
+def secret_values(token: str, models: settings.ResolvedModels) -> list[str]:
+    """Every credential this run's worker could have seen or been told about: the bridge token, the
+    data-vendor keys and the stored key of each model's provider."""
+    return [token, *settings.data_vendor_env().values(), *settings.provider_keys(models)]
+
+
+def scrub_secrets(text: str, secrets: Iterable[str]) -> str:
+    """``text`` with each known secret masked by VALUE (a worker's error text quotes URLs, headers
+    and environment values in shapes no pattern knows), then the pattern redaction on top."""
+    for value in sorted({v for v in secrets if len(v) >= _MIN_SECRET}, key=len, reverse=True):
+        text = text.replace(value, REDACTED)
+    return redact_error(text)
 
 
 def reports_of(state: dict) -> dict:

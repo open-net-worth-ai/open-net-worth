@@ -162,6 +162,13 @@ def test_a_local_model_costs_nothing_and_is_not_unpriced():
     assert got.median_usd == 0.0 and got.priced and got.unpriced_models == ()
 
 
+def test_a_local_endpoint_serving_a_priced_model_is_estimated_like_any_other():
+    """A proxy on loopback may forward to a paid model: a known price is never zeroed for locality."""
+    local = replace(API, deep_local=True, quick_local=True)
+    got = budget.estimate(settings.load(), local, ANALYSTS, _rate_for)
+    assert got.median_usd == pytest.approx(0.837) and got.priced
+
+
 def test_the_unpriced_models_are_named_in_the_estimate():
     got = budget.estimate(settings.load(), API, ANALYSTS, lambda model: None)
     assert got.unpriced_models == ("acme-ai:model-a", "acme-ai:model-b")

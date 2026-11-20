@@ -12,7 +12,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from backend.ai.trading_agents import openai_shape as shape
-from backend.ai.trading_agents.bridge_models import DEFAULT_MAX_OUTPUT_TOKENS, SOURCE, BridgeModel
+from backend.ai.trading_agents.bridge_models import SOURCE, BridgeModel
 from backend.ai.trading_agents.openai_errors import error_body
 from backend.core.cost_context import cost_attribution
 from backend.core.errors import ValidationError
@@ -127,12 +127,3 @@ def record_cost(run_id: str, model: BridgeModel, usage: shape.Usage) -> None:
         cost_basis=usage.cost_basis,
         provider=model.provider_label,
     )
-
-
-def max_output_tokens(body: dict) -> int:
-    """The reply length a request allows, else the default the reservation assumes."""
-    for key in ("max_completion_tokens", "max_tokens"):
-        value = body.get(key)
-        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
-            return value
-    return DEFAULT_MAX_OUTPUT_TOKENS

@@ -145,7 +145,14 @@ only, so expect rough edges and report them.
 - **Estimate**: the median and range of your last ten finished runs with the same models,
   analysts and rounds, once you have three; before that a rough guess from the settings.
 - Runs on a subscription CLI are not counted in dollars and are not blocked by the dollar caps.
-  The call limit still applies.
+  The call limit still applies. A CLI counts as a subscription only when it has no API key saved
+  in Open Net Worth and reports that you are signed in; otherwise it is metered like an API model.
+- Before each call Open Net Worth reserves the most it could cost, using the model's own longest
+  possible reply. If even one such call is more than the run has left, the run stops there. A
+  premium model can need a higher per-run cap than the $2 default.
+- A model on your own computer (localhost or a loopback address) may have no known price and runs
+  anyway, but the call limit applies to it, and any cost it reports is counted. A proxy on your
+  computer that forwards to a paid service and reports no cost cannot be seen by the dollar caps.
 - All TradingAgents spend is in US dollars, whatever your base currency.
 
 ## See what it cost
@@ -167,4 +174,10 @@ database and your saved keys, and can use your network. TradingAgents also keeps
 logs inside your data folder; they are deleted when you remove the connector or the run. This is
 shown on the connector's setup page, under Install.
 
-On the public demo, TradingAgents' spend panel and Lucius's four TradingAgents tools are turned off.
+TradingAgents is not sandboxed. Open Net Worth gives it a separate home folder and a clean
+environment, installs it from hash-locked dependencies and masks any key that appears in its error
+text, but those reduce risk and do not confine it: install only if you trust the pinned release.
+The install refuses to continue if its dependency lock file is missing.
+
+On the public demo, every TradingAgents route (settings, runs and reports, spend) and Lucius's four
+TradingAgents tools are turned off.

@@ -6,7 +6,7 @@ cap's remainder at the run's start becomes one more live limit (``run_limit_usd`
 monthly cap is checked once, against the estimates of every run still queued or going plus this
 one. What is metered is decided by the provider's own billing, never by a transport's name: a CLI
 on a stored API key is billed, and a model with no known price is refused (it cannot be capped),
-unless its endpoint is local. The app-wide AI budget (``AppConfigStore``) is not enforced — a
+unless its endpoint is a loopback one. The app-wide AI budget (``AppConfigStore``) is not enforced — a
 separate, advisory figure.
 
 Prices are not read here: they live in ``ai.models.pricing``, a layer above, so the caller hands in
@@ -111,24 +111,27 @@ def _tier_cost(rates: Optional[tuple[float, float]], calls: int, tokens: tuple[i
 def _static(
     cfg: Settings, models: ResolvedModels, analysts: int, rate_for: RateFor
 ) -> tuple[float, int, tuple[str, ...]]:
-    """``(usd, calls, unpriced models)`` from the assumed tokens per call, metered tiers only:
-    a plan-included or local tier costs nothing and is never unpriced."""
+    """``(usd, calls, unpriced models)`` from the assumed tokens per call, metered tiers only: a
+    plan-included tier costs nothing. A local tier with no known price costs nothing and is never
+    unpriced (an endpoint on loopback is allowed to be); one whose model has a price — a proxy
+    serving a paid model — is estimated like any other."""
     calls = static_calls(cfg, analysts)
     tiers = (
-        (models.deep, models.deep_plan_included or models.deep_local, _DEEP_CALLS, _DEEP_TOKENS),
+        (models.deep, models.deep_plan_included, models.deep_local, _DEEP_CALLS, _DEEP_TOKENS),
         (
             models.quick,
-            models.quick_plan_included or models.quick_local,
+            models.quick_plan_included,
+            models.quick_local,
             calls - _DEEP_CALLS,
             _QUICK_TOKENS,
         ),
     )
     usd, unpriced = 0.0, []
-    for ref, free, tier_calls, tokens in tiers:
-        if free:
+    for ref, plan, local, tier_calls, tokens in tiers:
+        if plan:
             continue
         rates = rate_for(_ref_model(ref))
-        if rates is None and ref not in unpriced:
+        if rates is None and not local and ref not in unpriced:
             unpriced.append(ref)
         usd += _tier_cost(rates, tier_calls, tokens)
     return round(usd, 6), calls, tuple(unpriced)

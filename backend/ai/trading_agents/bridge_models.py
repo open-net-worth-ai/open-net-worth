@@ -20,11 +20,16 @@ ALIASES = (ALIAS_DEEP, ALIAS_QUICK)
 PLAN_INCLUDED = "plan_included"
 KIND_BUDGET, KIND_CALLS = "budget", "calls"
 # What a call may cost at most, before it is made: the request's bytes read as 3 per token, and
-# the reply as long as the request allows (else this many tokens). A model with no known price is
-# reserved at the dearest rates there are.
-DEFAULT_MAX_OUTPUT_TOKENS = 8192
+# the reply as long as the provider could ever write — never the length the worker asks for, which
+# is untrusted. A model with no known price is reserved at the dearest rates there are, except on
+# this machine's own endpoint, where it is reserved at nothing.
+OUTPUT_CEILING_TOKENS = {"anthropic": 32_000}  # what ``AnthropicProvider.stream_chat`` allows
+_DEFAULT_OUTPUT_CEILING_TOKENS = (
+    64_000  # a CLI cannot cap its reply; a vendor's own limit may be higher
+)
 _BYTES_PER_TOKEN = 3
 _UNPRICED_RATES = (15.0, 75.0)
+_FREE_RATES = (0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -42,21 +47,37 @@ class BridgeModel:
 
     @property
     def metered(self) -> bool:
-        """Whether a call on it can cost money: not on a subscription, not on this machine."""
-        return not (self.plan_included or is_local_base_url(self.base_url))
+        """Whether a call on it is held to the dollar limits: everything but a subscription. A
+        local endpoint is metered too — it is not free to the caps just for being on loopback (a
+        proxy there may forward to a paid API and report a cost) — but an unknown price on it is
+        allowed rather than refused (``unpriced_allowed``)."""
+        return not self.plan_included
 
-    def worst_case_usd(self, body_bytes: int, max_output_tokens: int) -> float:
+    @property
+    def unpriced_allowed(self) -> bool:
+        """A model with no known price may run only on a truly loopback endpoint."""
+        return is_local_base_url(self.base_url)
+
+    @property
+    def output_ceiling_tokens(self) -> int:
+        return OUTPUT_CEILING_TOKENS.get(self.transport, _DEFAULT_OUTPUT_CEILING_TOKENS)
+
+    def worst_case_usd(self, body_bytes: int) -> float:
         if not self.metered:
             return 0.0
-        rates = list_price_rates(self.model, self.base_url) or _UNPRICED_RATES
+        rates = list_price_rates(self.model, self.base_url)
+        if rates is None:
+            rates = _FREE_RATES if self.unpriced_allowed else _UNPRICED_RATES
         input_tokens = body_bytes / _BYTES_PER_TOKEN
-        return (input_tokens * rates[0] + max_output_tokens * rates[1]) / 1_000_000
+        return (input_tokens * rates[0] + self.output_ceiling_tokens * rates[1]) / 1_000_000
 
     def is_unpriced(self, usage: shape.Usage) -> bool:
         """A call that cost money nobody can name: no subscription, no local endpoint, no price in
         the table and none reported by the endpoint. (A provider emits ``0.0``, never nothing, for
         such a call — so a missing figure is not the test.)"""
         if usage.cost_basis == PLAN_INCLUDED or not self.metered or usage.cost_reported:
+            return False
+        if self.unpriced_allowed:
             return False
         return list_price_rates(self.model, self.base_url) is None
 

@@ -204,6 +204,44 @@ def test_a_cli_model_resolves_with_its_transport_and_gets_fewer_parallel_calls(d
     assert settings.bridge_concurrency(settings.load(), models) == 6
 
 
+@pytest.fixture
+def billing(monkeypatch):
+    """Answers the CLI-billing question the AI layer normally answers, and puts the seam back."""
+    answers: dict = {}
+    monkeypatch.setattr(settings, "_cli_billing", lambda key, entry: answers.get(key, False))
+    return answers
+
+
+def test_a_cli_is_plan_included_only_when_its_own_billing_basis_says_so(db_isolated, billing):
+    _models(default="claude_cli:model-a", providers={})
+    assert not settings.resolve_models(settings.load()).plan_included  # unknown means metered
+    billing["claude_cli"] = True
+    models = settings.resolve_models(settings.load())
+    assert models.deep_plan_included and models.quick_plan_included and models.plan_included
+
+
+def test_a_cli_with_a_stored_key_is_metered_whatever_its_basis_says(db_isolated, billing):
+    billing["claude_cli"] = True
+    _models(default="claude_cli:model-a", providers={"claude_cli": {"api_key": "test-key"}})
+    models = settings.resolve_models(settings.load())
+    assert models.deep_keyed and not models.plan_included
+
+
+def test_an_api_model_never_asks_the_cli_billing_question(db_isolated, monkeypatch):
+    def boom(*_args):
+        raise AssertionError("asked")
+
+    monkeypatch.setattr(settings, "_cli_billing", boom)
+    _models()
+    assert not settings.resolve_models(settings.load()).uses_cli
+
+
+def test_a_cli_with_no_registered_probe_is_metered(db_isolated, monkeypatch):
+    monkeypatch.setattr(settings, "_cli_billing", settings._unknown_billing)
+    _models(default="claude_cli:model-a", providers={})
+    assert not settings.resolve_models(settings.load()).plan_included
+
+
 def test_api_models_get_four_parallel_calls_by_default(db_isolated):
     _models()
     cfg = settings.load()

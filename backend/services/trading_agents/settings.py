@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from backend.core.errors import (
     ConfigurationError,
@@ -69,8 +69,9 @@ class Settings:
 @dataclass(frozen=True)
 class ResolvedModels:
     """The two models of a run as ``"<provider_key>:<model>"``, each one's transport, whether the
-    provider has a stored API key (``*_keyed``) and whether its endpoint is on this machine
-    (``*_local``)."""
+    provider has a stored API key (``*_keyed``), whether the CLI's OWN cost basis reads
+    plan-included (``*_basis_plan``; only meaningful on a CLI transport) and whether its endpoint is
+    on this machine (``*_local``)."""
 
     deep: str
     quick: str
@@ -78,6 +79,8 @@ class ResolvedModels:
     quick_transport: str
     deep_keyed: bool = False
     quick_keyed: bool = False
+    deep_basis_plan: bool = True
+    quick_basis_plan: bool = True
     deep_local: bool = False
     quick_local: bool = False
 
@@ -87,16 +90,24 @@ class ResolvedModels:
 
     @property
     def deep_plan_included(self) -> bool:
-        return self.deep_transport in CLI_TRANSPORTS and not self.deep_keyed
+        return (
+            self.deep_transport in CLI_TRANSPORTS and not self.deep_keyed and self.deep_basis_plan
+        )
 
     @property
     def quick_plan_included(self) -> bool:
-        return self.quick_transport in CLI_TRANSPORTS and not self.quick_keyed
+        return (
+            self.quick_transport in CLI_TRANSPORTS
+            and not self.quick_keyed
+            and self.quick_basis_plan
+        )
 
     @property
     def plan_included(self) -> bool:
-        """Every call is on a CLI subscription. A CLI with a stored API key is billed, so it is
-        metered like any API provider; unknown means metered."""
+        """Every call is on a CLI subscription: each model is a CLI transport with no stored API
+        key whose own cost basis (``CliBillingProbe``) reads plan-included. A CLI with a stored key
+        is billed, and one whose basis is unknown or unreadable is treated as billed too — metered
+        like any API provider."""
         return self.deep_plan_included and self.quick_plan_included
 
     def as_dict(self) -> dict:
@@ -105,6 +116,31 @@ class ResolvedModels:
             "quick": self.quick,
             "transports": {"deep": self.deep_transport, "quick": self.quick_transport},
         }
+
+
+# The AI layer's answer to "is this CLI on its subscription?" — its providers' own cost-basis
+# resolution plus the CLI's sign-in state. ``services`` cannot import ``ai``, so the runner
+# registers it; until then (and on any doubt) a CLI is metered.
+CliBillingProbe = Callable[[str, dict], bool]
+
+
+def _unknown_billing(_provider_key: str, _entry: dict) -> bool:
+    return False
+
+
+_cli_billing: CliBillingProbe = _unknown_billing
+
+
+def set_cli_billing_probe(probe: Optional[CliBillingProbe]) -> None:
+    """``probe(provider_key, entry)`` -> True only when the CLI is known to bill the plan."""
+    global _cli_billing
+    _cli_billing = probe or _unknown_billing
+
+
+def _basis_plan(provider_key: str, entry: dict) -> bool:
+    if entry.get("transport") not in CLI_TRANSPORTS:
+        return True
+    return _cli_billing(provider_key, entry)
 
 
 # ── validation ───────────────────────────────────────────────────────────────────────────
@@ -343,9 +379,25 @@ def resolve_models(cfg: Settings) -> ResolvedModels:
         quick_transport=quick_entry["transport"],
         deep_keyed=bool(str(deep_entry.get("api_key") or "").strip()),
         quick_keyed=bool(str(quick_entry.get("api_key") or "").strip()),
+        deep_basis_plan=_basis_plan(deep.partition(":")[0], deep_entry),
+        quick_basis_plan=_basis_plan(quick.partition(":")[0], quick_entry),
         deep_local=is_local_base_url(str(deep_entry.get("base_url") or "")),
         quick_local=is_local_base_url(str(quick_entry.get("base_url") or "")),
     )
+
+
+def provider_keys(models: ResolvedModels) -> list[str]:
+    """The stored API key of each model's provider, for the runner to mask in anything a worker
+    reports. Never sent anywhere."""
+    keys: list[str] = []
+    for ref in {models.deep, models.quick}:
+        try:
+            key = str(_resolved(ref).get("api_key") or "").strip()
+        except ModelUnavailableError:
+            continue
+        if key:
+            keys.append(key)
+    return keys
 
 
 def bridge_concurrency(cfg: Settings, models: ResolvedModels) -> int:

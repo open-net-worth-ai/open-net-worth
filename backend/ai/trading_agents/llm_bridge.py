@@ -12,8 +12,9 @@ transcript — never the Lucius "turn stays open" path. It runs NO tool.
 
 Caps are enforced HERE, before a call is made: a metered call reserves its worst-case cost first
 (``BridgeModel.worst_case_usd``) and waits while the reservations in flight would pass the limit,
-so concurrent calls cannot overshoot it by more than the one call that is let through when
-nothing else is outstanding. A call runs as its own task, shielded from the request: it is
+so concurrent calls cannot overshoot it. The reservation is the provider's real output ceiling,
+never the length the worker asks for, and a call whose worst case alone is more than the run has
+left is refused even when nothing else is outstanding. A call runs as its own task, shielded from the request: it is
 finished and recorded (one cost row, one ``CallRecord``) even when the worker was killed under it,
 and ``stop()`` waits for the calls still going.
 
@@ -41,7 +42,6 @@ from backend.ai.trading_agents.bridge_http import (
     QuietServer,
     error_response,
     is_loopback,
-    max_output_tokens,
     read_json,
     record_cost,
     run_provider,
@@ -79,6 +79,11 @@ __all__ = [
 _START_TIMEOUT_SECONDS = 5.0
 _STOP_TIMEOUT_SECONDS = 5.0
 _INFLIGHT_WAIT_SECONDS = 60.0
+# After the grace a cancelled call gets this long to unwind, then it is abandoned: a provider or
+# CLI child that ignores a cancel must not hold the run open.
+_CANCEL_WAIT_SECONDS = 3.0
+_CALL_TIMEOUT_SECONDS = 10 * 60.0
+STOP_BOUND_SECONDS = _INFLIGHT_WAIT_SECONDS + _CANCEL_WAIT_SECONDS + _STOP_TIMEOUT_SECONDS
 
 
 class LlmBridge:
@@ -171,7 +176,13 @@ class LlmBridge:
             _, unfinished = await asyncio.wait(pending, timeout=_INFLIGHT_WAIT_SECONDS)
             for task in unfinished:
                 task.cancel()
-            await asyncio.gather(*unfinished, return_exceptions=True)
+            if unfinished:
+                _, abandoned = await asyncio.wait(unfinished, timeout=_CANCEL_WAIT_SECONDS)
+                if abandoned:
+                    log.warning(
+                        "bridge_calls_abandoned run=%s count=%d", self.run_id, len(abandoned)
+                    )
+                    self._inflight.clear()
         if self._server is not None:
             self._server.should_exit = True
         task, self._task = self._task, None
@@ -209,16 +220,20 @@ class LlmBridge:
             )
         return None
 
-    def _stop_reason(self, metered: bool) -> Optional[tuple[str, str]]:
-        """``(kind, sentence)`` when no more calls may be admitted, else ``None``."""
+    def _stop_reason(self, metered: bool, reserve: float = 0.0) -> Optional[tuple[str, str]]:
+        """``(kind, sentence)`` when no more calls may be admitted, else ``None``. With nothing
+        else outstanding, a call whose own worst case is more than the dollars left is turned away
+        too: it could not be held to the limit."""
         if self._refusal is not None:
             return self._refusal
         limits = self._limits
         if limits.max_calls is not None and self._admitted >= limits.max_calls:
             return KIND_CALLS, f"The run reached its limit of {limits.max_calls} model calls."
         limit = limits.usd_limit() if metered else None
-        if limit is not None and self._metered_usd >= limit[0]:
-            return KIND_BUDGET, limit[1]
+        if limit is not None:
+            left = limit[0] - self._metered_usd
+            if left <= 0 or (self._reserved_usd == 0 and reserve > left):
+                return KIND_BUDGET, limit[1]
         return None
 
     def _fits(self, reserve: float, metered: bool) -> bool:
@@ -231,7 +246,7 @@ class LlmBridge:
         """Count a call in and reserve its worst-case cost, waiting while the reservations
         already in flight leave no room; ``BudgetExceededError`` when the run is out of budget."""
         while True:
-            stop = self._stop_reason(metered)
+            stop = self._stop_reason(metered, reserve)
             if stop is not None:
                 self._refused += 1
                 if self.refusal_kind is None:
@@ -269,7 +284,7 @@ class LlmBridge:
                     "model_not_found",
                 )
             onw_request = shape.to_onw_request(body)
-            reserve = model.worst_case_usd(size, max_output_tokens(body))
+            reserve = model.worst_case_usd(size)
             await self._admit(reserve, model.metered)
         except OpenNetWorthError as exc:
             status, payload = classify_error(exc)
@@ -333,7 +348,7 @@ class LlmBridge:
         count the same things."""
         try:
             async with self._slots:
-                reply = await run_provider(self.run_id, model, onw_request)
+                reply = await _bounded(run_provider(self.run_id, model, onw_request))
             return reply, self._finish(model, call_id, reply, started)
         except BaseException:
             self._notify(self._failed_record(model, call_id, started))
@@ -388,3 +403,26 @@ class LlmBridge:
                 self._on_call(record)
             except Exception:  # noqa: BLE001 — the runner's bookkeeping never fails a call
                 log.exception("bridge_on_call_failed run=%s call=%s", self.run_id, record.call_id)
+
+
+def _consume(task: asyncio.Future) -> None:
+    if not task.cancelled():
+        task.exception()  # read it, so an abandoned call is not logged as lost
+
+
+async def _bounded(call) -> shape.Reply:
+    """``call``'s result within ``_CALL_TIMEOUT_SECONDS``. A call past it, or one whose caller was
+    cancelled, is cancelled and ABANDONED rather than awaited, so a provider that ignores a cancel
+    cannot keep this coroutine (and the run) waiting."""
+    inner = asyncio.ensure_future(call)
+    try:
+        done, _ = await asyncio.wait({inner}, timeout=_CALL_TIMEOUT_SECONDS)
+    except BaseException:
+        inner.cancel()
+        inner.add_done_callback(_consume)
+        raise
+    if not done:
+        inner.cancel()
+        inner.add_done_callback(_consume)
+        raise ExternalServiceError("The model did not answer in time.")
+    return inner.result()

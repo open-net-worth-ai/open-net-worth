@@ -7,7 +7,9 @@ Modes: ``normal`` (a short analysis ending in a result), ``crash`` (one call, th
 result), ``hang`` (one call, then never ends), ``overcap`` (calls until the bridge refuses one,
 then reports it), ``badline`` (garbage between valid lines, then a result), ``bigline`` (one line
 past the runner's limit), ``midline`` (a 3 MiB line, past the 2 MiB limit but under the old one),
-``resulthang`` (a result, then it never exits), ``spoof`` (progress for a stage no node has, the same stage over and over, and an ``llm_call``
+``resulthang`` (a result, then it never exits), ``leak`` (an error line quoting the bridge token, a
+data-vendor key and a URL with ``apikey=``), ``leakstderr`` (the same on stderr, then exits 3 with no
+result), ``spoof`` (progress for a stage no node has, the same stage over and over, and an ``llm_call``
 for a call the bridge never served, then a result).
 """
 
@@ -104,6 +106,17 @@ def spoof(request: dict) -> None:
     emit({"type": "result", "signal": "Hold", "final_state": {}})
 
 
+def leaked() -> str:
+    return (
+        "HTTPError 401 for url https://data.example/v1/q?apikey="
+        + os.environ["FRED_API_KEY"]
+        + " token "
+        + os.environ["OPENAI_COMPATIBLE_API_KEY"]
+        + " vendor "
+        + os.environ["FRED_API_KEY"]
+    )
+
+
 def main() -> None:
     mode = sys.argv[1]
     if len(sys.argv) > 2:
@@ -130,6 +143,12 @@ def main() -> None:
         time.sleep(3600)
     elif mode == "spoof":
         spoof(request)
+    elif mode == "leak":
+        emit({"type": "error", "kind": "llm", "message": leaked()})
+        sys.exit(1)
+    elif mode == "leakstderr":
+        print(leaked(), file=sys.stderr, flush=True)
+        sys.exit(3)
     elif mode == "midline":
         sys.stdout.write("x" * (3 * 1024 * 1024) + "\n")
         sys.stdout.flush()

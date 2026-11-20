@@ -47,8 +47,15 @@ reach a model **only through an ONW loopback bridge**.
    only by `ai/trading_agents/runner.py` (one at a time, at most 3 queued). The worker imports the
    standard library and `tradingagents` only, and nothing imports it (import-linter contract plus an
    AST test). Its environment is `scrubbed_environ()` plus the per-run bridge token and the two
-   optional data-vendor keys, never an LLM key. All three TradingAgents paths (results, cache,
-   memory log) are forced into the connector's scratch folder, never `~/.tradingagents`.
+   optional data-vendor keys, never an LLM key, with HOME and every XDG/AppData folder pointed at
+   the run's scratch folder and `.env` loading off (the worker also replaces python-dotenv's
+   functions before it imports TradingAgents, as the environment variable is not honoured by every
+   version). All three TradingAgents paths (results, cache, memory log) are forced into the
+   connector's scratch folder, never `~/.tradingagents`. The install builds from a hash-locked
+   dependency list (`--require-hashes --no-deps`, wheels only; a missing lock FAILS the install),
+   then the pinned commit, then a `pip check`, and its self-test must find the pinned commit and
+   import the modules TradingAgents loads lazily; installer and self-test run in that same
+   redirected environment and a scratch working directory.
 2. **The loopback LLM bridge.** TradingAgents is configured with its `openai_compatible` provider
    pointed at a per-run server on `127.0.0.1` (`ai/trading_agents/llm_bridge.py`), authenticated by a
    token valid for that run only, accepting loopback peers only. The worker sees two aliases,
@@ -86,8 +93,12 @@ reach a model **only through an ONW loopback bridge**.
    run (`context_sent`) and shown to the owner before it starts. Data vendors get the ticker and the
    date, never an amount.
 6. **Caps are enforced, not displayed.** A per-run dollar cap and a model-call cap are enforced by
-   the bridge itself (it refuses to admit the next call), with the runner as backstop, so a cap is
-   overshot by at most the calls already in flight. A 30-minute wall clock ends a run as `timed_out`.
+   the bridge itself (it refuses to admit the next call), with the runner as backstop. A call
+   reserves its worst case before it is made: its request bytes plus the provider's OWN output
+   ceiling (32,000 tokens on Anthropic, 64,000 elsewhere), never the reply length the worker asks
+   for. A call whose worst case alone is more than the run has left is refused even with nothing
+   else outstanding, so a cap is not overshot by in-flight calls either. A model call also has an
+   overall timeout, and `stop()` abandons a call that ignores its cancel instead of waiting. A 30-minute wall clock ends a run as `timed_out`.
    The monthly cap is checked once, at submit, against the run's estimate (median of the last ten
    matching finished runs, else a static heuristic) and refuses the run with the numbers in the
    message. The statuses `stopped_budget`, `stopped_calls`, `timed_out` and `interrupted` (an app
@@ -124,6 +135,25 @@ reach a model **only through an ONW loopback bridge**.
   node run in parallel, and ONW's `max_risk_rounds` is `max_risk_discuss_rounds` in TradingAgents
   (translated in the worker). Both model tiers run at medium effort, as TradingAgents sends none.
 - Codex and Antigravity carry only fixture evidence until someone runs them live.
+- **The worker is third-party code that can read the Open Net Worth data folder.** It is not
+  sandboxed (no chroot, seccomp or separate user — an OS sandbox is out of scope), so the redirected
+  HOME and the scrubbed environment remove what it would find by habit, not what it could find on
+  purpose. Hash-locked dependencies reduce supply-chain risk but do not confine it, and building the
+  pinned commit's own source distribution still fetches its build backend unpinned (a pip config
+  that pins it is not feasible for a VCS install). Whatever the worker or its stderr says is masked
+  by value (the bridge token, the data-vendor keys, each model's provider key) and by shape before
+  it is stored, but a secret it transforms first is not recognised.
+- **"On this machine" is not "free".** A local endpoint is judged by its parsed host (exactly
+  `localhost` or a loopback address, never a prefix, never with userinfo) and an unknown price is
+  allowed only there. It still counts against the call cap, and a price in the table or a cost the
+  endpoint reports is metered like any other. What cannot be known: a loopback LiteLLM or other
+  proxy that forwards a model with no price in the table to a paid API and reports no cost. Its
+  calls run, cost money and are invisible to the dollar caps; only the call cap holds them.
+- A CLI is plan-included only when its provider's own cost basis says so for an account with no
+  stored key AND the CLI reports it is signed in (Antigravity has no sign-in probe). Anything
+  else — a stored key, a silent or signed-out CLI, an error — is metered: the monthly cap, the
+  estimate and the per-call reservation apply. A premium model with a high output price can have a
+  worst case above the default $2 per-run cap, and is then refused up front until the cap is raised.
 
 ### Follow-ups
 

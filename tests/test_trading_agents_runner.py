@@ -225,6 +225,9 @@ async def test_a_metered_call_with_no_price_and_no_reported_cost_is_counted_unpr
     """A provider emits 0.0 — not nothing — for a model it cannot price."""
     runner_env.monkeypatch.setattr(bridge_models, "list_price_rates", lambda *a, **k: None)
     use_provider(runner_env.monkeypatch, FakeProvider(cost=0.0))
+    TradingAgentsConfigStore().write(
+        config={"per_run_cap_usd": 50.0}
+    )  # clears the dearest worst case
     run_id = await submit()
     await settle()
     row = run_of(run_id)
@@ -336,6 +339,9 @@ async def test_a_run_past_the_timeout_is_killed_and_timed_out(runner_env):
 async def test_the_spend_cap_stops_the_run_and_kills_the_process(runner_env):
     worker("overcap", runner_env.tmp, pid_file=True)
     use_provider(runner_env.monkeypatch, FakeProvider(cost=0.04))
+    runner_env.monkeypatch.setattr(
+        bridge_models, "list_price_rates", lambda *a, **k: (0.001, 0.001)
+    )
     TradingAgentsConfigStore().write(config={"per_run_cap_usd": 0.10})
     run_id = await submit()
     await settle()
@@ -357,6 +363,9 @@ async def test_a_result_that_arrived_before_the_timeout_does_not_make_the_run_do
 async def test_what_is_left_of_the_month_is_a_live_limit_on_the_run(runner_env):
     worker("overcap", runner_env.tmp)
     use_provider(runner_env.monkeypatch, FakeProvider(cost=0.02))
+    runner_env.monkeypatch.setattr(
+        bridge_models, "list_price_rates", lambda *a, **k: (0.001, 0.001)
+    )
     TradingAgentsConfigStore().write(config={"monthly_cap_usd": 0.05})
     earlier = runs.apply_run_change(
         "create",
@@ -797,3 +806,37 @@ async def test_the_default_budget_check_prices_the_run_and_stores_its_median(run
         "disclosure": row["context_sent"]["disclosure"],
     }
     assert row["context_sent"]["disclosure"]["level"] == "ticker"
+
+
+# ── what a worker says never reaches the row unredacted ───────────────────────────────────
+
+_VENDOR_SECRET = "fred-vendor-secret-0451"
+
+
+@pytest.mark.parametrize("mode", ["leak", "leakstderr"])
+async def test_a_workers_error_text_and_stderr_are_redacted_before_they_are_stored(
+    runner_env, mode
+):
+    TradingAgentsConfigStore().write(secrets={"fred_api_key": _VENDOR_SECRET})
+    worker(mode, runner_env.tmp)
+    seen: list[str] = []
+    real_start = llm_bridge.LlmBridge.start
+
+    async def start(self):
+        await real_start(self)
+        seen.append(self.token)
+
+    runner_env.monkeypatch.setattr(llm_bridge.LlmBridge, "start", start)
+    run_id = await submit()
+    await settle()
+    row = run_of(run_id)
+    assert row["status"] == "failed"
+    assert _VENDOR_SECRET not in row["error"] and seen[0] not in row["error"]
+    assert "apikey=" in row["error"] and "***" in row["error"]
+
+
+def test_known_secrets_are_masked_by_value_and_by_shape():
+    text = "HTTPError for https://x.example/q?apikey=abcdef123456 and abc and plain-secret-9 here"
+    out = worker_env.scrub_secrets(text, ["plain-secret-9", "abc", ""])
+    assert "abcdef123456" not in out and "plain-secret-9" not in out
+    assert " and abc and " in out  # too short to be treated as a secret by value
