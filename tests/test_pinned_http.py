@@ -622,7 +622,9 @@ def testhttps_context_uses_platform_bundle_when_present(monkeypatch):
         "get_default_verify_paths",
         lambda: _FakeVerifyPaths(openssl_cafile="/exists/cert.pem"),
     )
-    monkeypatch.setattr(pinned_http.Path, "is_file", lambda self: str(self) == "/exists/cert.pem")
+    monkeypatch.setattr(
+        pinned_http.Path, "is_file", lambda self: self.as_posix() == "/exists/cert.pem"
+    )
 
     calls: list[dict] = []
 
@@ -730,7 +732,10 @@ print(before, after > 0, chosen == certifi.where(), os.environ.get("SSL_CERT_FIL
     out = subprocess.run(
         [sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True
     )
-    assert out.stdout.split() == ["0", "True", "True", "True"], out.stdout + out.stderr
+    before, *rest = out.stdout.split()
+    assert rest == ["True", "True", "True"], out.stdout + out.stderr
+    if os.name != "nt":  # Windows always has its system store, so there is no empty "before"
+        assert before == "0", out.stdout + out.stderr
 
 
 def test_ensure_default_trust_store_leaves_a_working_platform_store_alone(monkeypatch, tmp_path):

@@ -53,6 +53,7 @@ from typing import AsyncGenerator, List, Optional
 from backend.ai.image_payloads import decode_image_payloads
 from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConfigurationError, ExternalServiceError, ProviderTimeoutError
+from backend.core.process_tree import kill_and_reap, spawn_kwargs
 from backend.services.feature_flags import enabled
 
 from . import claude_live_session, cli_sign_in
@@ -407,6 +408,7 @@ class ClaudeCliProvider(AIProvider):
                 cwd=workdir,
                 env=_child_env(self.api_key, no_thinking=no_thinking),
                 limit=_STDOUT_LIMIT,
+                **spawn_kwargs(),
             )
             content: list[dict] = [{"type": "text", "text": prompt}]
             for img in images or []:
@@ -1178,19 +1180,8 @@ async def _drain(stream, sink: list[bytes]) -> None:
 
 
 async def _kill(proc) -> None:
-    """Best-effort terminate AND reap — a dead process must never keep the turn alive.
-
-    The reap matters: without awaiting ``wait()`` the transport is torn down by the GC
-    later, after the loop may already be closed.
-    """
-    try:
-        proc.kill()
-    except (ProcessLookupError, OSError):
-        return
-    try:
-        await asyncio.wait_for(proc.wait(), timeout=5.0)
-    except (asyncio.TimeoutError, ProcessLookupError, OSError):
-        pass
+    """Best-effort terminate AND reap — a dead process must never keep the turn alive."""
+    await kill_and_reap(proc)
 
 
 def _assistant_text(ev: dict) -> str:

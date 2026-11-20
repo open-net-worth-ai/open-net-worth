@@ -11,13 +11,13 @@ instead. Anthropic's ``defer_loading`` and Claude Code's own ToolSearch work the
 from __future__ import annotations
 
 import json
-import stat
 import textwrap
 
 import pytest
 
 from backend.ai.models import claude_live_session as cls
 from backend.ai.models.claude_cli_provider import ClaudeCliProvider
+from tests.fake_exe import python_cli
 
 USER = {"role": "user", "content": "what did I spend?"}
 REPLY = {"role": "assistant", "content": "hi"}
@@ -35,7 +35,8 @@ TOOL_B = {
 def _fake_cli(tmp_path):
     """A `claude` stand-in recording each spawn's system prompt and every stdin line."""
     script = tmp_path / "claude"
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             """
             #!/usr/bin/env python3
@@ -60,9 +61,8 @@ def _fake_cli(tmp_path):
                     sys.stdout.write(json.dumps(ev) + "\\n")
                 sys.stdout.flush()
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
 

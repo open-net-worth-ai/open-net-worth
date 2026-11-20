@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import stat
 import sys
 import textwrap
 from types import SimpleNamespace
@@ -23,6 +22,7 @@ from backend.ai.models.antigravity_cli_provider import (
     cost_basis_for,
 )
 from backend.core.errors import ExternalServiceError
+from tests.fake_exe import python_cli
 
 USER = {"role": "user", "content": "What is my balance? TOOLCALL"}
 ASSISTANT = {
@@ -55,7 +55,8 @@ def _fake_agy(tmp_path):
     turn n alone is 100+n input, 7 output, 3 cached.
     """
     script = tmp_path / "agy"
-    script.write_text(
+    script = python_cli(
+        script,
         textwrap.dedent(
             f"""
             #!{sys.executable}
@@ -108,9 +109,8 @@ def _fake_agy(tmp_path):
                                  "thinking_tokens": 2 * n, "cache_read_tokens": 3 * n,
                                  "total_tokens": 112 * n}}}}}})
             """
-        ).strip()
+        ).strip(),
     )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
 

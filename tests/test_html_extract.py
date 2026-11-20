@@ -14,6 +14,8 @@ failure it is here to prevent, made visible.
 
 from __future__ import annotations
 
+import os
+
 import backend.ai.search.html_extract as he
 
 _ARTICLE = """
@@ -52,7 +54,9 @@ def test_a_native_abort_in_the_child_is_contained(monkeypatch, caplog):
     assert out is None, "a crashed child must degrade to None, never propagate"
     # Reaching this line at all is the real assertion — the process is still alive.
     assert "NATIVE CRASH" in caplog.text
-    assert "-6" in caplog.text, "SIGABRT should be reported as the negative signal it is"
+    # POSIX reports SIGABRT as the negative signal; Windows as the NTSTATUS STATUS_STACK_BUFFER_OVERRUN.
+    expected = str(0xC0000409) if os.name == "nt" else "-6"
+    assert expected in caplog.text, "an abort should be reported as the status the OS gave it"
 
 
 def test_the_caller_can_still_extract_after_a_crash(monkeypatch):

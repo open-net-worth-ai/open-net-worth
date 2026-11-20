@@ -9,6 +9,7 @@ Stdlib only — ``core`` is a leaf.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import signal
 import subprocess
@@ -90,3 +91,26 @@ def has_exited(pid: int, poll: Any) -> bool:
         return os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
     except ChildProcessError:
         return True
+
+
+async def kill_and_reap(proc: Any, timeout: float = 5.0) -> None:
+    """Best-effort: stop an ``asyncio`` child's whole tree, then reap it. ``proc`` must have been
+    spawned with ``spawn_kwargs()`` — on Windows an npm CLI is a ``.cmd`` launcher whose real
+    program is a grandchild that killing only the launcher leaves running (holding its cwd).
+    Awaiting ``wait()`` matters: left to the GC the transport is torn down after the loop may
+    have closed."""
+    if proc.returncode is not None:
+        # Already exited and reaped: its pid may now name an unrelated process (Windows reuses
+        # pids fast), and a tree kill by that pid would take down whatever holds it.
+        return
+    try:
+        await asyncio.to_thread(kill_tree, proc.pid)
+    except (OSError, subprocess.SubprocessError):
+        try:
+            proc.kill()
+        except OSError:
+            return
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=timeout)
+    except (asyncio.TimeoutError, OSError):
+        pass

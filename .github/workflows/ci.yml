@@ -253,13 +253,39 @@ jobs:
           tests/test_desktop_runtime_build.py tests/test_keep_awake.py tests/test_cli_auto_upgrade.py
           tests/test_cli_status.py tests/test_cli_upgrade_request.py tests/test_cli_background.py
           tests/test_cli_help.py
-      # Pushes to main only, in parallel: run serially on every PR it took 50+ min, and the run
-      # (and the windows runner) stayed busy that long for a result nobody gates on.
+
+  # --- test-windows-full: the WHOLE suite on Windows, as information only. Its own job, outside
+  # `ci ok`'s needs, so the gate reports in minutes instead of waiting ~30 for a result nobody
+  # gates on (it was a step of test-windows and held `ci ok` to ~33 min). Pushes to main only:
+  # on every PR it cost a Windows runner 50+ min. Remaining failures: docs/WINDOWS.md.
+  test-windows-full:
+    # Sharded: in one runner it reached 93% in 50 min and was cut off (a timeout reads as a
+    # CANCELLED run, even with continue-on-error).
+    # A PR labelled `windows-full` runs it too, to prove a Windows fix before it merges.
+    name: test (windows, full suite ${{ matrix.shard }}/3, informational)
+    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'windows-full') }}
+    runs-on: windows-latest
+    timeout-minutes: 40
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-backend
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          editable: "true"
       - name: Full suite (informational)
-        if: ${{ always() && github.event_name == 'push' }}
-        continue-on-error: true
-        timeout-minutes: 30
-        run: python -m pytest -q -p no:randomly -m "not integration" -n auto --no-header -rfE tests
+        run: >
+          python -m pytest -q -p no:randomly -m "not integration" -n auto --no-header -rfE
+          --shard=${{ matrix.shard }}/3 tests
 
   # --- db: the ENTIRE tests/db suite again, against real Postgres. This is the
   # second-dialect gate (spec 2026-08-05 D1): any SQLite-only SQL fails here,
@@ -342,6 +368,30 @@ jobs:
           npm ci
           npm run build
 
+  # --- test-frontend: the vitest suite. It never ran in CI, so 72 tests drifted from the UI
+  # unnoticed on main; now it gates `ci ok` like the backend suite.
+  # Sharded 3 ways: one runner carrying all ~1,000 files was CPU-starved into timeouts.
+  test-frontend:
+    name: test (frontend, vitest ${{ matrix.shard }}/3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: npm ci && npm test
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test -- --shard=${{ matrix.shard }}/3
+
   # --- package: the wheel a user installs is self-contained. Build it, install it into a
   # clean environment (no checkout on sys.path), boot `onw start` from it on an isolated
   # scratch root, and hit the API, the SPA and the docs. This is the evidence behind
@@ -407,7 +457,7 @@ jobs:
   ci-ok:
     name: ci ok
     if: ${{ always() }}
-    needs: [privacy, lint, type, test, test-flags, test-windows, db-postgres, build, package]
+    needs: [privacy, lint, type, test, test-flags, test-windows, db-postgres, build, test-frontend, package]
     runs-on: ubuntu-24.04
     steps:
       - name: Every gating job passed

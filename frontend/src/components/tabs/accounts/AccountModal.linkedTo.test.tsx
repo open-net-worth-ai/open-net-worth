@@ -99,10 +99,10 @@ describe('AccountModal "Linked to" list', () => {
     expect(screen.queryByLabelText(/connected/i)).toBeNull()
   })
 
-  it('CDS-UI-14: shows the empty copy when there are no external_ids', () => {
+  it('CDS-UI-14: offers to link a bank account when there are no external_ids', () => {
     renderEdit(baseAccount({ externalIds: [] }))
 
-    expect(screen.getByText('Not linked to a connector.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Link a bank account' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Unlink' })).toBeNull()
   })
 

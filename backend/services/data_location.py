@@ -83,7 +83,7 @@ def inspect(raw_path: str) -> LocationReport:
         ancestor = path.parent
         while not ancestor.exists() and ancestor != ancestor.parent:
             ancestor = ancestor.parent
-        writable = ancestor.exists() and os.access(ancestor, os.W_OK)
+        writable = ancestor.is_dir() and os.access(ancestor, os.W_OK)
         return LocationReport(shown, False, writable, False, None, None, None, None)
 
     if not path.is_dir():

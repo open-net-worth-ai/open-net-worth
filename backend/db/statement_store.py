@@ -455,7 +455,7 @@ class StatementStore:
         # DATA_DIR at all (a test that isolates one but not the other — read_file_bytes
         # cannot resolve that combination correctly either way, so this is not a regression).
         try:
-            rel = str(disk.relative_to(DATA_DIR))
+            rel = disk.relative_to(DATA_DIR).as_posix()
         except ValueError:
             rel = f"files/statements/{sid}{ext}"
 

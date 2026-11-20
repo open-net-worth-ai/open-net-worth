@@ -227,14 +227,15 @@ class PendingAnalysisStore(PayloadTableStore):
 
     def recently_failed(self, subject: str, cutoff_iso: str) -> bool:
         """True if `subject` has a PERMANENTLY-failed row (`mark_failed`'s attempts>=3 branch)
-        whose `failed_at` is at or after `cutoff_iso` — the cooldown check `_enqueue_stale_briefs`
+        whose `failed_at` is STRICTLY after `cutoff_iso` (a zero-minute cooldown must match nothing,
+        even when a coarse clock stamps the failure and the cutoff identically) — the cooldown check `_enqueue_stale_briefs`
         and `trigger_on_demand_brief_refresh` use alongside `has_active` before opening a fresh
         row for a subject, so a subject that just exhausted its 3-attempt budget gets a genuine
         breathing-room window instead of being re-enqueued on the very next tick/page-open (see
         `mark_failed`'s own docstring for the retry-storm this closes). A row with no `failed_at`
         (pre-fix data) never matches — treated as not-recently-failed, never as a false positive."""
         for r in self._rows_where(self._table.c.payload["subject"].as_string() == subject):
-            if r.get("status") == "failed" and (r.get("failed_at") or "") >= cutoff_iso:
+            if r.get("status") == "failed" and (r.get("failed_at") or "") > cutoff_iso:
                 return True
         return False
 

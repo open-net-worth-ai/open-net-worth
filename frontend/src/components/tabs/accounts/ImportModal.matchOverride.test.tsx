@@ -249,8 +249,13 @@ describe('ImportModal — "Change match" on an already-matched row', () => {
     const row = pairRow()
     expect(within(ledgerCol(row)).getByText(/Different Grab charge/)).toBeTruthy()
     expect(within(ledgerCol(row)).queryByText(/Grab ride/)).toBeNull()
-    // The re-pointed-to entry is now accounted for — it drops off the panel.
-    expect(document.querySelector('.imp3-sec.ledger')).toBeNull()
+    // The re-pointed-to entry is now accounted for, and the engine's ORIGINAL pick is released
+    // in its place (owner, 2026-10-26): the panel still lists exactly one entry — the one this
+    // row no longer covers.
+    expect(ledgerSectionCount()).toBe('1')
+    const sect = document.querySelector('.imp3-sec.ledger') as HTMLElement
+    expect(within(sect).getByText('Grab ride')).toBeTruthy()
+    expect(within(sect).queryByText(/Different Grab charge/)).toBeNull()
   })
 
   it("the commit payload carries the user-picked existing_id, not the engine's original match", async () => {
@@ -292,8 +297,9 @@ describe('ImportModal — "Change match" on an already-matched row', () => {
   })
 
   // The one shape where "this entry is spoken for" (matchOverride) and "this row rejected it"
-  // (a WEAK row's Import, ADR 2026-07-31) collide on the same entry. The row's live decision
-  // wins: it books as new, so the entry it points at is uncovered and must be listed.
+  // (Import on a match, ADR 2026-07-31) collide on the same entry. The row's live decision
+  // wins: it books as new, so BOTH entries it points at — the engine's original pick and the
+  // re-pointed one — are uncovered and must be listed.
   it('a WEAK row re-pointed and then set to Import releases the picked entry too', async () => {
     const p = strongMatchPreview()
     p.drafts[0]!.flags[0]!.band = 'weak'
@@ -301,21 +307,31 @@ describe('ImportModal — "Change match" on an already-matched row', () => {
     await findPairRow()
     fireEvent.click(within(pairRow()).getByRole('button', { name: /Change match/ }))
     fireEvent.click(screen.getByRole('option', { name: /Different Grab charge/ }))
-    // Picking sets the row to Link, so the picked entry is claimed and drops off the panel.
-    expect(document.querySelector('.imp3-sec.ledger')).toBeNull()
-    fireEvent.click(within(pairRow()).getByRole('radio', { name: 'Import' }))
+    // Picking sets the row to Link, so the picked entry is claimed — only the engine's
+    // original pick, which this row no longer covers, is listed.
     expect(ledgerSectionCount()).toBe('1')
+    expect(
+      within(document.querySelector('.imp3-sec.ledger') as HTMLElement).queryByText(
+        /Different Grab charge/,
+      ),
+    ).toBeNull()
+    fireEvent.click(within(pairRow()).getByRole('radio', { name: 'Import' }))
+    expect(ledgerSectionCount()).toBe('2')
     const sect = document.querySelector('.imp3-sec.ledger') as HTMLElement
     expect(within(sect).getByText(/Different Grab charge/)).toBeTruthy()
+    expect(within(sect).getByText('Grab ride')).toBeTruthy()
   })
 
-  it('a STRONG row re-pointed and then set to Import keeps the picked entry claimed', async () => {
+  it('a STRONG row re-pointed and then set to Import releases the picked entry as well (every band)', async () => {
     await openWith(strongMatchPreview())
     await findPairRow()
     fireEvent.click(within(pairRow()).getByRole('button', { name: /Change match/ }))
     fireEvent.click(screen.getByRole('option', { name: /Different Grab charge/ }))
     fireEvent.click(within(pairRow()).getByRole('radio', { name: 'Import' }))
-    expect(document.querySelector('.imp3-sec.ledger')).toBeNull()
+    expect(ledgerSectionCount()).toBe('2')
+    const sect = document.querySelector('.imp3-sec.ledger') as HTMLElement
+    expect(within(sect).getByText(/Different Grab charge/)).toBeTruthy()
+    expect(within(sect).getByText('Grab ride')).toBeTruthy()
   })
 
   it('does not carry a transfer-only flag onto a normal replacement match', async () => {

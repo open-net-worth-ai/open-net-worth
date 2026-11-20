@@ -18,6 +18,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def _boot_against_fake_home(fake_home: Path) -> subprocess.CompletedProcess[str]:
     script = (
@@ -31,6 +33,7 @@ def _boot_against_fake_home(fake_home: Path) -> subprocess.CompletedProcess[str]
     return subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_fresh_instance_root_is_created_owner_only(tmp_path):
     fake_home = tmp_path / "fresh-home"
     fake_home.mkdir()
@@ -44,6 +47,7 @@ def test_fresh_instance_root_is_created_owner_only(tmp_path):
     assert mode == 0o700, f"expected a fresh instance root at 0o700, got {oct(mode)}"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_existing_instance_root_permissions_are_left_alone(tmp_path):
     """A pre-existing root — a pre-fix install, or one an operator deliberately
     customized — must never be silently re-chmodded on a later boot."""

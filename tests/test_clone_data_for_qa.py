@@ -12,9 +12,12 @@ Run:
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import stat
 from pathlib import Path
+
+import pytest
 
 from backend.scripts.clone_data_for_qa import _DROP_DIRS, clone
 
@@ -250,6 +253,7 @@ def test_clone_drops_migrated_secret_files_using_central_policy(tmp_path: Path) 
     assert not (dest / migrated.name).exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_clone_is_owner_only_on_disk(tmp_path: Path) -> None:
     """A local QA snapshot contains the full financial book and cannot be world-readable."""
     src = _make_source(tmp_path)

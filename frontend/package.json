@@ -17,6 +17,7 @@
     "lint:tokens": "node scripts/check-tokens.mjs",
     "lint:breakpoints": "node scripts/check-breakpoints.mjs",
     "pretypecheck": "node scripts/build-tokens.mjs",
+    "pretest": "node scripts/build-tokens.mjs",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",

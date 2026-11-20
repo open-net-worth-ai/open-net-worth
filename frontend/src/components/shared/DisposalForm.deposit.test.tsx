@@ -37,11 +37,29 @@ const SALE = {
   consumptions: [],
 } as unknown as RealizedEvent
 
+// The form shows no sale fields (and so no deposit picker) when the holding has no open units.
+const LOT = {
+  id: 'lot-1',
+  position_id: 'pos-1',
+  instrument_id: 'inst-1',
+  account_id: 'brokerage-1',
+  acquired_at: '2026-01-02',
+  original_qty: 10,
+  remaining_qty: 8,
+  unit_cost: 10,
+  cost_currency: 'SGD',
+  fees: 0,
+  kind: 'buy',
+  effective_unit_cost: 10,
+  remaining_basis: 80,
+  term_to_date: 'short',
+}
+
 beforeEach(() => {
   mockAuthFetch.mockReset()
   mockAuthFetch.mockImplementation((url: string) => {
     if (url.includes('/lots'))
-      return Promise.resolve({ ok: true, json: async () => ({ lots: [] }) })
+      return Promise.resolve({ ok: true, json: async () => ({ lots: [LOT] }) })
     return Promise.resolve({ ok: false, status: 404, json: async () => ({}) })
   })
 })

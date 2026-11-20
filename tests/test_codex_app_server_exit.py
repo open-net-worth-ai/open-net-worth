@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
 
 import pytest
 
 from backend.ai.models import codex_app_server as cas
 from backend.core.errors import ExternalServiceError
+from tests.fake_exe import python_cli
 
 posix_only = pytest.mark.skipif(os.name == "nt", reason="fake CLI is a POSIX script")
 
@@ -39,8 +39,9 @@ def _fake_cli(tmp_path, body: str) -> str:
     script = tmp_path / "die.py"
     script.write_text(body, encoding="utf-8")
     launcher = tmp_path / "codex"
-    launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}"\n')
-    launcher.chmod(0o755)
+    launcher = python_cli(
+        launcher, f"import runpy\nrunpy.run_path({str(script)!r}, run_name='__main__')\n"
+    )
     return str(launcher)
 
 

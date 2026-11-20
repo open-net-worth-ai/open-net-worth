@@ -18,6 +18,8 @@ import os
 import stat
 from contextlib import contextmanager
 
+import pytest
+
 import backend.core.logging as core_logging
 from backend.core.logging import (
     _BACKUP_COUNT,
@@ -414,6 +416,7 @@ def test_add_file_handler_formatter_uses_file_format(tmp_path):
         assert rfh.formatter.datefmt == _FILE_DATE_FMT  # type: ignore[union-attr]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_add_file_handler_log_dir_permissions(tmp_path):
     """The log directory must be set to 0700 (owner-only)."""
     log_file = tmp_path / "perms" / "app.log"
@@ -425,6 +428,7 @@ def test_add_file_handler_log_dir_permissions(tmp_path):
         assert stat.S_IMODE(mode) == stat.S_IRWXU
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no POSIX mode bits")
 def test_add_file_handler_log_file_permissions(tmp_path):
     """The log file itself must be set to 0600 (owner read/write only)."""
     log_file = tmp_path / "perms" / "app.log"

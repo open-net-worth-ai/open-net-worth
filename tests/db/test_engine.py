@@ -9,7 +9,7 @@ def test_database_url_defaults_to_sqlite_in_data_dir(monkeypatch):
 
     url = eng.database_url()
     assert url.startswith("sqlite:///")
-    assert url.endswith("/onw.db")
+    assert url.replace("\\", "/").endswith("/onw.db")
 
 
 def test_database_url_env_override(monkeypatch):

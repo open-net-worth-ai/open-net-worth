@@ -221,14 +221,21 @@ def _zip_live_db(zf: zipfile.ZipFile) -> tuple[set[Path], int]:
     return skip, 1
 
 
-def run_backup(*, now: datetime | None = None, force: bool = False, trigger: str = "auto") -> dict:
+def run_backup(
+    *,
+    now: datetime | None = None,
+    force: bool = False,
+    trigger: str = "auto",
+    keep: str | None = None,
+) -> dict:
     """Zip the entire ``DATA_DIR`` into a new timestamped ``.zip`` under ``BACKUPS_DIR``,
     then prune backups older than the configured retention window.
 
     Honors the ``backup_enabled`` instance flag unless ``force=True`` (the on-demand
     "Back up now" action always runs regardless of the toggle). The live SQLite db (if any)
     is captured via ``_zip_live_db`` as a consistent point-in-time snapshot rather than
-    copied byte-for-byte. Returns a summary dict; never raises.
+    copied byte-for-byte. ``keep`` names a backup the prune must leave alone (the one a restore
+    is reading — Windows cannot unlink an open file). Returns a summary dict; never raises.
     """
     cfg = AppConfigStore()
     if not force and not cfg.get_flag(BACKUP_ENABLED_FLAG, default=True):
@@ -266,7 +273,7 @@ def run_backup(*, now: datetime | None = None, force: bool = False, trigger: str
     # Prune against the SAME clock the backup was stamped with. Reading the real clock here
     # instead meant a run with an explicit `now` (tests, a backfill) could delete the backup it
     # had just written, the moment real time drifted past the retention window from that stamp.
-    pruned = _prune_old_backups(cfg.get_backup_retention_days(), now=now)
+    pruned = _prune_old_backups(cfg.get_backup_retention_days(), now=now, keep=keep)
     logger.info(
         "backup: created %s (%d files, %d bytes zipped); pruned %d old backup(s), "
         "swept %d stale temp entr(y/ies)",
@@ -316,7 +323,9 @@ def resolve_backup(name: str):
     return entry
 
 
-def _prune_old_backups(retain_days: int, *, now: datetime | None = None) -> list[str]:
+def _prune_old_backups(
+    retain_days: int, *, now: datetime | None = None, keep: str | None = None
+) -> list[str]:
     """Remove backup zips older than ``retain_days``. Parses each filename as the
     timestamp it was created at (rather than trusting filesystem mtime, which a
     copy/sync operation can rewrite) — a file with an unparseable name is left alone."""
@@ -326,7 +335,7 @@ def _prune_old_backups(retain_days: int, *, now: datetime | None = None) -> list
         if not entry.is_file():
             continue
         created = _parse_backup_name(entry.name)
-        if created is None:
+        if created is None or entry.name == f"{keep}{_SUFFIX}":
             continue
         if created.timestamp() < cutoff:
             entry.unlink(missing_ok=True)
@@ -626,7 +635,8 @@ def restore_backup(name: str) -> dict:
         # Open the archive BEFORE the safety backup runs. That run prunes to the retention
         # window, and the backup being restored is by definition an old one — restoring the
         # oldest backup you still have would otherwise delete it out from under this call.
-        # An open handle keeps the bytes readable even if the path is unlinked.
+        # POSIX keeps an unlinked open file readable; Windows refuses the unlink, so the
+        # safety run is also told to keep this archive.
         with zipfile.ZipFile(entry) as zf:
             members = [m for m in zf.infolist() if not m.is_dir()]
             targets: dict = {}
@@ -682,9 +692,14 @@ def restore_backup(name: str) -> dict:
 
             # Only once the archive is known-good: a refused restore must leave no trace,
             # including no safety backup for a restore that never happened.
-            safety = run_backup(force=True, trigger="manual")
+            safety = run_backup(force=True, trigger="manual", keep=name)
             if not safety.get("ok"):
                 return {"ok": False, "error": f"pre-restore backup failed: {safety.get('error')}"}
+
+            # Windows will not unlink the db's -wal/-shm (or replace the file) while a pooled
+            # connection holds it, so close them all before the delete pass touches anything.
+            if db_member is not None:
+                dispose_engine()
 
             # Delete what the snapshot did not contain, so the result IS the snapshot.
             removed = 0
@@ -711,13 +726,12 @@ def restore_backup(name: str) -> dict:
 
             if db_member is not None:
                 assert db_dest is not None  # db_member is only ever set from targets[db_dest]
-                # dispose_engine() FIRST — the file below is swapped out from under any live
-                # pooled connection otherwise (corruption risk, and the swap becomes invisible
-                # to any connection already open against the old file — reads keep hitting the
-                # unlinked inode); the singleton lazily re-opens against the SAME url on its
+                # The engine was disposed above, before the delete pass — the file below is
+                # swapped out from under any live pooled connection otherwise (corruption
+                # risk, and the swap becomes invisible to any connection already open against
+                # the old file); the singleton lazily re-opens against the SAME url on its
                 # next use (mirrors db/migrate.py::ensure_migrated's own dispose-before-DDL-
                 # swap pattern).
-                dispose_engine()
                 # Stale -wal/-shm siblings belong to the database we are ABOUT to discard — if
                 # left behind, SQLite can replay them into the freshly-restored file on next
                 # open, silently reintroducing exactly the data this restore is meant to

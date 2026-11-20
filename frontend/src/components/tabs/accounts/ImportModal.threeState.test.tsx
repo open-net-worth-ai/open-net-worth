@@ -9,6 +9,7 @@ vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, cleanup, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { fDate } from '../../../utils/format'
 import { ImportModal } from './ImportModal'
 import { authFetch } from '../../../api/client'
 import type { Account, Category } from './types'
@@ -574,10 +575,11 @@ describe('ImportModal — weak band (twin-sourced pair row)', () => {
   })
 })
 
-// ── The release is WEAK-ONLY (SIUM-WEAK-RELEASE, band clause) ────────────────────────
-// Same fixture, same partner, only the band differs. A strong/review row demands a deliberate
-// answer, and its `Import` means "the engine was confident and I'm keeping both anyway" — not
-// "these are different things" — so its entry stays claimed.
+// ── The release applies to EVERY band (owner, 2026-10-26) ────────────────────────────
+// Same fixture, same partner, only the band differs. A strong/review row's default is Link, so
+// `Import` on it is always the owner's own call to book it as new — and booking a second copy
+// while the first entry vanished from view was the bug: the entry is uncovered, so it is
+// listed in the ledger-only panel just like a weak row's.
 
 function bandedPairPreview(band: 'strong' | 'review') {
   const p = weakPairPreview()
@@ -587,17 +589,19 @@ function bandedPairPreview(band: 'strong' | 'review') {
   return p
 }
 
-describe('ImportModal — only the WEAK band releases its entry on Import', () => {
+describe('ImportModal — every band releases its entry on Import', () => {
   for (const band of ['strong', 'review'] as const) {
-    it(`a ${band} row explicitly set to Import leaves the matched entry claimed`, async () => {
+    it(`a ${band} row explicitly set to Import releases the matched entry to the ledger-only section`, async () => {
       await openWith(bandedPairPreview(band), { importReviewDefault: 'merge' })
       await findPairRowFor('Link')
       const row = pairRowFor('Link')
       fireEvent.click(within(row).getByRole('radio', { name: 'Import' }))
       expect(document.querySelector('.imp-pair-row')?.className).not.toContain('weak')
       expect(document.querySelector('.imp3-dchip')?.textContent).toBe('Import')
-      expect(document.querySelector('.imp3-sec.ledger')).toBeNull()
-      expect(screen.queryByText(/In your ledger, not on this statement/i)).toBeNull()
+      expect(ledgerSectionCount()).toBe('1')
+      const sect = document.querySelector('.imp3-sec.ledger') as HTMLElement
+      expect(within(sect).getByRole('button', { name: /Anthropic Claude API/ })).toBeTruthy()
+      expect(screen.getByText(/In your ledger, not on this statement/i)).toBeTruthy()
     })
   }
 })
@@ -2167,8 +2171,9 @@ describe('ImportModal — transfer_pair formation copy (§2b)', () => {
     fixture.total = 2
     await openWith(fixture)
     await findPairRowFor('Link')
-    fireEvent.click(screen.getByRole('button', { name: 'Filter by kind' }))
-    const pop = screen.getByRole('listbox')
+    // The one filter button now covers Type and Category, each its own listbox.
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by type or category' }))
+    const pop = screen.getByRole('listbox', { name: 'Type' })
     expect(within(pop).getByRole('option', { name: /Transfer\s*1/ })).toBeTruthy()
     fireEvent.click(within(pop).getByRole('option', { name: /Transfer\s*1/ }))
     expect(screen.getByText('Top-up received')).toBeTruthy()
@@ -2294,7 +2299,8 @@ describe('ImportModal — boundary bucket (SI-51)', () => {
     const closeRow = screen
       .getByRole('button', { name: 'Coffee after close' })
       .closest('.acct-stmtview-check-row') as HTMLElement
-    expect(within(closeRow).getByText('2026-06-29')).toBeTruthy()
+    // The date follows the Date-format setting, never raw ISO text.
+    expect(within(closeRow).getByText(fDate('2026-06-29', 'short', 'always'))).toBeTruthy()
     // The last two terms are SERVER strings rendered verbatim — the old third term was the
     // client's `via Lucius` provenance phrase, which never answered "which statement".
     expect(

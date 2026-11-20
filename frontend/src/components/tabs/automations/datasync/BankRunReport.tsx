@@ -452,5 +452,5 @@ function fDayLabel(iso: string): string {
   const d = new Date(`${iso}T00:00:00`)
   return Number.isNaN(d.getTime())
     ? iso
-    : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+    : `${d.toLocaleDateString(undefined, { weekday: 'short' })}, ${fDate(d, 'short', 'never')}`
 }

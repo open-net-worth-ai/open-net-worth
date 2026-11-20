@@ -17,6 +17,13 @@ _SIGNAL_HINTS = {
 }
 
 
+# Windows' `signal` lacks most of these (no SIGKILL), yet a 137 or -9 still reaches us from a
+# container or WSL child, so the Linux numbering names what the platform's enum cannot.
+_LINUX_SIGNAL_NAMES = {7: "SIGBUS", 9: "SIGKILL", 11: "SIGSEGV", 15: "SIGTERM"}
+# Past this a "code above 128" is a Windows NTSTATUS (0xC0000409 ...), not a shell-style signal.
+_MAX_SIGNAL = 64
+
+
 def describe_exit(returncode: Optional[int], label: str = "the CLI") -> str:
     """``exited with code 3`` / ``was stopped by SIGKILL (…)`` / ``was still running …``.
 
@@ -25,12 +32,12 @@ def describe_exit(returncode: Optional[int], label: str = "the CLI") -> str:
     if returncode is None:
         return "was still running but never answered"
     signum = -returncode if returncode < 0 else returncode - 128 if returncode > 128 else 0
-    if not signum:
+    if not signum or signum > _MAX_SIGNAL:
         return f"exited with code {returncode}"
     try:
         name = signal.Signals(signum).name
     except ValueError:
-        name = f"signal {signum}"
+        name = _LINUX_SIGNAL_NAMES.get(signum, f"signal {signum}")
     detail = [f"exit code {returncode}"] if returncode > 0 else []
     if name in _SIGNAL_HINTS:
         detail.append(_SIGNAL_HINTS[name].format(label=label))

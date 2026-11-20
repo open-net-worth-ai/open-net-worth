@@ -101,7 +101,14 @@ def test_installs_the_verified_appimage_with_launcher_entry_and_icon(release, ho
     assert installed(home).read_bytes() == fake_appimage("1")
     assert os.access(installed(home), os.X_OK)
     entry = (home / ".local/share/applications/open-net-worth.desktop").read_text()
-    assert f'Exec="{installed(home)}"' in entry
+    exec_line = next(line for line in entry.splitlines() if line.startswith("Exec="))
+    if os.name == "nt":
+        # The POSIX script runs under an MSYS sh that rewrites the drive prefix of $HOME
+        # (C:\\... becomes /c/...), so only the part the script itself appends is comparable.
+        tail = '/home/.local/bin/open-net-worth" %U'  # the test's tmp "home"; privacy-guard: ok
+        assert exec_line.replace("\\", "/").endswith(tail)
+    else:
+        assert exec_line == f'Exec="{installed(home)}" %U'
     assert "Icon=open-net-worth" in entry
     assert (
         home / ".local/share/icons/hicolor/512x512/apps/open-net-worth.png"

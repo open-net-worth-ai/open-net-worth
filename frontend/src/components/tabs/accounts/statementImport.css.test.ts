@@ -27,7 +27,7 @@ describe('statement import — global `.link` utility collision', () => {
   it('still has the collision to defend against', () => {
     // The prototype modifier: the strong band's tone is the bare word `link`.
     expect(modal).toMatch(/tone:\s*'link'/)
-    expect(modal).toMatch(/className=\{'imp3-sec '\+sec\.tone\}/)
+    expect(modal).toMatch(/className=\{'imp3-sec '\s*\+\s*sec\.tone\}/)
     // The global utility that collides with it. `^\s*` because the rule sits inside an @layer
     // block: how deep Prettier indents it is not part of the collision this test defends.
     expect(indexCss).toMatch(/^\s*\.link \{[^}]*text-decoration:\s*underline/m)

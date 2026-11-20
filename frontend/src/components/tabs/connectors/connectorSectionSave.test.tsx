@@ -18,7 +18,7 @@
 // of them.
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, screen, cleanup, act } from '@testing-library/react'
+import { render, screen, cleanup, act, waitFor } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import { SimpleFinSection } from './SimpleFinSection'
 import { TelegramSection } from './TelegramSection'
@@ -108,12 +108,14 @@ describe('SimpleFinSection — save() never hardcodes enabled', () => {
     render(<Harness Section={SimpleFinSection} hostRef={hostRef} />)
     await screen.findByLabelText(/^Setup token/)
 
+    // The token field renders before the config loads; save only once it has loaded.
+    await screen.findByText(/Currently paused/)
     await act(async () => {
       await hostRef.current!.run()
     })
 
+    await waitFor(() => expect(putBodiesTo('/api/simplefin/config')).toHaveLength(1))
     const bodies = putBodiesTo('/api/simplefin/config')
-    expect(bodies).toHaveLength(1)
     expect(bodies[0]?.enabled).toBe(false)
   })
 })
@@ -157,12 +159,14 @@ describe('TelegramSection — save() never hardcodes enabled', () => {
     render(<Harness Section={TelegramSection} hostRef={hostRef} />)
     await screen.findByLabelText(/^Bot token/)
 
+    // The token field renders before the config loads; save only once it has loaded.
+    await screen.findByText(/Currently paused/)
     await act(async () => {
       await hostRef.current!.run()
     })
 
+    await waitFor(() => expect(putBodiesTo('/api/telegram/config')).toHaveLength(1))
     const bodies = putBodiesTo('/api/telegram/config')
-    expect(bodies).toHaveLength(1)
     expect(bodies[0]?.enabled).toBe(false)
   })
 })
@@ -210,12 +214,14 @@ describe('YodleeSection — save() never hardcodes enabled', () => {
     render(<Harness Section={YodleeSection} hostRef={hostRef} />)
     await screen.findByLabelText(/^Client ID/)
 
+    // The token field renders before the config loads; save only once it has loaded.
+    await screen.findByText(/Currently paused/)
     await act(async () => {
       await hostRef.current!.run()
     })
 
+    await waitFor(() => expect(putBodiesTo('/api/yodlee/config')).toHaveLength(1))
     const bodies = putBodiesTo('/api/yodlee/config')
-    expect(bodies).toHaveLength(1)
     expect(bodies[0]?.enabled).toBe(false)
   })
 })

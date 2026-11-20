@@ -718,9 +718,10 @@ def test_fetch_account_transactions_pages_via_continuation_key(monkeypatch):
 
 
 def test_fetch_account_transactions_page_cap_returns_incomplete(monkeypatch):
-    """A never-terminating continuation_key must not spin forever — the safety cap
-    (_MAX_FETCH_PAGES) trips and the caller is told the fetch is INCOMPLETE, never
+    """A never-terminating continuation_key (a new one every page) must not spin forever — the
+    safety cap (_MAX_FETCH_PAGES) trips and the caller is told the fetch is INCOMPLETE, never
     silently truncated-but-labeled-complete."""
+    pages = iter(range(10_000))
 
     class _Resp:
         content = b"{}"  # _safe_get's size guard only reads len(), never parses this
@@ -729,7 +730,10 @@ def test_fetch_account_transactions_page_cap_returns_incomplete(monkeypatch):
             pass
 
         def json(self):
-            return {"transactions": [{"entry_reference": "X"}], "continuation_key": "always-more"}
+            return {
+                "transactions": [{"entry_reference": "X"}],
+                "continuation_key": f"k{next(pages)}",
+            }
 
     monkeypatch.setattr(svc.httpx, "get", lambda *a, **k: _Resp())
     txns, complete = svc.fetch_account_transactions(

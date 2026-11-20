@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import sys
 
 import pytest
 
@@ -23,12 +22,17 @@ from backend.ai.models import codex_app_server as cas
 from backend.ai.models import codex_cli_provider as ccp
 from backend.ai.models import codex_live_turn as clt
 from backend.ai.models.cli_tool_protocol import NATIVE_TOOLS_NOTE
+from tests.fake_exe import python_cli
 
 THREAD_ID = "019fbbae-29a8-7c73-821d-aef48de1a574"
 TURN_ID = "019fbbae-29cf-7991-8ee7-c323140a9b42"
 
 _FAKE_SERVER = r"""
 import json, sys
+
+# The app passes a scrubbed env (no PYTHONUTF8), so decode the UTF-8 protocol explicitly.
+sys.stdin.reconfigure(encoding="utf-8")
+sys.stdout.reconfigure(encoding="utf-8")
 
 def send(obj):
     sys.stdout.write(json.dumps(obj) + "\n")
@@ -39,7 +43,7 @@ TURN = "%(turn)s"
 ROUNDS = %(rounds)r
 VERSION = "%(version)s"
 REJECT_DYNAMIC = %(reject)r
-RECORD = "%(record)s"
+RECORD = %(record)r
 AFTER = %(after)r
 round_n = 0
 
@@ -55,7 +59,7 @@ def play(script):
         send({"jsonrpc": "2.0", **note})
 
 def record(kind, params):
-    with open(RECORD, "a") as fh:
+    with open(RECORD, "a", encoding="utf-8") as fh:
         fh.write(json.dumps({"kind": kind, "params": params}) + "\n")
 
 for raw in sys.stdin:
@@ -116,18 +120,15 @@ def _server(tmp_path, rounds, *, version="0.160.0", reject=False, host=True, aft
             "rounds": rounds,
             "version": version,
             "reject": reject,
-            "record": record,
+            "record": str(record),
             "after": {str(k): v for k, v in (after or {}).items()},
         },
         encoding="utf-8",
     )
     exe = tmp_path / "codex"
-    exe.write_text(f'#!/bin/sh\nexec {sys.executable} "{py}"\n', encoding="utf-8")
-    exe.chmod(0o755)
+    exe = python_cli(exe, f"import runpy\nrunpy.run_path({str(py)!r}, run_name='__main__')\n")
     if host:
-        sibling = tmp_path / "codex-code-mode-host"
-        sibling.write_text("#!/bin/sh\n", encoding="utf-8")
-        sibling.chmod(0o755)
+        python_cli(tmp_path / "codex-code-mode-host", "")
     return str(exe), record
 
 
@@ -146,7 +147,7 @@ def _rows(record, kind):
         return []
     return [
         json.loads(line)["params"]
-        for line in record.read_text().splitlines()
+        for line in record.read_text(encoding="utf-8").splitlines()
         if json.loads(line)["kind"] == kind
     ]
 

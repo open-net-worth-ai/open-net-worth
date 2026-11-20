@@ -10,14 +10,15 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import sys
 from pathlib import Path
 
 import pytest
 
 from backend.ai.models import codex_app_server as cas
 from backend.ai.models import codex_cli_provider as ccp
+from backend.core import process_tree
 from backend.core.errors import CliNotSignedInError, ExternalServiceError
+from tests.fake_exe import python_cli
 
 THREAD_ID = "019fbbae-29a8-7c73-821d-aef48de1a574"
 TURN_ID = "019fbbae-29cf-7991-8ee7-c323140a9b42"
@@ -187,17 +188,21 @@ def test_the_exec_transport_still_folds_what_it_cannot_send():
 _FAKE_SERVER = r"""
 import json, sys
 
+# The app passes a scrubbed env (no PYTHONUTF8), so decode the UTF-8 protocol explicitly.
+sys.stdin.reconfigure(encoding="utf-8")
+sys.stdout.reconfigure(encoding="utf-8")
+
 def send(obj):
     sys.stdout.write(json.dumps(obj) + "\n")
     sys.stdout.flush()
 
 THREAD = "%(thread)s"
 TURNS = %(script)r
-RECORD = "%(record)s"
+RECORD = %(record)r
 turn_n = 0
 
 def record(kind, params):
-    with open(RECORD, "a") as fh:
+    with open(RECORD, "a", encoding="utf-8") as fh:
         fh.write(json.dumps({"kind": kind, "params": params}) + "\n")
 
 for raw in sys.stdin:
@@ -247,15 +252,11 @@ def _fake_server(tmp_path, script: list, name: str = "codex"):
     record = tmp_path / f"{name}_received.jsonl"
     py = tmp_path / f"{name}_server.py"
     py.write_text(
-        _FAKE_SERVER % {"thread": THREAD_ID, "script": turns, "record": record},
+        _FAKE_SERVER % {"thread": THREAD_ID, "script": turns, "record": str(record)},
         encoding="utf-8",
     )
     exe = tmp_path / name
-    exe.write_text(
-        f'#!/bin/sh\nexec {sys.executable} "{py}"\n',
-        encoding="utf-8",
-    )
-    exe.chmod(0o755)
+    exe = python_cli(exe, f"import runpy\nrunpy.run_path({str(py)!r}, run_name='__main__')\n")
     return str(exe), record
 
 
@@ -266,7 +267,7 @@ def _received(record, kind: str) -> dict:
 def _received_all(record, kind: str) -> list:
     rows = [
         json.loads(line)["params"]
-        for line in record.read_text().splitlines()
+        for line in record.read_text(encoding="utf-8").splitlines()
         if json.loads(line)["kind"] == kind
     ]
     if not rows:
@@ -549,7 +550,8 @@ async def test_every_turn_carries_the_tool_manifest_across_model_switch_and_resp
     await _turn("gpt-5.6-terra")
     await _turn("gpt-6-luna")
     client = cas.client_for(cli)
-    client._proc.kill()
+    # Kill the whole tree, as a real crash would: on Windows the pid is a .cmd launcher.
+    process_tree.kill_tree(client._proc.pid)
     await client._proc.wait()
     await _turn("gpt-6-luna")
     await client.aclose()
@@ -590,7 +592,8 @@ async def test_a_dead_server_is_respawned_on_the_next_turn(tmp_path):
     async for _ in client.run_turn(instructions="s", transcript="t", model="m", effort="low"):
         pass
     first = client._proc.pid
-    client._proc.kill()
+    # Kill the whole tree, as a real crash would: on Windows the pid is a .cmd launcher.
+    process_tree.kill_tree(client._proc.pid)
     await client._proc.wait()
 
     async for _ in client.run_turn(instructions="s", transcript="t", model="m", effort="low"):
@@ -612,8 +615,7 @@ async def test_a_failing_app_server_retries_then_raises_instead_of_using_exec(
     `codex exec` — which streams nothing — with a single WARNING as the only trace.
     """
     exe = tmp_path / "codex"
-    exe.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
-    exe.chmod(0o755)
+    exe = python_cli(exe, "import sys\nsys.exit(2)\n")
 
     attempts = {"n": 0}
 
@@ -655,8 +657,7 @@ async def test_a_transient_app_server_failure_is_retried_not_surfaced(tmp_path, 
     """Two of three attempts may fail without the user ever seeing it — that's the point of
     retrying rather than failing on the first hiccup."""
     exe = tmp_path / "codex"
-    exe.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
-    exe.chmod(0o755)
+    exe = python_cli(exe, "import sys\nsys.exit(2)\n")
 
     attempts = {"n": 0}
 
@@ -684,8 +685,7 @@ async def test_a_transient_app_server_failure_is_retried_not_surfaced(tmp_path, 
 async def test_a_failure_after_content_reached_the_user_is_never_retried(tmp_path, monkeypatch):
     """Retrying a half-streamed turn would repeat the text the user already read."""
     exe = tmp_path / "codex"
-    exe.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
-    exe.chmod(0o755)
+    exe = python_cli(exe, "import sys\nsys.exit(2)\n")
 
     attempts = {"n": 0}
 
@@ -1346,7 +1346,7 @@ async def test_a_retry_after_text_stops_rather_than_showing_the_reply_twice(tmp_
 async def _wait_for_interrupt(record) -> None:
     """The model must not keep running a reply nobody will read."""
     for _ in range(100):
-        if '"turn/interrupt"' in record.read_text():
+        if '"turn/interrupt"' in record.read_text(encoding="utf-8"):
             return
         await asyncio.sleep(0.02)
     raise AssertionError("the abandoned turn was never interrupted")

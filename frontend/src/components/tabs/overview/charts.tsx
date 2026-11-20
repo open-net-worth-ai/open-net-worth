@@ -79,7 +79,7 @@ export { amountsHidden }
 // not nodes), so every canvas-side money formatter consults amountsHidden() at draw time, and a
 // flip redraws whatever is on screen: its ticks were painted under the old state.
 subscribeAmountsHidden(() => {
-  Object.values(Chart.instances).forEach((chart) => chart?.update('none'))
+  Object.values(Chart.instances ?? {}).forEach((chart) => chart?.update('none'))
 })
 
 /** Compact currency tick: S$2k, S$14k. Masks to `***` in privacy mode — the

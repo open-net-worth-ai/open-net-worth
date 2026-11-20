@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -18,6 +19,10 @@ LAUNCHER = ROOT / "scripts" / "run_demo.sh"
 # precondition instead of asserting through it.
 VENV_PYTHON = ROOT / ".venv" / "bin" / "python3"
 MAKEFILE = ROOT / "Makefile"
+posix_launcher = pytest.mark.skipif(
+    os.name == "nt",
+    reason="run_demo.sh is a bash launcher; on a Windows PATH `bash` is the WSL stub",
+)
 
 
 def test_launcher_isolated_from_owner_data_and_credentials() -> None:
@@ -109,6 +114,7 @@ def test_hosted_root_is_never_deleted_by_cleanup() -> None:
     assert '"${DEMO_TMP_BASE}"/onw-demo.*) rm -rf "${DEMO_ROOT}" ;;' in text
 
 
+@posix_launcher
 @pytest.mark.parametrize(
     "layout, expected",
     [
@@ -136,6 +142,7 @@ def test_rebuild_only_touches_something_that_looks_like_an_instance(tmp_path, la
     assert _guard_verdict(str(root)) == expected
 
 
+@posix_launcher
 @pytest.mark.parametrize("path", ["", "/", "$HOME", "$REPO"])
 def test_rebuild_refuses_the_obviously_catastrophic_paths(path) -> None:
     resolved = {"$HOME": str(Path.home()), "$REPO": str(ROOT)}.get(path, path)
@@ -181,6 +188,7 @@ def test_smoke_mode_builds_a_fabricated_book_and_cleans_up() -> None:
     assert report["data_dir_removed"] is True
 
 
+@posix_launcher
 def test_launcher_rejects_an_unknown_argument() -> None:
     result = subprocess.run(
         [str(LAUNCHER), "--nope"], cwd=ROOT, text=True, capture_output=True, timeout=30

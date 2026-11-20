@@ -128,7 +128,9 @@ class PairingStore(PayloadTableStore):
         rows = list(self._read_raw().values())
         if connector:
             rows = [r for r in rows if r.get("connector") == connector]
-        return sorted(rows, key=lambda r: r.get("requested_at", ""), reverse=True)
+        # Reversed first so requests stamped in the same clock tick (Windows: ~16 ms) still
+        # come newest first; the sort is stable.
+        return sorted(reversed(rows), key=lambda r: r.get("requested_at", ""), reverse=True)
 
     def get(self, connector: str, sender_id: str) -> Optional[dict]:
         """The pending row for ``(connector, sender_id)`` or ``None``."""

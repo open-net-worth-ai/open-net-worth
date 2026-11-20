@@ -17,11 +17,13 @@ vi.mock('../api/client', () => ({
 }))
 
 vi.mock('../utils/chatStore', () => ({
+  fetchServerSnapshot: vi.fn().mockResolvedValue(null),
   loadMessages: vi.fn().mockResolvedValue([]),
   reconcileWithRemote: vi.fn().mockResolvedValue(null),
   saveMessages: vi.fn(),
   withRestoreMarks: (target: unknown) => target,
   completeUnfinishedTail: () => null,
+  repairCutReplies: (target: unknown) => target,
 }))
 vi.mock('../utils/chatServerSync', () => import('./__testing__/transcriptReadDouble'))
 

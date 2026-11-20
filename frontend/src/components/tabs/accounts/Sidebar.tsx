@@ -100,6 +100,8 @@ interface AccountRowProps {
   onSelect: (id: string) => void
   /** Set when the bank sync keeps this account: the link icon becomes its sync mark. */
   mark?: SyncMark
+  /** The group's band color: tints the account's chip glyph in the Lucius picker. */
+  color?: string
 }
 
 const MARK_CLASS: Record<SyncTone, string> = {
@@ -108,7 +110,7 @@ const MARK_CLASS: Record<SyncTone, string> = {
   bad: 'acct-row-linked acct-sync-bad',
 }
 
-function AccountRow({ a, sel, onSelect, mark }: AccountRowProps) {
+function AccountRow({ a, sel, onSelect, mark, color }: AccountRowProps) {
   const isSec = a.role === 'securities'
   const neg = a.balance < 0
   const base = getBaseCurrency()
@@ -133,6 +135,7 @@ function AccountRow({ a, sel, onSelect, mark }: AccountRowProps) {
       id={a.id}
       label={a.name}
       search={[a.name, a.institution, typeLabel(a.type)].filter(Boolean).join(' ')}
+      color={color}
       item={a}
       toFields={(it) => ({
         name: it.name,
@@ -349,10 +352,12 @@ export function Sidebar({
             else flat.push(...arr)
           })
 
+          const group = groups.find((gr) => gr.key === g)
+
           return (
             <div className="acct-grp" key={g}>
               <div className="acct-grp-h">
-                <span>{groups.find((gr) => gr.key === g)?.label ?? g}</span>
+                <span>{group?.label ?? g}</span>
                 <span className={'t mask' + (total < 0 ? ' neg' : '')}>{fBaseCompact(total)}</span>
               </div>
 
@@ -363,6 +368,7 @@ export function Sidebar({
                   sel={selectedId === a.id}
                   onSelect={onSelect}
                   mark={marks.get(a.id)}
+                  color={group?.color}
                 />
               ))}
 
@@ -405,6 +411,7 @@ export function Sidebar({
                             sel={selectedId === a.id}
                             onSelect={onSelect}
                             mark={marks.get(a.id)}
+                            color={group?.color}
                           />
                         ))}
                       </div>

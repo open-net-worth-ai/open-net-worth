@@ -19,7 +19,7 @@ const ANCHORED: Record<string, string> = {
   '../tabs/accounts/Toast.tsx': 'acct-toast mb-anchored',
   '../tabs/plan/outlook.tsx': 'pl-rail-fab mb-anchored',
   '../tabs/plan/Plan.tsx': 'pl-toast mb-anchored',
-  '../tabs/plan/budget.tsx': 'pl-undo mb-anchored',
+  '../tabs/plan/UndoPill.tsx': 'pl-undo mb-anchored',
   '../tabs/commitments/Commitments.tsx': 'c2-toast mb-anchored',
   '../tabs/assets/Assets.tsx': 'as-toast mb-anchored',
   '../tabs/overview/OvToast.tsx': 'ov-toast mb-anchored',

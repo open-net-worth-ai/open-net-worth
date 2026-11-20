@@ -528,6 +528,12 @@ def _fetch(
             status, error_text, since_resolved, before_resolved, provider.lookback_days
         )
 
+    read_from = str(getattr(window, "read_from", None) or "")
+    if read_from > since_resolved:
+        # The bank served a shorter range than asked: the window read starts there, so no row
+        # before it is ever taken as gone, and the sync's pending check stops there too.
+        since_resolved = read_from
+
     # ── steps 3-4: normalize (already done by fetch_window) + sanitize ─────────────────
     accounts = [_sanitize_account(a) for a in window.accounts]
     rows = [_sanitize_row(r) for r in window.rows]

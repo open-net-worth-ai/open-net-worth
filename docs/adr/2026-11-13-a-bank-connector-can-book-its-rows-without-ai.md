@@ -481,3 +481,47 @@ and an Enable Banking card's available credit never stored as its debt).
   (`balance_state: needs_limit`), the first import leaves the card alone, and "Use the bank's
   balance" refuses with the reason (`balances.bank_figure`). A cash account's one figure is
   unchanged. The bank's `creditLimitIncluded` flag is not relied on: its meaning varies by bank.
+
+## Amendment 20 (2026-11-20: provider gaps found against other open-source importers)
+
+GoCardless and Enable Banking handling was compared with Actual Budget, Sure, Firefly III's
+Data Importer and ynabber (source and open issues). Seven gaps closed; each has a test in
+`tests/test_bank_data_sync_provider_gaps.py`.
+
+- **A repeated page key ends an Enable Banking read** (`fetch_account_transactions`): a key
+  already sent means the same page again (Actual #8846: every row twice). The read is WHOLE —
+  marked incomplete, a first import would be refused as cut short on every sync. The page that
+  came with the repeated key keeps only rows not already read (it is often page 1 again; an
+  id-less row read twice would book twice as `#2`). The 50-page cap still returns incomplete.
+- **An id is trusted only when it names one row** (`aggregation/row_ids`, both providers): a
+  placeholder (`NOTPROVIDED`, all zeros …) is no id; within one read, rows sharing an id but
+  differing in date, amount or wording are keyed on their content, and rows sharing both are one
+  row listed twice (kept once). Pending and booked rows are judged apart. The id ref stays an
+  alias, which `_booked_under_alias` honours only for the same date and amount — so the one row
+  the last release booked under a placeholder is still known and no other hides behind it. Every
+  id-keyed row is also known by its content hash when unique in the read (Enable Banking already
+  was; GoCardless now is), so a row keyed on content while its id was shared is still known when
+  later listed alone. NOT done: remembering a shared id across reads — a new row reusing an id an
+  earlier release booked, seen alone, is still taken as booked (as before); and two genuine
+  purchases the bank gives the same id AND the same content are one row (before, the second was
+  hidden as already booked — the same loss, not a new one).
+- **A refused range is asked again** (`fetch_served_transactions`): Enable Banking's
+  `WRONG_TRANSACTIONS_PERIOD` (N26: `PERIOD_INVALID`) is retried from the day its `detail` names,
+  else 89/60/30 days back (as Sure). `FetchWindow.read_from` carries the first day read;
+  `connector_fetch` moves the window's `since` there, so the vanished check and the sync's pending
+  check never read earlier rows as gone. The run warns from when.
+- **A card in credit** (`balances._in_credit`): neither provider signs a balance (Enable
+  Banking's BalanceResource has no `credit_debit_indicator` — checked against its API reference;
+  the plan to read one was dropped), so `-abs` stays the rule, except a `credit` account with a
+  limit whose available credit exceeds it by exactly the balance: that balance is held.
+- **A card's limit from its bank** (`balances.fill_limit`): Enable Banking's account details
+  `credit_limit` (same currency only) is set on a `credit` account with none, through
+  `accounts.update_account`; never replaces a set limit, never on a non-card (there it is an
+  overdraft). GoCardless states no limit.
+- **Enable Banking dates**: `booking_date`, then `value_date`, then `transaction_date` (last, so
+  no booked row's key moves); no date at all is `user_today()`, not the server's UTC day.
+- **Multi-currency accounts**: the balance in the account's own currency is read when the bank
+  lists several (Sure does the same).
+
+Left out: sending the user's IP as Enable Banking's PSU headers (a self-hosted server sees a LAN
+address; a public one needs an outside lookup), `strategy=longest`, and per-bank quirk handlers.

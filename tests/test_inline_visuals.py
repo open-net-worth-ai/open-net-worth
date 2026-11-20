@@ -598,6 +598,8 @@ def test_a_drawing_passes_through_with_its_own_figures(convo):
         '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script><canvas></canvas>',
         "x" * 100_000,
     ],
+    # PYTEST_CURRENT_TEST embeds the id, and Windows caps an environment variable at 32767 chars.
+    ids=lambda code: code if len(code) < 80 else f"{len(code)}-chars",
 )
 def test_a_drawing_is_taken_as_written_with_no_limits(convo, code):
     assert visual_spec.resolve({"code": code})["code"] == code
