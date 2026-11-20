@@ -345,7 +345,9 @@ async def narrate_row(
     zero-evidence or rejected result still stamps `narration_checked_at` so the row isn't
     retried on every poll."""
     store = PriceMovementStore()
-    prior = store.get_note(inst["id"], row["session_date"]) or {}
+    # Every store call here runs off the event loop: this job runs every poll, and a write
+    # waiting on the database lock froze every request for 0.5s+ (loop_watch, 2026-11-20).
+    prior = await asyncio.to_thread(store.get_note, inst["id"], row["session_date"]) or {}
     now_iso = _utcnow().isoformat()
     note = {
         **prior,
@@ -364,7 +366,7 @@ async def narrate_row(
         note["newest_evidence_seen"] = newest
     attempts = int(prior.get("narration_attempts") or 0)
 
-    def _settle(status: str, error: str | None = None, *, counts: bool) -> bool:
+    async def _settle(status: str, error: str | None = None, *, counts: bool) -> bool:
         # Three honest outcomes, never conflated: no_evidence (the day was quiet in OUR cache),
         # failed (the provider gave nothing usable), rejected (the guard refused the answer).
         # Only the last two count as attempts and retry (see narration_due).
@@ -372,11 +374,11 @@ async def narrate_row(
         note["evidence_window"] = EVIDENCE_WINDOW_VERSION
         note["narration_error"] = error
         note["narration_attempts"] = attempts + 1 if counts else attempts
-        store.upsert_note(note)
+        await asyncio.to_thread(store.upsert_note, note)
         return False
 
     if not evidence:
-        return _settle("no_evidence", counts=False)
+        return await _settle("no_evidence", counts=False)
     prompt = build_prompt(
         inst, row, evidence, currency=currency, tz_short=(market or {}).get("tz_short")
     )
@@ -390,7 +392,7 @@ async def narrate_row(
             type(exc).__name__,
             str(exc)[:160],
         )
-        return _settle("failed", type(exc).__name__, counts=True)
+        return await _settle("failed", type(exc).__name__, counts=True)
     valid, reason = check_result(result, row, evidence)
     if valid is None:
         status = "failed" if reason == "empty_or_invalid_json" else "rejected"
@@ -403,7 +405,7 @@ async def narrate_row(
             attempts + 1,
             MAX_ATTEMPTS,
         )
-        return _settle(status, reason, counts=True)
+        return await _settle(status, reason, counts=True)
     paragraph, sources = valid
     note.update(
         summary=paragraph,
@@ -416,7 +418,7 @@ async def narrate_row(
         narration_error=None,
         narration_attempts=attempts,
     )
-    store.upsert_note(note)
+    await asyncio.to_thread(store.upsert_note, note)
     return True
 
 
@@ -495,9 +497,15 @@ async def ensure_narrations(
     )
     evidence_newest = await asyncio.to_thread(_newest_evidence_arrival, instrument_id)
     due: list[tuple[dict, str | None, str | None]] = []
-    for row in _due_rows(
-        instrument_id, rows, timeline, evidence_newest, live_milestones_only=live_milestones_only
-    ):
+    due_rows = await asyncio.to_thread(
+        _due_rows,
+        instrument_id,
+        rows,
+        timeline,
+        evidence_newest,
+        live_milestones_only=live_milestones_only,
+    )
+    for row in due_rows:
         if len(due) >= max_calls:
             break
         prev = max((d for d in session_dates if d < row["session_date"]), default=None)
@@ -618,7 +626,8 @@ async def run_price_movement_sweep() -> int:
     narrate concurrently (``NARRATION_CONCURRENCY``); returns paragraphs landed."""
     now = time.monotonic()
     due: list[str] = []
-    for cand in _candidates():
+    # Off the loop: hydrating every holding reads price history (seconds on a small server).
+    for cand in await asyncio.to_thread(_candidates):
         iid = cand["instrument_id"]
         try:
             note, market = await asyncio.to_thread(_observe, iid)

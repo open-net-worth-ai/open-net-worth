@@ -77,25 +77,9 @@ def _wire_story(story: dict) -> dict:
     return out
 
 
-def _bounded_timeline_view(store: IntelStoriesStore, story: dict, limit: int) -> dict:
-    """``story`` with a ``timeline`` key assembled from ``signal_timeline_entries``, capped
-    at ``limit`` entries (newest-first — F11), plus ``showing_timeline``/``total_timeline``.
-    SQL-backed rewrite of the old JSON-array-slicing helper of the same name — same
-    contract, real query now (``IntelStoriesStore.entries_for_signal``'s own ``ORDER BY seq
-    DESC LIMIT :n``)."""
-    total = store.count_entries_for_signal(story["id"])
-    entries = store.entries_for_signal(story["id"], limit=limit)
-    return {
-        **story,
-        "timeline": entries,
-        "showing_timeline": min(total, limit),
-        "total_timeline": total,
-    }
-
-
 def _full_timeline_view(store: IntelStoriesStore, story: dict) -> dict:
     """``story`` with its FULL, unbounded ``timeline`` — the "show all" counterpart to
-    ``_bounded_timeline_view``'s embed (F11), used by ``get_signal``."""
+    ``list_signals``' bounded embed (F11), used by ``get_signal``."""
     return {**story, "timeline": store.entries_for_signal(story["id"], limit=None)}
 
 
@@ -109,10 +93,21 @@ def list_signals(include_archived: bool = False) -> list[dict]:
     if not include_archived:
         signals = [s for s in signals if not _is_archived(s)]
     newest_first = sorted(signals, key=lambda s: _ts_sort_key(s.get("updated_at")), reverse=True)
-    return [
-        _bounded_timeline_view(store, _wire_story(s), _LIST_TIMELINE_LIMIT)
-        for s in sorted(newest_first, key=_sort_key)
-    ]
+    timelines = store.bounded_entries_for_signals(
+        [s["id"] for s in newest_first], limit=_LIST_TIMELINE_LIMIT
+    )
+    out = []
+    for s in sorted(newest_first, key=_sort_key):
+        entries, total = timelines.get(s["id"], ([], 0))
+        out.append(
+            {
+                **_wire_story(s),
+                "timeline": entries,
+                "showing_timeline": min(total, _LIST_TIMELINE_LIMIT),
+                "total_timeline": total,
+            }
+        )
+    return out
 
 
 def get_signal(signal_id: str) -> dict | None:

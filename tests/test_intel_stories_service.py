@@ -135,6 +135,37 @@ def test_list_signals_bounds_timeline_and_reports_showing_total(db_isolated):
     assert signal["timeline"][0]["id"] == "e24"
 
 
+def test_list_signals_batches_timelines_per_story_without_a_query_per_story(db_isolated):
+    """Regression (2026-11-20): the 30-second Intel poll ran two queries PER story (355+ per
+    request on a real book). Each story still gets its own newest-first, capped timeline and
+    total; a story with no entries gets an empty one; the query count no longer grows with
+    the number of stories."""
+    from sqlalchemy import event
+
+    store = IntelStoriesStore()
+    for n in range(6):
+        svc.apply_story_change(_story(f"story_{n}", label=f"ACME {n}"))
+        for i in range(n * 5):
+            store.append_timeline_entry(f"story_{n}", _entry(f"s{n}e{i}"))
+
+    statements: list[str] = []
+    engine = store._eng()
+    listener = lambda *a: statements.append(a[2])  # noqa: E731
+    event.listen(engine, "before_cursor_execute", listener)
+    try:
+        by_id = {s["id"]: s for s in svc.list_signals()}
+    finally:
+        event.remove(engine, "before_cursor_execute", listener)
+
+    assert by_id["story_0"]["timeline"] == []
+    assert by_id["story_0"]["total_timeline"] == 0
+    assert by_id["story_0"]["showing_timeline"] == 0
+    assert by_id["story_5"]["total_timeline"] == 25
+    assert by_id["story_5"]["showing_timeline"] == 20
+    assert [e["id"] for e in by_id["story_3"]["timeline"]][:2] == ["s3e14", "s3e13"]
+    assert len(statements) <= 3
+
+
 def test_get_signal_returns_full_unbounded_timeline(db_isolated):
     svc.apply_story_change(_story())
     store = IntelStoriesStore()

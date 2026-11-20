@@ -274,7 +274,8 @@ async def run_rss_poll(tier: str) -> int:
     ticker_assets = _ticker_asset_map(wl_items)
 
     pa_store = PendingAnalysisStore()
-    all_rows = read_rows()
+    # Off the event loop: hydrating holdings reads price history for every row.
+    all_rows = await asyncio.to_thread(read_rows)
     ranked = _rank_holdings(all_rows)
 
     if tier == "fast":

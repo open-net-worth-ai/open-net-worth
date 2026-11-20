@@ -267,7 +267,7 @@ class IntelStoriesStore:
         prepend-ordered ``timeline[]`` array's wire shape (``StoryArcCard.tsx``,
         ``ai/tools/asset_context.py::_timeline_entry_view`` both expect newest-first).
         ``limit``, when given, caps to the N most recent — the bounded-read shape
-        ``_bounded_timeline_view`` embeds on the list feed."""
+        the list feed embeds (``bounded_entries_for_signals`` is its batch form)."""
         q = (
             select(signal_timeline_entries)
             .where(signal_timeline_entries.c.signal_id == signal_id)
@@ -279,6 +279,41 @@ class IntelStoriesStore:
             return [r.payload for r in conn.execute(q)]
         with self._eng().connect() as owned_conn:
             return [r.payload for r in owned_conn.execute(q)]
+
+    def bounded_entries_for_signals(
+        self, signal_ids: list[str], *, limit: int
+    ) -> dict[str, tuple[list[dict], int]]:
+        """``{signal_id: (newest-first entries capped at limit, total count)}`` for many signals
+        in one query per chunk — the list feed's batch form of ``entries_for_signal`` +
+        ``count_entries_for_signal``, which cost two queries per signal on every 30-second
+        poll. A signal with no entries is absent from the result."""
+        t = signal_timeline_entries.c
+        out: dict[str, tuple[list[dict], int]] = {}
+        with self._eng().connect() as conn:
+            for start in range(0, len(signal_ids), 500):
+                chunk = signal_ids[start : start + 500]
+                ranked = (
+                    select(
+                        t.signal_id,
+                        t.payload,
+                        func.row_number()
+                        .over(partition_by=t.signal_id, order_by=t.seq.desc())
+                        .label("rn"),
+                        func.count().over(partition_by=t.signal_id).label("total"),
+                    )
+                    .where(t.signal_id.in_(chunk))
+                    .subquery()
+                )
+                q = (
+                    select(ranked.c.signal_id, ranked.c.payload, ranked.c.total)
+                    .where(ranked.c.rn <= limit)
+                    .order_by(ranked.c.signal_id, ranked.c.rn)
+                )
+                for r in conn.execute(q):
+                    entries, _ = out.get(r.signal_id, ([], 0))
+                    entries.append(r.payload)
+                    out[r.signal_id] = (entries, int(r.total))
+        return out
 
     def count_entries_for_signal(self, signal_id: str, *, conn: Connection | None = None) -> int:
         q = (

@@ -1035,6 +1035,15 @@ def _select_queries(
     return watch_selected + selected, remaining
 
 
+def _sync_watchlist_holdings() -> dict:
+    """Read-modify-write under the store's lock, so a follow/unfollow landing mid-scan is never
+    overwritten by this scan's older copy."""
+    with _watchlist_lock:
+        wl = _sync_holdings(read_watchlist())
+        write_watchlist(wl)
+    return wl
+
+
 async def run_intel_scan(*, raise_on_incomplete: bool = False) -> int:
     """Run a full intelligence scan. Returns number of stories created or updated."""
     scan_started_at = datetime.now().isoformat()
@@ -1045,13 +1054,11 @@ async def run_intel_scan(*, raise_on_incomplete: bool = False) -> int:
         return 0
 
     if wl["config"].get("auto_scan_holdings", True):
-        # Read-modify-write under the store's lock, so a follow/unfollow landing mid-scan is
-        # never overwritten by this scan's older copy.
-        with _watchlist_lock:
-            wl = _sync_holdings(read_watchlist())
-            write_watchlist(wl)
+        # Off the event loop: syncing holdings hydrates every position (price-history reads)
+        # and froze every request while it ran (loop_watch, 2026-11-20).
+        wl = await asyncio.to_thread(_sync_watchlist_holdings)
 
-    rows = read_rows()
+    rows = await asyncio.to_thread(read_rows)
     fx = load_fx_cache()
     profile = read_profile()
     base = (profile.get("base_currency") or "SGD").upper()
