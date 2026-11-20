@@ -54,7 +54,8 @@ preview shows the price it would fill at, the total and your paper cash after, a
 says what happens next ("Fills now…", "Market closed. Fills at the next open…"). Click
 **Place paper buy** or **Place paper sell**.
 
-An order that waits shows under **Orders** with what it waits for, and you can cancel it there.
+An order that waits shows under **Orders** with what it waits for and when you placed it, and you
+can cancel it there.
 The page picks up a fill on its own, without a reload.
 
 The page shows your **Paper value** (holdings plus cash) and **Cash left** (not yet invested),
@@ -65,7 +66,7 @@ holding's price at that moment (a fund or a price you set stays at its last clos
 trades count from that day's start, so this figure can differ a little from Investments'. Pick **1W**, **1M**, **3M**, **1Y** or **All**
 under the chart. **By sector** rings what it holds, as on Copy Trading (cash left out); tap a
 sector to list only its holdings. Below are **Holdings** (click a row to open that asset's page), **Orders** and
-**Activity** (every trade, with its **Why**).
+**Activity** (every trade, with its **Why** and the date and time it happened).
 
 - **Go live** asks Lucius to help you do it for real: he compares it with what you hold and
   drafts the trades for your broker, and asks before placing anything.

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ActionMenu, Button, ConfirmDialog, ErrorState, PageTabs, TabSkeleton, Tag } from '../../ui'
 import { AutopilotTag } from './AutopilotTag'
 import { Spark } from '../../../lucius/identity'
-import { fCurrency, fDate } from '../../../utils/format'
+import { fCurrency, fDateTime } from '../../../utils/format'
 import { SortTable, type Column } from '../following/SortTable'
 import { NameCell } from '../following/NameCell'
 import { SectorPie } from '../following/SectorPie'
@@ -261,7 +261,7 @@ export function PaperPortfolioPage({
                   <div>{a.label}</div>
                   {a.note && <div className="note">Why: {a.note}</div>}
                 </div>
-                <div className="when">{fDate(a.at, 'short', 'auto')}</div>
+                <div className="when">{fDateTime(a.at)}</div>
               </div>
             ))}
           </div>
@@ -481,6 +481,13 @@ function orderColumns(cancel: (id: string) => void): Column<PaperOrder>[] {
               ? 'At NAV'
               : 'Market',
       wide: true,
+    },
+    {
+      key: 'placed',
+      label: 'Placed',
+      sortValue: (o) => o.placed_at,
+      cell: (o) => fDateTime(o.placed_at),
+      secondary: true,
     },
     {
       key: 'status',
