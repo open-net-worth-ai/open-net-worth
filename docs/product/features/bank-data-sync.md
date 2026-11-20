@@ -183,7 +183,9 @@ balance is its own request, which banks limit separately, about as often as tran
   difference.
 
 A card or loan's balance is money owed, so it's compared as a negative figure whichever way the
-bank reports it. GoCardless and Enable Banking say which figure is settled, and that's the one
+bank reports it. The exception is a card **in credit** (you paid more than you owed): when the
+card's credit limit is set and the bank's available credit is more than the limit by exactly
+the card's balance, that balance is money the card holds, not money owed. GoCardless and Enable Banking say which figure is settled, and that's the one
 compared with your cleared balance. Plaid sends a single figure that leaves out pending
 payments, so it's compared with your cleared balance too. Plaid may send a figure that's a few
 hours old: if it's behind, the row shows the difference rather than your balance silently
@@ -195,6 +197,11 @@ That figure is never used as the card's balance. If the card's account has a **C
 what you owe is worked out as the limit minus the available credit (a £5,000 limit with
 £1,200 available is £3,800 owed). Without one, the card's balance is left as it is and its
 row says **Add the card's credit limit to check its balance**; set it in the account's settings.
+Enable Banking banks that state a card's credit limit fill it in for you, on a card that has none
+set; a limit you've set is never changed.
+
+An account that holds several currencies (Revolut, Wise and the like) is compared in the
+account's own currency, whatever else the bank lists.
 
 Banks report their balances in the same terms your accounts use, both on the connector's
 **Accounts** list and when Lucius lists a bank's accounts:
@@ -206,6 +213,19 @@ Banks report their balances in the same terms your accounts use, both on the con
 | **Available to spend** | What you can spend now, overdraft or credit line included |
 
 A figure the bank doesn't send is left empty, never filled in from another.
+
+## What the sync handles for you
+
+- **A bank that serves less history than asked.** Some banks won't send 90 days. The sync asks
+  again from the first day the bank says it serves (or 89, 60 and then 30 days back), books what
+  it gets, and the run says from when: "the bank serves transactions only from …".
+- **A bank that repeats itself.** A bank that sends the same page again (Enable Banking) ends the
+  read there, so nothing is booked twice.
+- **Ids that aren't real ids.** Some banks give every transaction the same placeholder id
+  (`NOTPROVIDED`), or one id to several different transactions. Those are told apart by their
+  date, amount and wording, so each is booked once — none is lost as "already booked". The same
+  transaction listed twice under its id is booked once.
+- **Dates.** A pending card payment that carries only its purchase date keeps that date.
 
 ## When the bank changes something
 

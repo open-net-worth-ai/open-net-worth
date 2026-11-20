@@ -8,6 +8,7 @@ from datetime import timedelta
 from backend.core.user_time import user_today
 from backend.services import accounts as accounts_service
 from backend.services.aggregation import gocardless as gocardless_svc
+from backend.services.aggregation import row_ids
 from backend.services.aggregation.providers import FetchWindow
 
 ACC_MAIN = "acc-main-0001"
@@ -67,14 +68,17 @@ class FakeBank:
                 raise self.fail_with
             if a in self.fail_accounts:
                 raise self.fail_accounts[a]
+            # One account's rows, judged together as the real ``_account_rows`` does.
+            own = []
             for t in self.booked[a]:
                 row = gocardless_svc._txn_to_row(t, a, "GBP", pending=False)
                 if row and since <= row["date"] <= before:
-                    rows.append(row)
+                    own.append(row)
             for t in self.pending[a]:
                 row = gocardless_svc._txn_to_row(t, a, "GBP", pending=True)
                 if row and since <= row["date"] <= before:
-                    rows.append(row)
+                    own.append(row)
+            rows.extend(row_ids.settle(own))
         return FetchWindow(accounts=accounts, rows=rows, complete=not (set(ids) & self.cut_short))
 
 

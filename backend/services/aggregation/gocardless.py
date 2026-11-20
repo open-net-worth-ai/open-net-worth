@@ -40,7 +40,7 @@ import httpx
 from backend.core.errors import ExternalServiceError, ValidationError
 from backend.db.gocardless_config_store import ENDED, LINKED, GoCardlessConfigStore
 from backend.services import ledger as ledger_service
-from backend.services.aggregation import balance_kinds, parallel
+from backend.services.aggregation import balance_kinds, parallel, row_ids
 from backend.services.aggregation.mcc import merchant_category
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
@@ -658,6 +658,7 @@ def _account_balance(
     figures: dict,
     *,
     reuse: bool = False,
+    currency: Optional[str] = None,
 ) -> dict:
     """``{balance, cleared_balance, working_balance, available_to_spend}`` (``balance_kinds``;
     ``balance`` the one figure, booked preferred) from ``/accounts/{id}/balances/``. The bank
@@ -675,12 +676,19 @@ def _account_balance(
     except ExternalServiceError:
         return (kept if reuse and kept else None) or {"balance": None, **balance_kinds.split({})}
     by_type: dict[str, float] = {}
+    own: dict[str, float] = {}
     for b in (data or {}).get("balances") or []:
         try:
             amount = float(((b or {}).get("balanceAmount") or {}).get("amount"))
         except (TypeError, ValueError):
             continue
-        by_type.setdefault(str((b or {}).get("balanceType") or ""), amount)
+        kind = str((b or {}).get("balanceType") or "")
+        by_type.setdefault(kind, amount)
+        paid_in = str(((b or {}).get("balanceAmount") or {}).get("currency") or "").upper()
+        if currency and paid_in == currency.upper():
+            own.setdefault(kind, amount)
+    if own:
+        by_type = own  # a multi-currency account (Revolut, Wise …): its own currency's figures
     best = next((by_type[k] for k in _BALANCE_PREFERENCE if k in by_type), None)
     if best is None:
         best = next(iter(by_type.values()), None)
@@ -696,7 +704,9 @@ def _txn_id(txn: dict) -> str:
     ``transactionId`` is bank-dependent and may change or repeat (GoCardless's docs): keyed on
     it, a changed one booked the row twice and a repeated one hid a real transaction as
     already booked (review 2026-11-15)."""
-    return str(txn.get("internalTransactionId") or txn.get("transactionId") or "").strip()
+    return row_ids.real_id(txn.get("internalTransactionId")) or row_ids.real_id(
+        txn.get("transactionId")
+    )
 
 
 def _bank_handle(txn: dict) -> str:
@@ -804,16 +814,16 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
     description = _txn_description(txn)
     original_amount, original_currency = _original_charge(txn)
     txn_id = _txn_id(txn)
-    ref = (
-        f"{account_id}:{txn_id}"
-        if txn_id
-        else derived_ref(account_id, date_str, amount, currency, _ref_text(txn))
-    )
+    content_hash = derived_ref(account_id, date_str, amount, currency, _ref_text(txn))
+    ref = f"{account_id}:{txn_id}" if txn_id else content_hash
     # Booked before the internal id came first, the row is filed under the bank's id: kept as
     # an alias, it still reads as booked (only on the same date and amount — a provider handle,
     # ``connector_fetch._booked_under_alias``) and a pending booking under it still settles.
-    handle = _bank_handle(txn)
-    aliases = [f"{account_id}:{handle}"] if handle and handle != txn_id else []
+    # So is an id now read as a placeholder (``row_ids``): ``NOTPROVIDED`` once keyed a row.
+    handles = (_bank_handle(txn), str(txn.get("internalTransactionId") or "").strip())
+    aliases = list(
+        dict.fromkeys(f"{account_id}:{h}" for h in handles if h and f"{account_id}:{h}" != ref)
+    )
     return {
         "external_refs": [{"source": EXTERNAL_SOURCE, "ref": ref}],
         "ref_aliases": aliases,
@@ -830,6 +840,7 @@ def _txn_to_row(txn: dict, account_id: str, currency_hint: str, *, pending: bool
         "category_hint": merchant_category(txn.get("merchantCategoryCode")),
         "pending": pending,
         "supersedes_ref": None,
+        "_content_hash": content_hash,
     }
 
 
@@ -846,7 +857,7 @@ def _account_rows(
                 row = _txn_to_row(txn, account_id, currency, pending=pending)
                 if row is not None:
                     rows.append(row)
-    return rows
+    return row_ids.settle(rows)
 
 
 def fetch_window(
@@ -884,7 +895,10 @@ def fetch_window(
     accounts = [_account_to_common(a, metas[a]) for _, a in owned]
     if accounts_only:
         read = parallel.each(
-            lambda ba: _account_balance(store, ba[0], ba[1], figures, reuse=True), owned
+            lambda ba: _account_balance(
+                store, ba[0], ba[1], figures, reuse=True, currency=metas[ba[1]].get("currency")
+            ),
+            owned,
         )
         for acc, figure in zip(accounts, read):
             acc.update(figure)
@@ -904,7 +918,7 @@ def fetch_window(
             failures.append(exc)
             warnings.append(f"{metas[account_id].get('name')} ({_bank_name(bank)}): {exc}")
             continue
-        figure = _account_balance(store, bank, account_id, figures)
+        figure = _account_balance(store, bank, account_id, figures, currency=currency)
         by_id[account_id].update(figure)
         if figure["balance"] is None:
             notes.append(

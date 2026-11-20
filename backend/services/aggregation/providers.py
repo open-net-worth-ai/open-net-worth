@@ -97,6 +97,9 @@ class FetchWindow:
     complete: bool = True
     warnings: list[str] = field(default_factory=list)
     extra: dict = field(default_factory=dict)
+    # The first day actually read, when the provider served less than asked (a bank that won't
+    # serve the range): rows before it weren't looked at, so none of them is "gone".
+    read_from: Optional[str] = None
 
 
 @dataclass(frozen=True)
