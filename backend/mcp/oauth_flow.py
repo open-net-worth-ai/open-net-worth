@@ -169,6 +169,13 @@ def begin(
 
     try:
         challenge = oauth.discover_www_authenticate(mcp_url)
+    except oauth.ServerUnavailableError as exc:
+        return _fail(
+            "server_unavailable",
+            f"This server had a problem answering (HTTP {exc.status}). Try Connect again in a moment."
+            if exc.status
+            else "Couldn't reach this server. Check the address and your connection, then try again.",
+        )
     except oauth.NotOAuthProtectedError:
         return _fail(
             "not_oauth",

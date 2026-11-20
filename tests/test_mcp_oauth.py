@@ -160,13 +160,56 @@ def test_discover_www_authenticate_raises_when_server_answers_200():
             oauth.discover_www_authenticate("https://mcp.example.test/mcp")
 
 
-def test_discover_www_authenticate_raises_on_a_non_401_error(monkeypatch):
+def _answers(monkeypatch, *outcomes):
+    """Each discovery POST gets the next outcome: an exception to raise, else a 2xx."""
+    calls = []
+
+    class _FakeResp:
+        def close(self):
+            pass
+
     def fake_urlopen(url, *, data=None, headers=None, method=None):
-        raise _http_error(500)
+        outcome = outcomes[len(calls)]
+        calls.append(url)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return _FakeResp()
 
     monkeypatch.setattr(oauth, "_unguarded_urlopen", fake_urlopen)
+    monkeypatch.setattr(oauth, "_DISCOVERY_RETRY_DELAY_SECONDS", 0)
+    return calls
+
+
+def test_discover_says_not_oauth_for_a_client_error(monkeypatch):
+    calls = _answers(monkeypatch, _http_error(403))
     with pytest.raises(oauth.NotOAuthProtectedError):
         oauth.discover_www_authenticate("https://mcp.example.test/mcp")
+    assert len(calls) == 1
+
+
+def test_discover_retries_a_server_error_once_and_takes_the_challenge(monkeypatch):
+    challenge = _http_error(401, {"WWW-Authenticate": 'Bearer scope="mcp:tools"'})
+    calls = _answers(monkeypatch, _http_error(500), challenge)
+    assert oauth.discover_www_authenticate("https://mcp.example.test/mcp").scope == "mcp:tools"
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("code", [500, 503, 429])
+def test_a_server_error_twice_is_unavailable_never_not_oauth(monkeypatch, code):
+    calls = _answers(monkeypatch, _http_error(code), _http_error(code))
+    with pytest.raises(oauth.ServerUnavailableError) as raised:
+        oauth.discover_www_authenticate("https://mcp.example.test/mcp")
+    assert not isinstance(raised.value, oauth.NotOAuthProtectedError)
+    assert raised.value.status == code
+    assert len(calls) == 2
+
+
+def test_an_unreachable_server_is_unavailable(monkeypatch):
+    down = urllib.error.URLError("connection refused")
+    _answers(monkeypatch, down, down)
+    with pytest.raises(oauth.ServerUnavailableError) as raised:
+        oauth.discover_www_authenticate("https://mcp.example.test/mcp")
+    assert raised.value.status is None
 
 
 # ── step 2: protected-resource metadata — challenge wins, else path/root fallback ─

@@ -29,6 +29,7 @@ import hashlib
 import json
 import re
 import secrets
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -57,6 +58,8 @@ CLIENT_INFO = {"name": "open-net-worth-client", "version": "1"}
 CLIENT_NAME = "Open Net Worth"
 
 _TIMEOUT_SECONDS = 10
+_DISCOVERY_ATTEMPTS = 2
+_DISCOVERY_RETRY_DELAY_SECONDS = 0.5
 MAX_OAUTH_RESPONSE_BYTES = 65_536  # ample for any real metadata/registration/token JSON body
 MAX_ERROR_DETAIL_CHARS = 300
 
@@ -86,6 +89,16 @@ class OAuthDiscoveryError(Exception):
 
 class NotOAuthProtectedError(OAuthDiscoveryError):
     """The server did not answer an unauthenticated ``initialize`` with a 401 challenge."""
+
+
+class ServerUnavailableError(OAuthDiscoveryError):
+    """The server failed to answer at all — a 5xx/429, or unreachable — twice in a row. Says
+    nothing about whether it needs a sign-in, so it must never read as "it doesn't" (IBKR's
+    endpoint answers HTTP 500 to about one ``initialize`` in ten, 2026-11-20)."""
+
+    def __init__(self, detail: str, status: Optional[int] = None) -> None:
+        super().__init__(detail)
+        self.status = status
 
 
 class ProtectedResourceMetadataError(OAuthDiscoveryError):
@@ -508,7 +521,21 @@ def discover_www_authenticate(mcp_url: str) -> WwwAuthChallenge:
     """POST an unauthenticated ``initialize`` to ``mcp_url``; expect a 401 challenge carrying
     ``resource_metadata``/``scope`` (RFC §4.2 step 1). Raises ``NotOAuthProtectedError`` if the
     server answers anything else — including a clean 2xx, which means it does not require a
-    sign-in at all."""
+    sign-in at all. A server error or no answer is tried once more, then raises
+    ``ServerUnavailableError``: a failure to answer is not an answer."""
+    failure: Optional[ServerUnavailableError] = None
+    for attempt in range(_DISCOVERY_ATTEMPTS):
+        if attempt:
+            time.sleep(_DISCOVERY_RETRY_DELAY_SECONDS)
+        try:
+            return _discover_once(mcp_url)
+        except ServerUnavailableError as exc:
+            failure = exc
+    assert failure is not None
+    raise failure
+
+
+def _discover_once(mcp_url: str) -> WwwAuthChallenge:
     body = json.dumps(
         {
             "jsonrpc": "2.0",
@@ -525,15 +552,18 @@ def discover_www_authenticate(mcp_url: str) -> WwwAuthChallenge:
     try:
         resp = _unguarded_urlopen(mcp_url, data=body, headers=headers, method="POST")
     except urllib.error.HTTPError as exc:
-        if exc.code != 401:
-            raise NotOAuthProtectedError(f"server answered HTTP {exc.code}, not a 401") from exc
-        challenge = _parse_www_authenticate(exc.headers.get("WWW-Authenticate") or "")
+        if exc.code == 401:
+            challenge = _parse_www_authenticate(exc.headers.get("WWW-Authenticate") or "")
+            exc.close()
+            return challenge
         exc.close()
-        return challenge
+        if exc.code >= 500 or exc.code == 429:
+            raise ServerUnavailableError(f"server answered HTTP {exc.code}", exc.code) from exc
+        raise NotOAuthProtectedError(f"server answered HTTP {exc.code}, not a 401") from exc
     except OAuthSecurityError:
         raise
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
-        raise NotOAuthProtectedError(
+        raise ServerUnavailableError(
             f"could not reach {redact_endpoint('http', mcp_url)}: {redact_error(str(exc))}"
         ) from exc
     else:

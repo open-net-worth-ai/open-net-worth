@@ -307,6 +307,11 @@ set up an app on their side. Register the address shown, then click **Connect** 
 **OAuth: a Client ID field appears** — this server doesn't support automatic sign-up. Create an
 app registration at the vendor, paste its client ID, and try again.
 
+**OAuth: "This server had a problem answering (HTTP 500)"** — the vendor's server failed for a
+moment (Open Net Worth already tried twice). Click **Connect** again. Before this version the same
+hiccup read *"This server didn't ask for a sign-in. Try None"* — ignore that advice; a sign-in
+server still needs **OAuth**.
+
 **"Sign in above, then test the connection."** — finish the OAuth sign-in before clicking
 Connect again.
 

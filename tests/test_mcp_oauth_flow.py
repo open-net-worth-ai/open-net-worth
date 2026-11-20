@@ -216,6 +216,21 @@ def test_begin_not_oauth_when_server_answers_without_a_401(monkeypatch):
     assert "None" in result["error"]
 
 
+@pytest.mark.parametrize(
+    ("status", "says"), [(500, "HTTP 500"), (None, "Couldn't reach this server")]
+)
+def test_begin_says_try_again_when_the_server_fails_to_answer(monkeypatch, status, says):
+    monkeypatch.setattr(
+        oauth,
+        "discover_www_authenticate",
+        lambda mcp_url: (_ for _ in ()).throw(oauth.ServerUnavailableError("down", status)),
+    )
+    result = oauth_flow.begin(url="https://mcp.example.test/mcp", request_base_url=BASE_URL)
+    assert result["reason"] == "server_unavailable"
+    assert says in result["error"]
+    assert "None" not in result["error"]
+
+
 def test_begin_no_registration_needs_client_id(monkeypatch):
     as_meta, prm = _fake_discovery(monkeypatch, registration_endpoint="")
     result = oauth_flow.begin(url="https://mcp.example.test/mcp", request_base_url=BASE_URL)
