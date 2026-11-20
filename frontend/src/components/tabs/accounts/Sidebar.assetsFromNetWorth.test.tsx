@@ -56,7 +56,10 @@ describe('Sidebar — Assets is derived from net worth, never re-summed from acc
     // liab = 390900, so assets must be 363029 + 390900 = 753929.
     expect(screen.getByText('S$753.93K')).toBeTruthy()
     expect(screen.getByText('S$390.9K')).toBeTruthy()
-    expect(screen.queryByText('S$0')).toBeNull()
+    // The "All accounts" row totals the groups, so it is S$0 here by design; the Assets figure is not.
+    expect(
+      screen.queryAllByText('S$0').filter((el) => !el.classList.contains('acct-all-v')),
+    ).toEqual([])
   })
 
   it('renders billion-scale VND sidebar figures through the canonical compact formatter', () => {

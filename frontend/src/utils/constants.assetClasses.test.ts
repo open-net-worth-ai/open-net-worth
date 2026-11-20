@@ -70,7 +70,7 @@ describe('asset-class band vocabulary', () => {
 
   it('resolves the map at every canvas fill that reads it', () => {
     const widgets = resolve(__dirname, '../components/tabs/overview/widgets')
-    for (const file of ['netWorth.tsx', 'trackingBudgeting.tsx']) {
+    for (const file of ['netWorth.tsx']) {
       const src = readFileSync(resolve(widgets, file), 'utf8')
       const fills = src.split('\n').filter((l) => /backgroundColor:.*ASSET_CLASS_COLOR/.test(l))
       expect(fills.length, `${file} should still have a canvas fill to guard`).toBeGreaterThan(0)

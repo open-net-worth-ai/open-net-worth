@@ -1,3 +1,4 @@
+/** @vitest-environment jsdom */
 // Guides wait while the person is in the middle of something (ADR 2026-11-14): a flow that
 // holds them, a moment after it lets go, and a whole visit that arrived by a link.
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -9,6 +10,7 @@ import {
 } from './tourTarget'
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   vi.useRealTimers()
   resetGuidedForTests()
 })
@@ -43,11 +45,11 @@ describe('guidesHeld', () => {
 
   it('holds the whole visit that arrived by a sync deep link', () => {
     const entry = { name: 'http://localhost/automations?view=sync&sync=bank-plaid' }
-    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([entry] as never)
+    const real = performance
+    vi.stubGlobal('performance', { now: () => real.now(), getEntriesByType: () => [entry] })
     vi.resetModules()
     return import('./tourTarget').then((m) => {
       expect(m.guidesHeld()).toBe(true)
-      vi.restoreAllMocks()
     })
   })
 

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const INVENTORY: Array<[string, string[]]> = [
   ['components/tabs/connectors/useConnectors.ts', ['/api/connectors']],
-  ['components/tabs/connectors/mcp.tsx', ['/api/auth/api-token']],
+  ['components/tabs/settings/sections/McpSection.tsx', ['/api/auth/api-token']],
   ['api/toolPermissions.ts', ['/api/tool-permissions']],
   ['api/matches.ts', ['/api/matches/config', '/api/matches/decisions']],
 ]

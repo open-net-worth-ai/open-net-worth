@@ -145,7 +145,9 @@ describe('title-bar CSS contract', () => {
 
   it('keeps full-window overlays clickable over the drag strip, and first run clear of the lights', () => {
     expect(
-      rule("html[data-desktop-chrome='mac'] :is(.firstrun-shell, .modal-overlay) {"),
+      rule(
+        "html[data-desktop-chrome='mac'] :is(.firstrun-shell, .modal-overlay, .artifact-fullscreen) {",
+      ),
     ).toContain('-webkit-app-region: no-drag')
     expect(rule("html[data-desktop-chrome='mac'] .firstrun-topbar {")).toContain(
       'padding-left: 92px',

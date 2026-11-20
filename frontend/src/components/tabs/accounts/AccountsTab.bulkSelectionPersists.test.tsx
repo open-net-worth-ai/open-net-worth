@@ -61,14 +61,20 @@ function makeTxn(id: string, needsReview: boolean): ApiTxn {
 let lastBulkIds: string[] | null = null
 let bulkCalls = 0
 
-function setupMocks(rows: ApiTxn[]) {
+function setupMocks(initial: ApiTxn[]) {
   lastBulkIds = null
   bulkCalls = 0
+  // What the server holds: a review flip refetches the register, so the write has to land here.
+  let rows = initial
   mockAuthFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (url === '/api/transactions/bulk-update') {
       bulkCalls += 1
-      const body = JSON.parse(String(init?.body)) as { ids: string[] }
+      const body = JSON.parse(String(init?.body)) as { ids: string[]; needs_review?: boolean }
       lastBulkIds = body.ids
+      if (body.needs_review !== undefined)
+        rows = rows.map((t) =>
+          body.ids.includes(t.id) ? ({ ...t, needs_review: body.needs_review } as ApiTxn) : t,
+        )
       return Promise.resolve(
         okJson({ updated: body.ids, not_found: [], skipped: [], count: body.ids.length }),
       )

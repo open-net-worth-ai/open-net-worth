@@ -93,9 +93,11 @@ beforeEach(() => {
           ? PLAID_STATUS
           : url === '/api/accounts'
             ? []
-            : url.startsWith('/api/account-linking/institutions')
-              ? { institutions: [], providers: [], manual_import: true }
-              : {}
+            : url === '/api/connectors/plaid/accounts'
+              ? { status: 'not_configured', provider_label: 'Plaid', accounts: [] }
+              : url.startsWith('/api/account-linking/institutions')
+                ? { institutions: [], providers: [], manual_import: true }
+                : {}
     return Promise.resolve({ ok: true, json: () => Promise.resolve(body) })
   })
 })

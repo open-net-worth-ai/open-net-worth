@@ -13,7 +13,11 @@ const commitmentsCss = readFileSync(
   'utf8',
 )
 const briefSource = readFileSync(new URL('./investments/Brief.tsx', import.meta.url), 'utf8')
-const intelSource = readFileSync(new URL('./Intel.tsx', import.meta.url), 'utf8')
+// The Scan button lives in the Intel page header.
+const intelHeaderSource = readFileSync(
+  new URL('../intel/IntelPageHeader.tsx', import.meta.url),
+  'utf8',
+)
 // The Intel cards' Ask Lucius lives in the header row both tabs share (IntelCardHead).
 const intelBriefSource = readFileSync(
   new URL('../intel/IntelCardHead.tsx', import.meta.url),
@@ -64,9 +68,9 @@ describe('affected mobile views', () => {
   })
 
   it('shows an icon + label scan action on phones at the standard button height', () => {
-    expect(intelSource).toContain('aria-label={scanning ?')
-    expect(intelSource).toContain('className="intel-scan-button"')
-    expect(intelSource).toContain("scanning ? 'Scanning…' : 'Scan'")
+    expect(intelHeaderSource).toContain('aria-label={scanning ?')
+    expect(intelHeaderSource).toContain('className="intel-scan-button"')
+    expect(intelHeaderSource).toContain("scanning ? 'Scanning…' : 'Scan'")
     // Compact horizontal padding only — no forced min-height/width, so it shares
     // the standard .ui-btn--sm height every other tab's header actions use.
     expect(indexCss).toMatch(
@@ -85,7 +89,9 @@ describe('affected mobile views', () => {
       /@media \(max-width: 640px\)\s*\{[\s\S]*?\.mk-search-wrap\s*\{[^}]*flex:\s*1 1 auto;[^}]*\}/,
     )
     expect(investmentsSource).toContain('aria-label="Search holdings"')
-    expect(investmentsSource).toContain("aria-label={groupBy === 'none' ? 'Grouping: No grouping'")
+    expect(investmentsSource).toMatch(
+      /aria-label=\{\s*groupBy === 'none'\s*\?\s*'Grouping: No grouping'/,
+    )
     expect(investmentsSource).toContain('aria-label="Card view"')
     expect(investmentsSource).toContain('aria-label="Table view"')
   })
@@ -196,14 +202,21 @@ describe('affected mobile views', () => {
       new URL('./investments/HoldingsFilterSheet.tsx', import.meta.url),
       'utf8',
     )
-    // Collapsed to an icon, it must still signal that something is filtered.
-    expect(sheet).toContain('mk-filter-btn')
+    const filterSheet = readFileSync(
+      new URL('./investments/FilterSheet.tsx', import.meta.url),
+      'utf8',
+    )
+    // Collapsed to an icon (the generic FilterSheet owns the trigger), it must still signal
+    // that something is filtered.
+    expect(filterSheet).toContain('mk-filter-btn')
+    expect(filterSheet).toContain("presentation = 'popover'")
+    expect(filterSheet).toContain('<BottomSheet')
     expect(investmentsCss).toMatch(
       /\.mk-filter-btn\.is-active::after\s*\{[^}]*background:\s*var\(--accent\)/,
     )
     // Both groups live in the one sheet.
-    expect(sheet).toMatch(/group\('Type',/)
-    expect(sheet).toMatch(/group\('Account',/)
+    expect(sheet).toContain("title: 'Type'")
+    expect(sheet).toContain("title: 'Account'")
   })
 
   it('shows YTD-vs-benchmark once on a phone — in the hero, not as an extra line', () => {
@@ -295,7 +308,12 @@ describe('affected mobile views', () => {
       /@media \(max-width: 640px\)\s*\{[\s\S]*?\.pl-sum-row\s*\{[^}]*padding:\s*8px 12px 7px;[^}]*\}/,
     )
     expect(planCss).toMatch(
-      /@media \(max-width: 640px\)\s*\{[\s\S]*?\.pl-sum-action\s*\{[^}]*min-height:\s*38px;[^}]*flex-wrap:\s*nowrap;[^}]*\}/,
+      /@media \(max-width: 640px\)\s*\{[\s\S]*?\.pl-sum-action\s*\{[^}]*min-height:\s*38px;[^}]*flex-wrap:\s*wrap;[^}]*\}/,
+    )
+    // The action buttons take their own full-width row under the one-line insight, instead
+    // of being squeezed (and clipped) beside it.
+    expect(planCss).toMatch(
+      /@media \(max-width: 640px\)\s*\{[\s\S]*?\.pl-sum-acts\s*\{[^}]*flex-basis:\s*100%;[^}]*\}/,
     )
   })
 

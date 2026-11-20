@@ -189,12 +189,12 @@ describe('ImportModal — payee/category edit pencil', () => {
     expect(within(row).queryByText('Đối tác PocketPay')).toBeNull()
   })
 
-  // Owner, 2026-07-29: on a routed-transfer row the pencil rendered on top of the wider
-  // "Transfer ← <account>" chip. The collision was the symptom; the render condition was the
-  // bug — the modal it opens edits payee & category, and a transfer routes to an ACCOUNT, so
-  // there is nothing there to edit. Asserted as a CONTRAST: gone on the transfer row, still
-  // there on the ordinary expense row beside it.
-  it('is absent on a transfer-routed row and present on an ordinary expense row', async () => {
+  // Owner, 2026-07-29: on a routed-transfer row the pencil collided with the wider
+  // "Transfer ← <account>" chip. Since 2026-10-26 the modal it opens has a Type switch
+  // (Expense or Income / Transfer) that turns a row into a transfer and back, so a ROUTED row
+  // keeps the pencil — it is the only way to switch it back. Asserted beside the ordinary
+  // expense row: both carry it.
+  it('is present on a transfer-routed row (the Type switch lives there) and on an ordinary expense row', async () => {
     await openWith({
       ...plainRowPreview(),
       drafts: [
@@ -229,8 +229,8 @@ describe('ImportModal — payee/category edit pencil', () => {
       '.imp3-arow',
     ) as HTMLElement
     expect(
-      within(transferRow).queryByRole('button', { name: /Edit payee and category/ }),
-    ).toBeNull()
+      within(transferRow).getByRole('button', { name: /Edit payee and category/ }),
+    ).toBeTruthy()
 
     const expenseRow = screen.getByText('Grab').closest('.imp3-arow') as HTMLElement
     expect(within(expenseRow).getByRole('button', { name: /Edit payee and category/ })).toBeTruthy()

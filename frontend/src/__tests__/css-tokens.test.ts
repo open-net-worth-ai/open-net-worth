@@ -39,9 +39,23 @@ const CSS_FILES = [
 //
 // --chat-width: set by ChatPanel.tsx drag-resize handler as an inline style on
 //   document.documentElement so the app-shell knows how wide the chat panel is.
+//
+// --ui-money-prefix-chars: MoneyField.tsx / ThesisEditor.tsx set it as an inline
+//   style (the currency prefix length) so the input's left padding clears it.
+//
+// --hue, --x, --peak, --fall, --spin, --flip: DesktopUpdateNotices.tsx sets them
+//   as per-element inline styles on each "What's new" confetti piece and list
+//   icon; the whats-new keyframes and tiles read them.
 const RUNTIME_INJECTED_TOKENS = new Set<string>([
   '--accent', // ThemeProvider.tsx: setProperty('--accent', accent_color)
   '--chat-width', // ChatPanel.tsx: setProperty('--chat-width', px)
+  '--ui-money-prefix-chars', // MoneyField.tsx / ThesisEditor.tsx: inline style
+  '--hue', // DesktopUpdateNotices.tsx: inline style per confetti piece / icon
+  '--x', // DesktopUpdateNotices.tsx: inline style per confetti piece
+  '--peak', // DesktopUpdateNotices.tsx: inline style per confetti piece
+  '--fall', // DesktopUpdateNotices.tsx: inline style per confetti piece
+  '--spin', // DesktopUpdateNotices.tsx: inline style per confetti piece
+  '--flip', // DesktopUpdateNotices.tsx: inline style per confetti piece
 ])
 
 // ── Token extraction helpers ────────────────────────────────────────────────
