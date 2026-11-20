@@ -1,4 +1,8 @@
-import { TA_CLI_LABEL, TA_CLI_PROVIDERS, TA_ROLE_LABEL } from '../../../../types/tradingAgentsConstants'
+import {
+  TA_CLI_LABEL,
+  TA_CLI_PROVIDERS,
+  TA_ROLE_LABEL,
+} from '../../../../types/tradingAgentsConstants'
 import type { TaCostSummary } from '../../../../types/tradingAgents'
 
 export interface Formatters {
