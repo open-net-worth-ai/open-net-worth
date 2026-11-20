@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from backend.ai.models.base import AIProvider
-from backend.ai.models.pricing import list_price_rates
+from backend.ai.models.pricing import approximate_price_rates, list_price_rates
 from backend.ai.trading_agents import openai_shape as shape
 from backend.core.errors import ConfigurationError, ModelUnavailableError
 from backend.core.local_endpoint import is_local_base_url
@@ -29,6 +29,8 @@ _DEFAULT_OUTPUT_CEILING_TOKENS = (
 )
 _BYTES_PER_TOKEN = 3
 _UNPRICED_RATES = (15.0, 75.0)
+# A dated snapshot priced as its undated model may cost more: its reservation is doubled.
+_APPROXIMATE_MARGIN = 2.0
 _FREE_RATES = (0.0, 0.0)
 
 
@@ -65,11 +67,17 @@ class BridgeModel:
     def worst_case_usd(self, body_bytes: int) -> float:
         if not self.metered:
             return 0.0
-        rates = list_price_rates(self.model, self.base_url)
+        rates, margin = list_price_rates(self.model, self.base_url), 1.0
+        if rates is None:
+            approximate = approximate_price_rates(self.model, self.base_url)
+            if approximate is not None:
+                rates, margin = approximate[0], _APPROXIMATE_MARGIN
         if rates is None:
             rates = _FREE_RATES if self.unpriced_allowed else _UNPRICED_RATES
         input_tokens = body_bytes / _BYTES_PER_TOKEN
-        return (input_tokens * rates[0] + self.output_ceiling_tokens * rates[1]) / 1_000_000
+        return (
+            margin * (input_tokens * rates[0] + self.output_ceiling_tokens * rates[1]) / 1_000_000
+        )
 
     def is_unpriced(self, usage: shape.Usage) -> bool:
         """A call that cost money nobody can name: no subscription, no local endpoint, no price in
@@ -79,7 +87,10 @@ class BridgeModel:
             return False
         if self.unpriced_allowed:
             return False
-        return list_price_rates(self.model, self.base_url) is None
+        return (
+            list_price_rates(self.model, self.base_url) is None
+            and approximate_price_rates(self.model, self.base_url) is None
+        )
 
 
 @dataclass(frozen=True)

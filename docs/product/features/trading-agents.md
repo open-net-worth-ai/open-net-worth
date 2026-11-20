@@ -34,7 +34,11 @@ Open **Connectors → TradingAgents**. The sections, in order:
   by itself. Removing the TradingAgents connector deletes the environment and everything it wrote (your runs stay).
   After an Open Net Worth update that changes the pinned version, the section says it needs
   reinstalling and the card on Intel points you here; click **Reinstall**. When a chosen model has
-  no known price, the run form names it and a run on it is refused.
+  no known price in the price table (for an OpenRouter model, the table's own rows for that model),
+  the run form names it and a run on it is refused; pick a model the table knows or a local one. A
+  dated snapshot the table lacks (for example `model-1017`) is priced as the same model without the
+  date, says so in the estimate, and reserves twice that price per call. The real cost OpenRouter
+  reports for each call is what counts against the caps.
 - **Models**: a **Deep-thinking model** (the research manager and the portfolio manager, the two
   decisions that matter most; default your Lucius model) and a **Quick model** (everything else,
   which is most of the calls; default your Intel model, else the deep one). Both are models from

@@ -45,7 +45,7 @@ def isolated_db(db_isolated):
 
 
 def _rate_for(model: str):
-    return (3.0, 15.0)
+    return budget.Rate(3.0, 15.0)
 
 
 def _run(models=API, analysts=ANALYSTS, ticker="ACME", cfg=None, finish=True, **usage):

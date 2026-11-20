@@ -10,8 +10,8 @@ unless its endpoint is a loopback one. The app-wide AI budget (``AppConfigStore`
 separate, advisory figure.
 
 Prices are not read here: they live in ``ai.models.pricing``, a layer above, so the caller hands in
-``rate_for`` (a bare model id -> ``(input, output)`` USD per million tokens, or ``None`` when the
-model has no price).
+``rate_for`` (a ``"<provider_key>:<model>"`` ref -> a ``Rate`` of USD per million tokens, or ``None``
+when the price table has no entry for the model on that provider's endpoint).
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from __future__ import annotations
 import statistics
 from dataclasses import dataclass
 from datetime import timezone
-from typing import Callable, Optional, Sequence
+from typing import Callable, NamedTuple, Optional, Sequence
 
 from backend.core.errors import BudgetExceededError, ModelUnavailableError
 from backend.core.user_time import user_now
@@ -28,7 +28,17 @@ from backend.services import trading_agents
 from backend.services.trading_agents import runs
 from backend.services.trading_agents.settings import ResolvedModels, Settings
 
-RateFor = Callable[[str], Optional[tuple[float, float]]]
+
+class Rate(NamedTuple):
+    """USD per million tokens. ``priced_as`` names the model a dated snapshot was priced as when the
+    table has no row of its own for it: an approximation, disclosed and reserved with a margin."""
+
+    input: float
+    output: float
+    priced_as: Optional[str] = None
+
+
+RateFor = Callable[[str], Optional[Rate]]
 
 HISTORY_SIZE = 10
 MIN_HISTORY = 3
@@ -57,6 +67,7 @@ class Estimate:
     plan_included: bool
     priced: bool
     unpriced_models: tuple[str, ...] = ()
+    approximate_prices: tuple[tuple[str, str], ...] = ()
 
     def as_dict(self) -> dict:
         return {
@@ -69,6 +80,9 @@ class Estimate:
             "plan_included": self.plan_included,
             "priced": self.priced,
             "unpriced_models": list(self.unpriced_models),
+            "approximate_prices": [
+                {"model": ref, "priced_as": priced_as} for ref, priced_as in self.approximate_prices
+            ],
         }
 
 
@@ -98,11 +112,7 @@ def static_calls(cfg: Settings, analysts: int) -> int:
     )
 
 
-def _ref_model(ref: str) -> str:
-    return ref.partition(":")[2]
-
-
-def _tier_cost(rates: Optional[tuple[float, float]], calls: int, tokens: tuple[int, int]) -> float:
+def _tier_cost(rates: Optional[Rate], calls: int, tokens: tuple[int, int]) -> float:
     if rates is None:
         return 0.0
     return calls * (tokens[0] * rates[0] + tokens[1] * rates[1]) / 1_000_000
@@ -110,8 +120,8 @@ def _tier_cost(rates: Optional[tuple[float, float]], calls: int, tokens: tuple[i
 
 def _static(
     cfg: Settings, models: ResolvedModels, analysts: int, rate_for: RateFor
-) -> tuple[float, int, tuple[str, ...]]:
-    """``(usd, calls, unpriced models)`` from the assumed tokens per call, metered tiers only: a
+) -> tuple[float, int, tuple[str, ...], tuple[tuple[str, str], ...]]:
+    """``(usd, calls, unpriced models, approximate prices)`` from the assumed tokens per call, metered tiers only: a
     plan-included tier costs nothing. A local tier with no known price costs nothing and is never
     unpriced (an endpoint on loopback is allowed to be); one whose model has a price — a proxy
     serving a paid model — is estimated like any other."""
@@ -126,15 +136,17 @@ def _static(
             _QUICK_TOKENS,
         ),
     )
-    usd, unpriced = 0.0, []
+    usd, unpriced, approximate = 0.0, [], []
     for ref, plan, local, tier_calls, tokens in tiers:
         if plan:
             continue
-        rates = rate_for(_ref_model(ref))
+        rates = rate_for(ref)
         if rates is None and not local and ref not in unpriced:
             unpriced.append(ref)
+        if rates is not None and rates.priced_as and (ref, rates.priced_as) not in approximate:
+            approximate.append((ref, rates.priced_as))
         usd += _tier_cost(rates, tier_calls, tokens)
-    return round(usd, 6), calls, tuple(unpriced)
+    return round(usd, 6), calls, tuple(unpriced), tuple(approximate)
 
 
 def _signature(snapshot: dict, analysts: Sequence[str]) -> tuple:
@@ -169,7 +181,7 @@ def estimate(
     heuristic. A run on CLI subscriptions only is plan-included: no dollars, a call count."""
     snapshot = config_snapshot(cfg, models)
     past = _history(snapshot, analysts)
-    usd, calls, unpriced = _static(cfg, models, len(analysts), rate_for)
+    usd, calls, unpriced, approximate = _static(cfg, models, len(analysts), rate_for)
     plan_included = models.plan_included
     if len(past) >= MIN_HISTORY:
         median, low, high = _band([float(r["cost_usd"]) for r in past])
@@ -191,6 +203,7 @@ def estimate(
         plan_included=plan_included,
         priced=not unpriced or basis == BASIS_HISTORY,
         unpriced_models=() if basis == BASIS_HISTORY else unpriced,
+        approximate_prices=() if basis == BASIS_HISTORY else approximate,
     )
 
 
@@ -229,8 +242,10 @@ def refuse_unpriced(expected: Estimate) -> None:
     if expected.unpriced_models:
         names = ", ".join(expected.unpriced_models)
         raise ModelUnavailableError(
-            f"{names} has no known price, so a run on it could not be held to a spend cap. Choose "
-            "a priced model for TradingAgents, or a local one.",
+            f"{names} has no known price (the price table has no entry for it), so a run on it "
+            "could not be held to a spend cap. Choose a model the price table knows (for an "
+            "OpenRouter model, one of its listed models), refresh the table with "
+            "`make refresh-prices`, or use a local model.",
             model_ref=expected.unpriced_models[0],
         )
 

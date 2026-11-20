@@ -212,7 +212,7 @@ def test_a_precheck_refuses_before_a_card_is_drawn(monkeypatch):
 
 @pytest.mark.usefixtures("ready")
 def test_a_precheck_refuses_a_run_the_monthly_cap_cannot_afford(monkeypatch):
-    monkeypatch.setattr(runner, "list_price_rates", lambda model: (3.0, 15.0))
+    monkeypatch.setattr(runner, "rate_for_ref", lambda ref: budget.Rate(3.0, 15.0))
     settings.update({"monthly_cap_usd": 0.0})
     with pytest.raises(BudgetExceededError, match="monthly"):
         tools._precheck({"ticker": "ACME"})
@@ -234,7 +234,7 @@ async def test_a_refused_start_at_approval_time_is_an_error_not_a_raise(monkeypa
 
 @pytest.mark.usefixtures("ready")
 def test_the_card_shows_models_cost_caps_and_the_exact_context(monkeypatch):
-    monkeypatch.setattr(runner, "list_price_rates", lambda model: (3.0, 15.0))
+    monkeypatch.setattr(runner, "rate_for_ref", lambda ref: budget.Rate(3.0, 15.0))
     card = tools._StartPreview().build({"ticker": "acme", "context_level": "position"})
     data = card["data"]
     assert card["kind"] == "trading_agents_run" and card["raw_arguments"]["ticker"] == "acme"

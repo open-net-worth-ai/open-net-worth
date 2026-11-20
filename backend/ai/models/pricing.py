@@ -114,6 +114,20 @@ def list_price_rates(model: str, base_url: str = "") -> "tuple[float, float] | N
     return vendored_rates(model, base_url)
 
 
+def approximate_price_rates(
+    model: str, base_url: str = ""
+) -> "tuple[tuple[float, float], str] | None":
+    """``(rates, priced_as)`` for a dated snapshot with no price row of its own, priced as the
+    undated model (``price_map.approximate_rates``); None when ``list_price_rates`` has an answer
+    or the undated model is unknown. Callers disclose it and reserve a margin over it."""
+    model = (model or "").strip()
+    if not model or list_price_rates(model, base_url) is not None:
+        return None
+    from backend.ai.models.price_map import approximate_rates
+
+    return approximate_rates(model, base_url)
+
+
 def cost_usd_anthropic(
     model: str,
     input_tokens: int,

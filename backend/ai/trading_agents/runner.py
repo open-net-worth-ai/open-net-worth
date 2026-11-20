@@ -21,9 +21,9 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from backend.ai.models.pricing import list_price_rates
 from backend.ai.trading_agents import billing, worker_session
 from backend.ai.trading_agents.llm_bridge import STOP_BOUND_SECONDS
+from backend.ai.trading_agents.rates import rate_for_ref
 from backend.ai.trading_agents.worker_session import Job, RunSession
 from backend.core.config import get_settings
 from backend.core.errors import (
@@ -54,7 +54,7 @@ def _default_budget_check(
     cfg: settings.Settings, models: settings.ResolvedModels, analysts: list[str]
 ) -> budget.Estimate:
     """The run's estimate, or ``BudgetExceededError`` when the monthly cap would be passed."""
-    return budget.check_can_start(cfg, models, analysts, list_price_rates)
+    return budget.check_can_start(cfg, models, analysts, rate_for_ref)
 
 
 _budget_check: Callable[..., budget.Estimate] = _default_budget_check

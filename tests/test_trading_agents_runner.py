@@ -796,9 +796,7 @@ async def test_the_default_budget_check_prices_the_run_and_stores_its_median(run
     await settle()
     row = run_of(run_id)
     cfg = settings.load()
-    expected = budget.estimate(
-        cfg, settings.resolve_models(cfg), cfg.analysts, runner.list_price_rates
-    )
+    expected = budget.estimate(cfg, settings.resolve_models(cfg), cfg.analysts, runner.rate_for_ref)
     assert row["estimate_usd"] == expected.median_usd
     assert row["context_sent"] == {
         "ticker": "ACME",

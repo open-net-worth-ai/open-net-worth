@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -33,7 +34,11 @@ _BASE_URL_PROVIDER_HINTS: tuple[tuple[str, str], ...] = (
     ("api.mistral.ai", "mistral"),
     ("moonshot", "moonshot"),
     ("api.openai.com", "openai"),
+    ("openrouter.ai", "openrouter"),
 )
+
+
+_DATE_SUFFIX = re.compile(r"^(.+)-(\d{4}-\d{2}-\d{2}|\d{8}|\d{6}|\d{4})$")
 
 
 @lru_cache(maxsize=1)
@@ -67,11 +72,32 @@ def _candidate_keys(model: str, base_url: str) -> list[str]:
     prefix = _provider_prefix_for(base_url)
     if prefix:
         keys.append(f"{prefix}/{model}")
+        # An OpenRouter variant (``:free`` ``:nitro`` ``:thinking``) is priced as the model it
+        # varies when the map has no row of its own; ``:free`` and ``:batch`` rows, when present,
+        # were already tried above.
+        if prefix == "openrouter" and ":" in model:
+            keys.append(f"{prefix}/{model.rsplit(':', 1)[0]}")
     # A model that already carries a provider prefix → also try the bare tail.
     if "/" in model:
         keys.append(model.split("/", 1)[1])
     # De-dupe while preserving order (dict keys keep insertion order).
     return list(dict.fromkeys(keys))
+
+
+def _dated_base(model: str) -> Optional[str]:
+    """``model`` without a trailing dated-snapshot suffix (``-MMDD``, ``-YYMMDD``, ``-YYYYMMDD``,
+    ``-YYYY-MM-DD``), or None when it carries none. Only a plausible calendar date counts, so
+    ``-4096`` or ``-0000`` is never read as one."""
+    match = _DATE_SUFFIX.match(model)
+    if not match:
+        return None
+    base, stamp = match.group(1), match.group(2).replace("-", "")
+    month, day = (int(stamp[-4:-2]), int(stamp[-2:]))
+    if not (1 <= month <= 12 and 1 <= day <= 31):
+        return None
+    if len(stamp) == 8 and not stamp.startswith("20"):
+        return None
+    return base
 
 
 def vendored_capabilities(model: str, base_url: str = "") -> Optional[dict]:
@@ -124,3 +150,15 @@ def vendored_rates(model: str, base_url: str = "") -> Optional[tuple[float, floa
         if isinstance(inp, (int, float)) and isinstance(out, (int, float)):
             return inp * 1_000_000, out * 1_000_000
     return None
+
+
+def approximate_rates(model: str, base_url: str = "") -> Optional[tuple[tuple[float, float], str]]:
+    """``((input_$/Mtok, output_$/Mtok), priced_as)`` for a dated snapshot the map has no row of
+    its own for, priced as the same model without the date; None when it has an exact row (use
+    ``vendored_rates``), carries no date, or the undated model is unknown too. It is an
+    approximation — a snapshot may be priced differently — so callers disclose it and keep a margin."""
+    if not model or vendored_rates(model, base_url) is not None:
+        return None
+    base = _dated_base(model.rsplit(":", 1)[0]) if ":" in model else _dated_base(model)
+    rates = vendored_rates(base, base_url) if base else None
+    return (rates, base) if rates is not None and base else None

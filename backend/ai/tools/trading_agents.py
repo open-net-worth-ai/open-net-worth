@@ -169,6 +169,8 @@ def _cost_line(estimate: budget.Estimate) -> str:
     if estimate.plan_included:
         return "plan-included: no dollars, it uses your subscription quota"
     line = f"about ${estimate.median_usd:.2f} (${estimate.low_usd:.2f} to ${estimate.high_usd:.2f})"
+    for ref, priced_as in estimate.approximate_prices:
+        line += f", {ref.partition(':')[2]} priced as {priced_as}"
     return line if estimate.priced else f"{line}, a model has no known price so this understates"
 
 

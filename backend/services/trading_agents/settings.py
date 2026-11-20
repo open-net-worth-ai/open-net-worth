@@ -361,6 +361,12 @@ def _resolved(ref: str) -> dict:
     return resolved
 
 
+def provider_base_url(ref: str) -> str:
+    """The endpoint behind ``ref``'s provider, for the price lookup (an aggregator's models are
+    priced by its own rows). ``ModelUnavailableError`` as ``resolve_models`` raises it."""
+    return str(_resolved(ref).get("base_url") or "")
+
+
 def _transport(ref: str) -> str:
     return _resolved(ref)["transport"]
 

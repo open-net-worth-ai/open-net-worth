@@ -26,8 +26,8 @@ from typing import Any, Awaitable, Callable, Optional, TypeVar
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.ai.models.pricing import list_price_rates
 from backend.ai.trading_agents import runner
+from backend.ai.trading_agents.rates import rate_for_ref
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.services.trading_agents import queries
 
@@ -127,7 +127,7 @@ def accept_disclaimer(body: DisclaimerBody):
 
 @router.post("/estimate")
 def estimate_run(body: EstimateBody):
-    return _run(queries.estimate, body.ticker, body.analysts, list_price_rates)
+    return _run(queries.estimate, body.ticker, body.analysts, rate_for_ref)
 
 
 @router.get("/context-preview")

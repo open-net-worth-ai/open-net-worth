@@ -179,15 +179,23 @@ class TestGrokGlmPricing:
         assert cost_usd_openai("glm-4.7-flash", 1_000_000, 1_000_000) == 0.0
         assert cost_usd_openai("glm-4.5-flash", 1_000_000, 1_000_000) == 0.0
 
+    def test_openrouter_model_in_the_price_table_is_priced_from_its_rows(self):
+        from backend.ai.models.pricing import cost_usd_openai
+
+        cost = cost_usd_openai(
+            "x-ai/grok-4", 100_000, 50_000, base_url="https://openrouter.ai/api/v1"
+        )
+        assert cost > 0.0
+
     def test_unknown_openrouter_style_id_zero(self, caplog):
         import logging
 
         from backend.ai.models.pricing import cost_usd_openai
 
-        # Namespaced OpenRouter ids do not match our prefix table → 0 (unmeasured).
+        # A namespaced OpenRouter id with no row in the price table → 0 (unmeasured).
         with caplog.at_level(logging.WARNING, logger="backend.ai.models.pricing"):
             cost = cost_usd_openai(
-                "x-ai/grok-4", 100_000, 50_000, base_url="https://openrouter.ai/api/v1"
+                "acme/no-such-model", 100_000, 50_000, base_url="https://openrouter.ai/api/v1"
             )
         assert cost == 0.0
         assert any("unknown model" in r.message for r in caplog.records)
