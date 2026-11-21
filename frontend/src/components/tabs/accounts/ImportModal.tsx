@@ -3972,7 +3972,7 @@ export function ImportModal({
                 </div>
                 <div className="imp3-cfg-row">
                   <span className="imp3-cfg-l">
-                    Read with
+                    Model
                     <em>this import only — your Statement import setting stays as it is</em>
                   </span>
                   <div className="imp3-read-ctl">

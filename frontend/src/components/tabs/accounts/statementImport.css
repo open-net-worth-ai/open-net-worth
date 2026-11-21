@@ -509,7 +509,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   flex-direction: column;
   gap: 10px;
 }
-/* "Read with": the model chip and the effort chip side by side, left-aligned under their
+/* "Model": the model chip and the effort chip side by side, left-aligned under their
    label like every other section — two quiet chips, not another full-width form field. */
 .imp3-read-ctl {
   display: flex;
