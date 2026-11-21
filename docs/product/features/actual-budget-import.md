@@ -233,8 +233,9 @@ covers this book, not Actual.
 **Preview** beside **Sync now** is a dry run: it reads Actual as a sync does and decides every
 transaction and month's Assigned by the same rules, then shows what would change and where (new,
 changed or deleted, here or in Actual, what would keep both sides' changes and what would wait for
-review), with a few of the rows. Nothing is written on either side, and nothing is filed. Category
-changes aren't in it: the run's report shows those.
+review), with a few of the rows. Categories are in it too: renamed, moved, hidden or shown on
+either side, new on either side, and one you deleted here that would be hidden in Actual with its
+Assigned set to 0. Nothing is written on either side, and nothing is filed.
 
 **Many answers at once.** With two or more transactions in **Needs your review**, **Keep all Open
 Net Worth's** and **Keep all Actual's** answer them together, after asking once more how many rows

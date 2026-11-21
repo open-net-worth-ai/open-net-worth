@@ -130,4 +130,4 @@ def test_preview_is_a_dry_run_over_the_api(client):
     wait(client)
     seen = client.post("/api/ynab/sync/preview")
     assert seen.status_code == 200
-    assert seen.json()["transactions"]["counts"] == {} and seen.json()["categories_left_out"]
+    assert seen.json()["transactions"]["counts"] == {} and seen.json()["categories"]["counts"] == {}
