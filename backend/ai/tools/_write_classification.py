@@ -311,6 +311,8 @@ READ_ONLY_TOOLS = frozenset(
         "google_pse_fetch_page",
         "firecrawl_search",
         "firecrawl_fetch_page",
+        "youcom_search",
+        "youcom_fetch_page",
     }
 )
 

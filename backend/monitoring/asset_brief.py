@@ -71,7 +71,8 @@ _SEARCH_COST_USD: dict[str, float] = {
     # (yearly) plan — cheaper per call than most of the above, but real cost is plan-tier
     # dependent like every other estimate in this table.
     "firecrawl": 0.002,
-    # duckduckgo and searxng are free / self-hosted — no cost
+    # duckduckgo and searxng are free / self-hosted — no cost. youcom is free without a key
+    # (the keyless tier); with a key the cost depends on the account's plan, so it isn't estimated.
 }
 
 # Providers whose fetch_page uses a paid API endpoint (~$0.002/page, Tavily). Firecrawl's own
