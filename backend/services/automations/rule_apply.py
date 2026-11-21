@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from backend.core.audit_context import rules_applied
 from backend.core.errors import NotFoundError, OpenNetWorthError, ValidationError
 from backend.db.automation_store import AutomationStore
 from backend.db.engine import locked_unit_of_work
@@ -23,7 +24,7 @@ from backend.db.tables import txn_audit as txn_audit_tbl
 
 from .executors import validate_execution
 from .rule_actions import apply_actions
-from .rule_engine import apply_rules, rules_enabled
+from .rule_engine import apply_rules, changed_fields, rules_enabled
 from .rule_references import resolve_execution_references
 from .service import apply_automation_change, rule_trigger, validated_trigger
 from .transaction_events import (
@@ -168,9 +169,11 @@ def apply_rule(body: object, transaction_ids: object) -> dict:
     finalize = _finalize()
     exists = _exists()
 
-    def plan(row: dict) -> tuple[dict, str | None, list[str]]:
+    def plan(row: dict) -> tuple[dict, str | None, list[dict]]:
         outcome = apply_actions(row, rule, finalize=finalize, exists=exists)
-        return _diff(row, outcome.row), outcome.skipped, [rule["id"]]
+        changes = _diff(row, outcome.row)
+        used = [_attribution(rule.get("id"), rule.get("name"), changed_fields(row, outcome.row))]
+        return changes, outcome.skipped, used
 
     return _write(_check_ids(transaction_ids), plan)
 
@@ -181,12 +184,22 @@ def run_rules(transaction_ids: object) -> dict:
     finalize = _finalize()
     exists = _exists()
 
-    def plan(row: dict) -> tuple[dict, str | None, list[str]]:
+    def plan(row: dict) -> tuple[dict, str | None, list[dict]]:
         after, matches, skipped = apply_rules(row, rules, finalize=finalize, exists=exists)
         reason = skipped[0]["reason"] if skipped else None
-        return _diff(row, after), reason, [m.automation_id for m in matches]
+        used = [_attribution(m.automation_id, m.automation_name, m.fields) for m in matches]
+        return _diff(row, after), reason, used
 
     return _write(_check_ids(transaction_ids), plan)
+
+
+def _attribution(rule_id: object, name: object, fields: object) -> dict:
+    """One Rule as the audit trail names it on the edit it caused."""
+    return {
+        "automation_id": str(rule_id or ""),
+        "automation_name": str(name or ""),
+        "fields": list(fields or ()),
+    }
 
 
 def _is_active_rule(row: dict) -> bool:
@@ -201,7 +214,7 @@ def _write(ids: list[str], plan: Callable) -> dict:
     applied: list[str] = []
     unchanged = 0
     skipped: list[dict] = []
-    todo: list[tuple[str, dict, list[str]]] = []
+    todo: list[tuple[str, dict, list[dict]]] = []
     opening = _opening_ids()
     for txn_id in ids:
         row = ledger.transactions.find_by_id(txn_id)
@@ -230,15 +243,18 @@ def _write(ids: list[str], plan: Callable) -> dict:
         todo.append((txn_id, changes, used))
     if todo:
         with locked_unit_of_work(txns_tbl, txn_audit_tbl) as conn:
-            for txn_id, changes, _used in todo:
-                ledger.update_transaction(txn_id, changes, labels_as_given=True, conn=conn)
+            for txn_id, changes, used in todo:
+                with rules_applied([rule for rule in used if rule["fields"]]):
+                    ledger.update_transaction(txn_id, changes, labels_as_given=True, conn=conn)
                 applied.append(txn_id)
         record_committed_matches(
             [
-                AutomationMatch(rule_id, "", "transaction_pre_commit", None, None, False)
+                AutomationMatch(
+                    rule["automation_id"], "", "transaction_pre_commit", None, None, False
+                )
                 for _txn_id, _changes, used in todo
-                for rule_id in used
-                if rule_id != "unsaved"
+                for rule in used
+                if rule["automation_id"] != "unsaved"
             ],
             transaction_id=None,
             context="rule_apply",

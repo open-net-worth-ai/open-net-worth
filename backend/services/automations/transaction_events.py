@@ -33,6 +33,8 @@ class AutomationMatch:
     category_from: str | None
     category_to: str | None
     category_applied: bool
+    # Which stored fields this Rule changed on the row (audit provenance); empty when unknown.
+    fields: tuple[str, ...] = ()
 
 
 def _is_transaction_transform(row: dict) -> bool:

@@ -17,7 +17,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from backend.core.audit_context import get_audit_scope
+from backend.core.audit_context import get_audit_scope, get_rules_applied
 from backend.core.ids import new_id
 from backend.core.write_receipt import record_write
 from backend.db.transaction_audit_store import TransactionAuditStore
@@ -78,6 +78,7 @@ def _build_event(
     after: Optional[dict],
     note: Optional[str],
     automation_applied: Optional[dict] = None,
+    provenance: Optional[dict] = None,
 ) -> dict:
     """Assemble one event dict from the active scope (or the system/unknown fallback)."""
     actor = (scope.actor if scope else None) or "system"
@@ -106,6 +107,15 @@ def _build_event(
     # is invisible (the row is simply "born" with the rule's category).
     if automation_applied:
         event["automation_applied"] = automation_applied
+    # Sparse too: what decided the row beyond the person — ``rules`` (each Rule that changed it
+    # and which fields), ``rules_skipped`` (a Rule that matched but could not act, and why) and
+    # ``payee_default`` (the payee's default category filled a blank one).
+    merged = dict(provenance or {})
+    rules = get_rules_applied()
+    if rules and "rules" not in merged:
+        merged["rules"] = rules
+    if merged:
+        event["provenance"] = merged
     return event
 
 
@@ -118,6 +128,7 @@ def record_txn_event(
     after: Optional[dict] = None,
     note: Optional[str] = None,
     automation_applied: Optional[dict] = None,
+    provenance: Optional[dict] = None,
     conn: object | None = None,
 ) -> Optional[dict]:
     """Append one audit event for a transaction mutation. Reads the active ``AuditScope``
@@ -155,6 +166,7 @@ def record_txn_event(
             after=after,
             note=note,
             automation_applied=automation_applied,
+            provenance=provenance,
         )
         record_write(op, txn_id, automation_applied=automation_applied)
         return _audit.append(event, conn=conn)
@@ -169,6 +181,7 @@ def record_txn_events(
     *,
     note: Optional[str] = None,
     automation_applied_by_id: Optional[dict[str, dict]] = None,
+    provenance_by_id: Optional[dict[str, dict]] = None,
     conn: object | None = None,
 ) -> None:
     """Record the SAME ``op`` for many transactions in ONE store write (the bulk
@@ -192,6 +205,7 @@ def record_txn_events(
                 after=None,
                 note=note,
                 automation_applied=(automation_applied_by_id or {}).get(r["id"]),
+                provenance=(provenance_by_id or {}).get(r["id"]),
             )
             for r in rows
             if r.get("id")

@@ -36,6 +36,21 @@ def stops(rule: dict) -> bool:
     return bool((rule.get("execution") or {}).get("stop", True))
 
 
+# The fields a Rule can change, in the order the audit trail lists them.
+_AUDITED_FIELDS = ("category", "splits", "tags", "payee_id", "description", "memo")
+
+
+def changed_fields(before: dict, after: dict) -> tuple[str, ...]:
+    """The stored fields that differ between ``before`` and ``after`` (tags as a set)."""
+
+    def norm(key: str, value: object) -> object:
+        if key == "tags":
+            return sorted(value or [])
+        return value or None
+
+    return tuple(k for k in _AUDITED_FIELDS if norm(k, before.get(k)) != norm(k, after.get(k)))
+
+
 def apply_rules(
     data: dict,
     rules: Sequence[dict] | None,
@@ -63,6 +78,7 @@ def apply_rules(
         if _is_routing_transform(rule) or not match_transaction_automation(rule, result):
             continue
         category_from = result.get("category") or None
+        before = result
         outcome = apply_actions(result, rule, finalize=finalize, owned=owned, exists=exists)
         if outcome.skipped:
             skipped.append(
@@ -84,6 +100,7 @@ def apply_rules(
                 category_from=category_from,
                 category_to=result.get("category") or None,
                 category_applied=outcome.category_applied,
+                fields=changed_fields(before, result),
             )
         )
         if stops(rule):

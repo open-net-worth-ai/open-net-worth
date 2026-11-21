@@ -230,6 +230,11 @@ running. A category you picked yourself is never replaced, and neither is one al
 the Rule says **Replace a category already set**. The order for a new transaction is: what you
 entered, then Rules, then the payee's default category.
 
+Every change a Rule makes is kept in the transaction's audit trail: which Rule changed it and
+which fields, a Rule that matched but could not act (and why), and when the payee's default
+category filled a blank one. Running Rules on past transactions records the same on each edit,
+so Lucius can always say why a transaction looks the way it does.
+
 Rules apply when a transaction is created, from any source (typed, imported, synced, logged by
 Lucius). Editing a transaction never re-runs them. To use a Rule on transactions you already have,
 preview what it matches and **Apply** (an **Undo** appears right after), or select transactions in
