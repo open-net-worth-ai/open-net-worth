@@ -418,8 +418,8 @@ disk. The one copy kept is a restore point, for a run that wrote to a budget tha
 this instance's backups folder (see Undoing a sync in Actual). It's tested against a real Actual
 server for the sync cases on this page, including end-to-end encrypted and tracking budgets, and a
 budget of 10,000 transactions: its import and check took about half a minute, and a sync about 5
-seconds. It's tested with a server that signs in only with OpenID, through PocketID and a token. It
-hasn't been tested on Windows.
+seconds. It's tested with a server that signs in only with OpenID, through PocketID and a token. The sync's
+tests also run on Windows; the live server tests run on macOS and Linux.
 
 **Which Actual versions.** The live tests run against Actual's server and official client
 26.11.0, pinned so every run sees the same thing. Other versions work as long as their budget
