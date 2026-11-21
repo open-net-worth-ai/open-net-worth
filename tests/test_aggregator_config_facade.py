@@ -37,7 +37,35 @@ STORES = [
 ]
 _IDS = [s.KIND for s in STORES]
 
+
 # One value for every writable field, so a single update() exercises the whole partition.
+def _synthetic_certificate() -> str:
+    """A throwaway self-signed certificate, made here: the store refuses anything that isn't one."""
+    import datetime as dt
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    from backend.core import server_certificate
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "actual.acme.test")])
+    now = dt.datetime.now(dt.timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(1)
+        .not_valid_before(now)
+        .not_valid_after(now + dt.timedelta(days=1))
+        .sign(key, hashes.SHA256())
+    )
+    return server_certificate.parse(cert.public_bytes(serialization.Encoding.PEM).decode())
+
+
 _VALUES = {
     "client_id": "cid-1",
     "environment": "production",
@@ -63,6 +91,7 @@ _VALUES = {
     "cash": 10.5,
     "buying_power": 20.5,
     "proxy_headers": "X-Acme-Proxy: secret-proxy_headers",
+    "server_certificate": _synthetic_certificate(),
 }
 
 

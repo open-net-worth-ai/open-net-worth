@@ -39,7 +39,7 @@ from typing import Any, Iterator
 
 import httpx
 
-from backend.core import platform_fs
+from backend.core import platform_fs, server_certificate
 from backend.core.errors import (
     ConflictError,
     ExternalServiceError,
@@ -322,6 +322,8 @@ def _chain(exc: BaseException) -> list[BaseException]:
 class SignInRefused(Stopped):
     """The server turned the saved password or token away."""
 
+    sign_in = True  # a retry can't help: the sync waits for the person (``state.sign_in_problem``)
+
 
 # A sign-in proxy answers with a redirect or its own login page, where Actual answers JSON.
 _BEHIND_PROXY = (
@@ -397,8 +399,8 @@ def _plain_error(exc: Exception) -> Stopped:
         text = "This budget is encrypted, and its encryption password is missing or wrong."
     elif has(ssl.SSLError):
         text = (
-            "The Actual server's certificate could not be verified. "
-            "Use a certificate this computer trusts."
+            "The Actual server's certificate could not be verified. If it is your own (self-signed, "
+            "or from a private authority), paste it under Server certificate."
         )
     elif (code and 300 <= code < 400) or any(_not_json(e) for e in chain):
         text = _BEHIND_PROXY
@@ -461,7 +463,11 @@ def _build(creds: dict, directory: Path | None = None):
         "base_url": url,
         "password": creds["password"] or None,
         "token": None if creds["password"] else creds["token"],
-        "cert": https_context() if url.lower().startswith("https:") else True,
+        "cert": (
+            server_certificate.trusting(https_context(), creds["server_certificate"])
+            if url.lower().startswith("https:")
+            else True
+        ),
         "encryption_password": creds["encryption_password"] or None,
         # Sent on every request, for a sign-in proxy in front of the server. The client follows
         # no redirect, so they reach only the saved address.

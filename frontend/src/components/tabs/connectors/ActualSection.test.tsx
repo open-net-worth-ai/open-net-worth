@@ -25,6 +25,7 @@ const BLANK = {
   has_server_url: false,
   has_proxy_headers: false,
   proxy_header_names: [] as string[],
+  server_certificate_fingerprints: [] as string[],
   server_host: null as string | null,
   server_scheme: null as string | null,
   server_plain_http: false,
@@ -426,6 +427,29 @@ describe('ActualSection', () => {
     expect(screen.getByText(/Removed when you save/)).toBeTruthy()
     await save()
     expect(lastSave()).toEqual({ clear_proxy_headers: true })
+  })
+
+  it('trusts a pasted server certificate, shows its fingerprint, and can remove it', async () => {
+    status = SAVED
+    form()
+    await screen.findByLabelText(/Server certificate/)
+    type(/Server certificate/, 'not a certificate')
+    expect(screen.getByText(/Paste the certificate from -----BEGIN CERTIFICATE-----/)).toBeTruthy()
+    expect(canSave()).toBe(false)
+    const pem = '-----BEGIN CERTIFICATE-----\nQUNNRQ==\n-----END CERTIFICATE-----'
+    type(/Server certificate/, pem)
+    expect(canSave()).toBe(true)
+    await save()
+    expect(lastSave()).toEqual({ server_certificate: pem })
+    cleanup()
+
+    const fingerprint = Array.from({ length: 32 }, () => 'AB').join(':')
+    status = { ...SAVED, server_certificate_fingerprints: [fingerprint] }
+    form()
+    expect(await screen.findByText(/Trusted: SHA-256 AB:AB:AB/)).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' }).at(-1)!)
+    await save()
+    expect(lastSave()).toEqual({ clear_server_certificate: true })
   })
 
   it('says saved headers stay behind when the address moves', async () => {

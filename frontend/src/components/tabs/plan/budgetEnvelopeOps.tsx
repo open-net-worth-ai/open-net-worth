@@ -18,6 +18,7 @@ import {
 import { NEWCAT_PALETTE } from './budgetParts'
 import type { LocalCat, LocalGroup } from './useBudgetModel'
 import { PlanningModal } from './PlanningModal'
+import { SyncFollowsNote } from './SyncFollowsNote'
 
 const { fSmart } = PD
 
@@ -931,6 +932,7 @@ export function DeleteCategoryModal({
             </div>
           </>
         )}
+        {!empty && <SyncFollowsNote />}
         <p className="pl-modal-sub">What happens:</p>
         <ul className="pl-modal-list">
           {empty ? (

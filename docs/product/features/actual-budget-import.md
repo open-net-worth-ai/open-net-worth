@@ -33,7 +33,7 @@ Open **Automations → Data Sync → Actual** and click **Connect Actual…**. I
   but it isn't encrypted: anyone on that network could read your password, token or proxy headers and your budget,
   and change what this app reads and writes. The form warns you under the field, so use https if you
   can. A certificate this computer doesn't trust stops the connection, and there's no switch to skip
-  that check.
+  that check: paste your server's own certificate under **Server certificate** instead.
 - **Sign in with** is a password or a token, whichever your server takes. Typing a new one replaces
   the other. A new server address asks for it again, so a mistyped address is never sent your saved
   password. That covers the host, the port, and a change between http and https.
@@ -48,6 +48,13 @@ Open **Automations → Data Sync → Actual** and click **Connect Actual…**. I
   never follows a redirect, and a new server address drops them, as it does a saved password. Headers
   the app sets itself, such as `Host` or Actual's own sign-in header, are refused. The form shows
   only the names of saved headers; **Remove** deletes them when you save.
+
+- **Server certificate** is only for a server with its own certificate, self-signed or from a
+  private authority, that this computer doesn't trust. Paste it as text, from
+  `-----BEGIN CERTIFICATE-----` to the END line (up to three; never a private key). It is trusted
+  for this server only, on top of the usual checks: the address must still match it. The form shows
+  its SHA-256 fingerprint, so you can compare it with your server's; **Remove** stops trusting it,
+  and a new server address drops it.
 
 Passwords, tokens and header values never come back from the server. A saved one shows as dots, and
 leaving the field blank keeps it.
@@ -186,6 +193,10 @@ the same comparison again whenever you like, against Actual's figures at that mo
 
 The sync runs on a schedule, every 15 or 30 minutes, hourly, every 6 hours, daily or only when you
 ask. It covers transactions, each month's Assigned, categories and groups. No AI model is involved.
+A run that fails for a reason that may pass, such as the server being down, tries again sooner:
+after 5 minutes, then 15, then an hour, never later than the schedule. A refused sign-in waits for
+you instead. After three failed runs in a row, **Worth checking** says so, with the date of the
+last run that went through and the latest error, until a run succeeds.
 
 Once it's set up, **Automations → Data Sync → Actual** has the switch and **Sync now** at the top,
 then **Needs your review**, **Worth checking** (only when there's something to say), **Direction**,
@@ -228,6 +239,8 @@ device whose clock runs more than ten minutes behind can lose the same way.
   Balance moves by that amount. Changed on both sides, each takes the other's difference, so
   neither change is lost. Actual's date follows here when it still matched yours; a date you set
   here stays here. **To Actual** holds Actual's changes back, and **To this book** holds yours.
+  The first sync after this arrived compares the two once: if they already differ, because one
+  was changed before, nothing moves on its own. The review list shows both and you keep one.
 - A payee you clear here is cleared in Actual too.
 - Actual has no category on an off-budget row, or on a transfer between two budget accounts. A
   category you give one here stays here and isn't sent; Actual's blank doesn't clear it.
@@ -268,7 +281,8 @@ category you're folding away and pick the one to keep under **Reassign activity 
 on, both ways or To Actual, Actual follows: its transactions move to the category you kept, which
 is created in Actual if it's new there, and the folded one is hidden in Actual, never deleted. Its
 Assigned in Actual is set to 0 in every month, as it holds nothing here any more, so Actual's To
-Budget doesn't count it twice. With the sync set to To this book, Actual isn't changed.
+Budget doesn't count it twice. With the sync set to To this book, Actual isn't changed. While a
+sync that writes to Actual is on, the delete dialog says so before you confirm.
 Renaming a category or moving it to another group here reaches Actual too. See
 [Categories and payees](categories-payees.md#manage-categories).
 

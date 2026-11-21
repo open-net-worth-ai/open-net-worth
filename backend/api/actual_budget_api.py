@@ -26,7 +26,7 @@ import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
@@ -53,6 +53,8 @@ class ActualBudgetConfigUpdate(BaseModel):
     proxy_headers: Optional[str] = None
     # Removes saved proxy headers (a blank field keeps them). New ones in the same request win.
     clear_proxy_headers: bool = False
+    server_certificate: Optional[str] = Field(default=None, max_length=20_000)
+    clear_server_certificate: bool = False
     # The budget's cloud file id. Blank clears the pick; omitted leaves it.
     budget_id: Optional[str] = None
     enabled: Optional[bool] = None
@@ -83,7 +85,9 @@ async def update_actual_budget_config(body: ActualBudgetConfigUpdate):
     otherwise. The sign-in is saved FIRST, so a budget pick in the same request is checked against
     it. Returns the public status."""
     store = ActualBudgetConfigStore()
-    changes = body.model_dump(exclude={"enabled", "budget_id", "clear_proxy_headers"})
+    changes = body.model_dump(
+        exclude={"enabled", "budget_id", "clear_proxy_headers", "clear_server_certificate"}
+    )
     if body.enabled is not None:
         changes["enabled"] = body.enabled
     try:
@@ -91,6 +95,8 @@ async def update_actual_budget_config(body: ActualBudgetConfigUpdate):
         store.update(changes)
         if body.clear_proxy_headers and not (body.proxy_headers or "").strip():
             store.clear_proxy_headers()
+        if body.clear_server_certificate and not (body.server_certificate or "").strip():
+            store.clear_server_certificate()
         if body.enabled is None and not was_configured and store.is_configured():
             store.update({"enabled": True})
         if body.budget_id is not None:

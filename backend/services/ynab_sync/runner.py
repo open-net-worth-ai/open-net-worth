@@ -394,13 +394,16 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
     token = audit_context.set_audit_scope("system", current().surface)
     rec_token = recorder.activate(rec)
     stopped = None
+    retry = False
     try:
         stopped = _execute(st, tally)
     except OpenNetWorthError as exc:
         error = exc.message or str(exc)
+        retry = not sync_state.sign_in_problem(exc)
     except Exception as exc:
         logger.exception("%s sync crashed", current().name)
         error = f"Unexpected error ({type(exc).__name__}); see the server log."
+        retry = True
     finally:
         recorder.deactivate(rec_token)
         audit_context.clear_audit_scope(token)
@@ -420,6 +423,9 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
         "summary": summary,
         "run_id": stored,
     }
+    st["failures"] = st.get("failures", 0) + 1 if retry else 0
+    if error is None:
+        st["last_ok_at"] = st["last_run"]["finished_at"]
     sync_state.schedule_next(st, started)
     sync_state.save(st)
     if error is None and tally["requests"]:

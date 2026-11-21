@@ -133,14 +133,17 @@ time.
   dated before its Starting Balance, which moves only if you confirm **Move the Starting Balance**
   (or choose **Keep as history**).
 - **Direction** and **Schedule**: each reads like an Automation's trigger; click it to change
-  it. How often: every 15 or 30 minutes, hourly, every 6 hours, daily, or manual only. Below them,
+  it. How often: every 15 or 30 minutes, hourly, every 6 hours, daily, or manual only. A run
+  that fails for a reason that may pass tries again sooner (5 minutes, then 15, then an hour,
+  never later than the schedule); a refused token waits for you. Below them,
   the last sync and what it did ("3 sent to YNAB, 1 pulled, 1 needs review"), or why it failed.
   A sync that's due shows **Next sync: within a minute**: the app checks every minute.
 - **A Starting Balance changes both ways**, by difference: change it in YNAB and your opening
   balance here moves by the same amount; change your opening balance here and YNAB's Starting
   Balance moves by that amount. Changed on both sides, each takes the other's difference. YNAB's date
   follows here when it still matched yours; a date you set here stays here. **To YNAB** holds
-  YNAB's changes back, and **From YNAB** holds yours.
+  YNAB's changes back, and **From YNAB** holds yours. The first sync after this arrived compares the two
+  once: if they already differ, **Needs your review** shows both and you keep one.
 - **A payee you clear here** is cleared in YNAB too. A category YNAB can't hold (on a tracking
   account's row, or on a transfer) stays here and isn't cleared by YNAB's blank.
 - **What YNAB held.** Open a synced or imported transaction and its drawer's **Source** section

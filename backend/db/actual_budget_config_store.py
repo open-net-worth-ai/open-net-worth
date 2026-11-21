@@ -20,7 +20,7 @@ import ipaddress
 import re
 from urllib.parse import urlsplit
 
-from backend.core import config
+from backend.core import config, server_certificate
 from backend.core.errors import ConflictError, ValidationError
 from backend.db.aggregator_config_store import AggregatorConfigStore
 
@@ -31,6 +31,7 @@ DEFAULTS: dict = {
     "token": "",  # WRITE-ONLY secret, for servers that do not take a password
     "encryption_password": "",  # WRITE-ONLY secret, for an end-to-end encrypted budget
     "proxy_headers": "",  # WRITE-ONLY secret, "Name: value" lines for a sign-in proxy in front
+    "server_certificate": "",  # PEM the person trusts for this server (self-signed or private CA)
     "budget_id": None,  # the budget's sync id
     "budget_name": None,
     "budget_currency": None,
@@ -39,7 +40,14 @@ DEFAULTS: dict = {
     "last_error": None,
 }
 
-SECRET_NAMES = ("server_url", "password", "token", "encryption_password", "proxy_headers")
+SECRET_NAMES = (
+    "server_url",
+    "password",
+    "token",
+    "encryption_password",
+    "proxy_headers",
+    "server_certificate",
+)
 
 MAX_PROXY_HEADERS = 10
 MAX_PROXY_HEADERS_CHARS = 4096
@@ -199,6 +207,8 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
             clean["proxy_headers"] = (
                 format_proxy_headers(parse_proxy_headers(clean["proxy_headers"])) or None
             )
+        if clean.get("server_certificate"):
+            clean["server_certificate"] = server_certificate.parse(clean["server_certificate"])
         if "server_url" in clean:
             if _parts(clean["server_url"]) is None:
                 raise ValidationError(
@@ -208,6 +218,7 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
                 if "password" not in clean and "token" not in clean:
                     clean["password"] = clean["token"] = None
                 clean.setdefault("proxy_headers", None)
+                clean.setdefault("server_certificate", None)
         if "budget_id" in clean:
             new_id = str(clean["budget_id"]).strip() or None
             clean["budget_id"] = new_id
@@ -225,6 +236,13 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
         with self._unit(None) as c:
             self._ensure(c)
             self._apply(c, {"proxy_headers": None})
+
+    def clear_server_certificate(self) -> None:
+        """Stop trusting the saved certificate: a blank field keeps it."""
+        self.require_available()
+        with self._unit(None) as c:
+            self._ensure(c)
+            self._apply(c, {"server_certificate": None})
 
     def note_sign_in(self, refused: bool) -> None:
         """What a read learned about the sign-in, as the status word alone: never the server's
@@ -267,6 +285,10 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
             "has_server_url": bool(secret["server_url"]),
             "has_proxy_headers": bool(secret["proxy_headers"]),
             "proxy_header_names": _header_names(secret["proxy_headers"]),
+            # A certificate is public: its fingerprints show which one is trusted.
+            "server_certificate_fingerprints": server_certificate.fingerprints(
+                secret["server_certificate"]
+            ),
             "server_host": display_host(secret["server_url"]),
             "server_scheme": server_scheme(secret["server_url"]),
             "server_plain_http": plain_http_remote(secret["server_url"]),
