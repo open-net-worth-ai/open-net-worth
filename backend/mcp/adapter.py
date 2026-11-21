@@ -66,14 +66,10 @@ def _annotations_for(name: str) -> dict:
       * tagged → ``readOnlyHint: false``; ``destructiveHint`` for the delete/remove/reset
         verbs, which an MCP client renders with a stronger confirmation affordance.
 
-    ``propose_*`` is checked FIRST: it returns a diff and writes nothing, but it is not
-    idempotent in the client's sense (re-running surfaces the diff again). The tag is a
-    data-REFRESH signal, so a tool whose side effect leaves no local data domain to refetch
-    (outbound mail, sandboxed code execution) is untagged — see ``_SIDE_EFFECT_NO_DOMAIN``,
+    The tag is a data-REFRESH signal, so a tool whose side effect leaves no local data
+    domain to refetch (outbound mail, sandboxed code execution) is untagged — see ``_SIDE_EFFECT_NO_DOMAIN``,
     which keeps those from being advertised read-only.
     """
-    if name.startswith("propose_"):
-        return {"readOnlyHint": True}
     if name in _SIDE_EFFECT_NO_DOMAIN or is_rest_send(name):
         return {"readOnlyHint": False}
     if not mutated_domains(name):
