@@ -411,6 +411,7 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
         retry = True
     finally:
         recorder.deactivate(rec_token)
+        recorder.finished()
         audit_context.clear_audit_scope(token)
     open_items = len(conflicts.listing())
     summary = "Failed" if error is not None else stopped or _summary(tally, open_items)

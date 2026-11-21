@@ -348,3 +348,12 @@ def resolve_sync_item(conflict_id: str, keep: str, choice: str | None = None) ->
     with using(ACTUAL):
         resolve.resolve(conflict_id, keep, choice)
         return _status()
+
+
+def resolve_sync_items(conflict_ids: list[str], keep: str) -> dict:
+    """One answer for many review items, in one session with the server: one restore point."""
+    _open()
+    client.refuse_while_paused()
+    with using(ACTUAL):
+        out = resolve.resolve_many(conflict_ids, keep)
+        return {**out, "status": _status()}

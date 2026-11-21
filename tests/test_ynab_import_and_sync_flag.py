@@ -30,6 +30,7 @@ GATED = [
     ("PUT", "/api/ynab/sync/settings", {"enabled": True}),
     ("POST", "/api/ynab/sync/run", None),
     ("POST", "/api/ynab/sync/conflicts/any/resolve", {"keep": "onw"}),
+    ("POST", "/api/ynab/sync/conflicts/resolve", {"ids": ["any"], "keep": "onw"}),
 ]
 
 

@@ -66,6 +66,16 @@ beforeEach(() => {
     const body = init?.body ? JSON.parse(init.body as string) : null
     if (method !== 'GET') requests.push({ url, method, body })
     if (path.startsWith('/api/ynab/sync/')) {
+      if (path.endsWith('/conflicts/resolve')) {
+        // The second one stays: the server couldn't answer it.
+        const kept = sync.conflicts.filter((c) => c.id !== 'c_1')
+        sync = { ...sync, conflicts: kept }
+        return ok({
+          resolved: body.ids.length - kept.length,
+          failed: kept.map((c) => ({ title: c.title, reason: 'YNAB did not accept it.' })),
+          status: sync,
+        })
+      }
       if (url.endsWith('/resolve')) sync = { ...sync, conflicts: [] }
       if (url.endsWith('/run')) sync = { ...sync, running: true, run_id: 'r9' }
       if (url.endsWith('/settings')) sync = { ...sync, ...body }
@@ -554,6 +564,27 @@ describe('YnabSyncDetail once set up', () => {
     ])
   })
 
+  it('keeps one side for all of them in one request, and names what stayed', async () => {
+    sync = syncStatus({
+      conflicts: [SYNC_ITEM, { ...SYNC_ITEM, id: 'c_2', title: 'ACME Hardware' }],
+    })
+    page()
+    fireEvent.click(await screen.findByRole('button', { name: /Keep all Open Net Worth/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, all 2' }))
+    expect(
+      await screen.findByText(
+        '1 transaction stayed in the review list. ACME Hardware: YNAB did not accept it.',
+      ),
+    ).toBeTruthy()
+    expect(requests).toEqual([
+      {
+        url: '/api/ynab/sync/conflicts/resolve',
+        method: 'POST',
+        body: { ids: ['c_1', 'c_2'], keep: 'onw' },
+      },
+    ])
+  })
+
   it('offers only YNAB’s side for something YNAB cannot take', async () => {
     sync = syncStatus({
       conflicts: [
@@ -597,6 +628,14 @@ describe('YnabSyncDetail once set up', () => {
       expect(requests.at(-1)).toMatchObject({ url: '/api/ynab/sync/run', method: 'POST' }),
     )
     expect(await screen.findByText('Syncing now…')).toBeTruthy()
+  })
+
+  it('a sync in progress says the step it is on, with its count', async () => {
+    sync = { ...sync, running: true, step: 'sending transactions to YNAB: 400 of 9,000' }
+    page()
+    expect(
+      await screen.findByText('Syncing now: sending transactions to YNAB: 400 of 9,000…'),
+    ).toBeTruthy()
   })
 
   it('turning it off keeps the plan', async () => {
