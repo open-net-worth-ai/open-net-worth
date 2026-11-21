@@ -33,7 +33,7 @@ Open **Automations → Data Sync → Actual** and click **Connect Actual…**. I
   but it isn't encrypted: anyone on that network could read your password, token or proxy headers and your budget,
   and change what this app reads and writes. The form warns you under the field, so use https if you
   can. A certificate this computer doesn't trust stops the connection, and there's no switch to skip
-  that check.
+  that check: paste your server's own certificate under **Server certificate** instead.
 - **Sign in with** is a password or a token, whichever your server takes. Typing a new one replaces
   the other. A new server address asks for it again, so a mistyped address is never sent your saved
   password. That covers the host, the port, and a change between http and https.
@@ -48,6 +48,13 @@ Open **Automations → Data Sync → Actual** and click **Connect Actual…**. I
   never follows a redirect, and a new server address drops them, as it does a saved password. Headers
   the app sets itself, such as `Host` or Actual's own sign-in header, are refused. The form shows
   only the names of saved headers; **Remove** deletes them when you save.
+
+- **Server certificate** is only for a server with its own certificate, self-signed or from a
+  private authority, that this computer doesn't trust. Paste it as text, from
+  `-----BEGIN CERTIFICATE-----` to the END line (up to three; never a private key). It is trusted
+  for this server only, on top of the usual checks: the address must still match it. The form shows
+  its SHA-256 fingerprint, so you can compare it with your server's; **Remove** stops trusting it,
+  and a new server address drops it.
 
 Passwords, tokens and header values never come back from the server. A saved one shows as dots, and
 leaving the field blank keeps it.
