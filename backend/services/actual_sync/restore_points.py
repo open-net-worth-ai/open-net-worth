@@ -1,7 +1,9 @@
 """Actual's budget as it was before a sync wrote to it: a way back on Actual's side, where this
 app can't take a write back. Each run that may write saves the copy it downloaded (``db.sqlite``
 and ``metadata.json``, the zip Actual's own Export makes and its Import takes) before anything is
-sent, keeps it only if the run then wrote, and keeps the last ``KEEP``. An end-to-end encrypted
+sent, keeps it only if the run then wrote, and keeps the last ``KEEP`` plus the first of each of
+the last ``DAYS`` days, so a sync every 15 minutes still leaves a way back to how Actual was at the
+start of yesterday. An end-to-end encrypted
 budget gets none: its downloaded copy is decrypted, and keeping it would undo that encryption on
 disk. They live in this instance's backups folder, owner-only."""
 
@@ -11,7 +13,7 @@ import logging
 import re
 import secrets
 import zipfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.core import platform_fs
@@ -21,6 +23,7 @@ from backend.core.errors import NotFoundError
 logger = logging.getLogger(__name__)
 
 KEEP = 5
+DAYS = 7
 _FILES = ("db.sqlite", "metadata.json")
 # Stamp, budget, and a short random tail: two runs in one second never share a file.
 _ID = re.compile(r"\d{8}T\d{6}Z-[a-z0-9-]{1,60}-[0-9a-f]{6}")
@@ -65,8 +68,25 @@ def settle(path: Path | None, wrote: bool) -> None:
     if not wrote:
         path.unlink(missing_ok=True)
         return
-    for old in sorted(_folder().glob("*.zip"))[:-KEEP]:
-        old.unlink(missing_ok=True)
+    paths = sorted(_folder().glob("*.zip"))
+    kept = kept_of([p.stem for p in paths], datetime.now(timezone.utc).date())
+    for old in paths:
+        if old.stem not in kept:
+            old.unlink(missing_ok=True)
+
+
+def kept_of(ids: list[str], today: date) -> set[str]:
+    """The newest ``KEEP``, and the earliest of each day from ``today`` back ``DAYS - 1`` days
+    (UTC, as the ids are stamped)."""
+    ordered = sorted(ids)
+    kept = set(ordered[-KEEP:])
+    first_of: dict[str, str] = {}
+    since = (today - timedelta(days=DAYS - 1)).strftime("%Y%m%d")
+    for rid in ordered:
+        day = rid[:8]
+        if day >= since and day not in first_of:
+            first_of[day] = rid
+    return kept | set(first_of.values())
 
 
 def listing() -> list[dict]:

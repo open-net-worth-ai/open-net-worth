@@ -239,7 +239,9 @@ restore point there (below) before turning the sync back on. Assigned, categorie
 Balances aren't part of it.
 
 **Undoing a sync in Actual.** Each sync that writes to Actual first keeps Actual's budget as it
-was, and the page lists the last five under **Before each sync that wrote**. Download one and, in
+was. The page lists them under **Before each sync that wrote**: the last five, and the first from
+each of the last seven days, so a frequent schedule still leaves a way back to how Actual was at the
+start of a recent day. Download one and, in
 Actual, **Import file → Actual**: it comes back as a separate budget, as it was before that sync, and
 nothing is overwritten. To sync with that restored budget from then on, move the sync to it, as
 **Moving the sync to another budget** below explains: rows it doesn't have are asked about, not

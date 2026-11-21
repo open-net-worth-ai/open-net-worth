@@ -55,7 +55,7 @@ export function RestorePoints({
     <section className="a3-block" aria-label="Restore points">
       <div className="a3-block-h">Before each sync that wrote</div>
       <div className="a3-block-note">
-        {`${app.name}'s budget as it was just before a sync changed it; the last five are kept. To undo a sync, download one and, in ${app.name}, import it (Import file, then Actual). It comes back as a separate budget, so nothing is overwritten.`}
+        {`${app.name}'s budget as it was just before a sync changed it. The last five are kept, and the first of each of the last seven days. To undo a sync, download one and, in ${app.name}, import it (Import file, then Actual). It comes back as a separate budget, so nothing is overwritten.`}
       </div>
       <Stack gap="--space-1">
         {points.map((p) => (
