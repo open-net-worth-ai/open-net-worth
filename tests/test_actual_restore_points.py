@@ -56,10 +56,10 @@ def test_a_from_actual_run_keeps_none(world):
     assert _points() == []
 
 
-def test_only_the_newest_five_are_kept(world, monkeypatch):
+def test_the_newest_five_and_the_first_of_the_day_are_kept(world, monkeypatch):
     enable()
     sync()
-    stamps = iter(f"20261121T0000{i:02d}Z" for i in range(10))
+    stamps = iter(f"20261121T00{i // 60:02d}{i % 60:02d}Z" for i in range(40))
 
     class Clock:
         @staticmethod
@@ -76,7 +76,31 @@ def test_only_the_newest_five_are_kept(world, monkeypatch):
     for i in range(7):
         edit_here(row("ACME Corp")["id"], memo=f"edit {i}")
         sync()
-    assert len(_points()) == restore_points.KEEP
+    kept = [p["created_at"] for p in _points()]
+    # All on one day: the newest five, and the day's first, from before every one of them.
+    assert len(kept) == restore_points.KEEP + 1
+    assert kept[-1] == min(kept) and kept[-1].startswith("2026-11-21T00:00:")
+
+
+def _id(stamp: str) -> str:
+    return f"{stamp}-acme-abc123"
+
+
+def test_a_frequent_sync_still_keeps_the_start_of_each_recent_day():
+    from datetime import date
+
+    # Every 15 minutes for ten days: 960 restore points.
+    ids = [
+        _id(f"202611{day:02d}T{q // 4:02d}{(q % 4) * 15:02d}00Z")
+        for day in range(12, 22)
+        for q in range(96)
+    ]
+    kept = restore_points.kept_of(ids, date(2026, 11, 21))
+    newest = sorted(ids)[-restore_points.KEEP :]
+    firsts = {_id(f"202611{day:02d}T000000Z") for day in range(15, 22)}
+    assert kept == set(newest) | firsts
+    assert len(kept) == restore_points.KEEP + restore_points.DAYS
+    assert _id("20261114T000000Z") not in kept, "older than the last seven days"
 
 
 @pytest.mark.parametrize("bad", ["../../etc/passwd", "", "20261121T000000Z-x-abc123/../y", "nope"])
