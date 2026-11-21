@@ -396,9 +396,11 @@ your book and other files aren't touched.
 
 **The limits.** The sync reads a fresh copy of the budget on every run and deletes it afterwards, or
 within about an hour of a later run if a crash stops that, so your decrypted budget doesn't stay on
-disk. It's tested against a real Actual server for the sync cases on this page, including end-to-end
-encrypted and tracking budgets. It hasn't been tested on Windows,
-with OpenID-only servers, or on large real budgets.
+disk. The one copy kept is a restore point, for a run that wrote to a budget that isn't encrypted, in
+this instance's backups folder (see Undoing a sync in Actual). It's tested against a real Actual
+server for the sync cases on this page, including end-to-end encrypted and tracking budgets, and a
+budget of 10,000 transactions: its import and check took about half a minute, and a sync about 5
+seconds. It hasn't been tested on Windows, or with OpenID-only servers.
 
 ## Guides and comparisons
 

@@ -333,6 +333,11 @@ export function YnabReview({
         ) : (
           p && <Notes app={app} preview={p} asking={asking} starter={starter} />
         )}
+        {app.key === 'actual_budget' && (sync === 'both' || sync === 'to_ynab') && (
+          <Text size="xs" tone="faint">
+            {`The sync will write to your ${app.name} budget. Each sync that writes keeps ${app.name}'s budget from just before it, so you can undo it there, except for an encrypted budget: export that from ${app.name} first. To start without writing, choose Sync from ${app.name} only.`}
+          </Text>
+        )}
         {error && !refusalIsBlock && (
           <div role="alert">
             <Text size="sm" tone="bad">

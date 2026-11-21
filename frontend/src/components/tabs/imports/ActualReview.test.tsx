@@ -369,6 +369,12 @@ describe('the notes', () => {
     expect(w.getByText(/2 starter categories and groups you never used are removed/)).toBeTruthy()
   })
 
+  it('says a sync both ways writes to Actual, and how to undo it there', async () => {
+    const w = await open()
+    expect(w.getByText(/The sync will write to your Actual budget/)).toBeTruthy()
+    expect(w.getByText(/so you can undo it there/)).toBeTruthy()
+  })
+
   it('keeps the starter categories when asked, and imports with that choice', async () => {
     preview = actualPreview({ prune: { categories: ['Alpha'], groups: [] } })
     const w = await open()
