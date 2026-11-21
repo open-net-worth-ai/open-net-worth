@@ -176,6 +176,25 @@ def _fmt_skills_catalog(
     return catalog_text(prepared, model=model, base_url=base_url)
 
 
+def _fmt_model_guidance(model: Optional[str]) -> str:
+    """The model family's own guidance block (``ai/model_guidance.py``), or "".
+
+    A caller that names no model gets the instance default's — the model that will serve it.
+    Best-effort: an unreadable config leaves the prompt without the block, never broken.
+    """
+    from backend.ai.model_guidance import guidance_for
+
+    if model is None:
+        try:
+            from backend.db.model_config_store import ModelConfigStore
+
+            model = ModelConfigStore().resolved().get("model") or ""
+        except Exception:
+            return ""
+    block = guidance_for(model)
+    return f"{block}\n" if block else ""
+
+
 def _fmt_lessons(agent_id: str) -> str:
     """Render an agent's "WHAT YOU'VE LEARNED" block (P3-AG5 §5.2) — the per-agent lessons the
     reflection loop distilled from past runs + user feedback. Its own layout, unrelated to the
@@ -844,6 +863,7 @@ if the user seems ready to add their first account or holding, call activate_ski
     )
 
     visuals_block = _visuals_block()
+    model_guidance_block = _fmt_model_guidance(model)
     closing_reminder = "Keep replies short: lead with the answer, stop when it is answered." + (
         " If the answer has a shape, draw it with show_visual." if visuals_block else ""
     )
@@ -1020,6 +1040,7 @@ The FINANCIAL PROFILE below is already current — call get_profile only for a f
 {mcp_instructions_block}
 {rest_instructions_block}
 {onboarding_block}
+{model_guidance_block}
 {closing_reminder}"""
 
     # ── SEMI-STABLE half: memory, skills, profile, FIRE — changes only on
