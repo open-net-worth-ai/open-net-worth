@@ -48,6 +48,21 @@ describe('one answer for many review items', () => {
     expect(onKeepAll).toHaveBeenCalledWith('ynab', ['a', 'b', 'c'])
   })
 
+  it('says how many the answer deletes', () => {
+    render(
+      <BulkReview
+        app={ACTUAL_APP}
+        items={[item('a', { onw: null }), item('b', { onw: { amount: 1 } as never })]}
+        busy={false}
+        onKeepAll={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Keep all Open Net Worth/ }))
+    expect(
+      screen.getByText(/and 1 is deleted there, as the kept side no longer has it/),
+    ).toBeTruthy()
+  })
+
   it('shows nothing for a single item', () => {
     const { container } = render(
       <BulkReview app={ACTUAL_APP} items={[item('a')]} busy={false} onKeepAll={vi.fn()} />,

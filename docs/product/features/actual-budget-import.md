@@ -231,14 +231,17 @@ its values back, a row it deleted comes back. A row anyone has changed since sta
 the result names it, as it does one that couldn't be put back in full because a category or account
 it used is gone. Only the latest sync can be undone, and only if it changed a transaction here. The sync is switched off afterwards and Actual isn't changed then. When you
 turn the sync on again, what was put back here is sent to Actual like any change made here, so it
-undoes Actual's side too, edits made in Actual included. To keep Actual as it is instead, import a
+undoes Actual's side too, edits made in Actual included. Until a run sends them, **Worth checking** says how many
+are waiting and what turning the sync on will do. To keep Actual as it is instead, import a
 restore point there (below) before turning the sync back on. Assigned, categories and Starting
 Balances aren't part of it.
 
 **Undoing a sync in Actual.** Each sync that writes to Actual first keeps Actual's budget as it
 was, and the page lists the last five under **Before each sync that wrote**. Download one and, in
 Actual, **Import file → Actual**: it comes back as a separate budget, as it was before that sync, and
-nothing is overwritten. A run that writes nothing keeps nothing. An end-to-end encrypted budget gets
+nothing is overwritten. To sync with that restored budget from then on, move the sync to it, as
+**Moving the sync to another budget** below explains: rows it doesn't have are asked about, not
+deleted. A run that writes nothing keeps nothing. An end-to-end encrypted budget gets
 none, and the page says so where they would be: its copy here is decrypted, and keeping it would undo that encryption on disk, so export it
 from Actual yourself (**Settings → Export data**) before a sync that writes. The import's own backup
 covers this book, not Actual.

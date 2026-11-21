@@ -123,3 +123,17 @@ def test_a_blank_category_put_back_stays_blank(world):
     sync()
     actual_app.undo_last_sync()
     assert by_ref("t-market")["category"] in (None, ""), payees
+
+
+def test_the_page_says_what_turning_the_sync_on_will_send_until_a_run_does(world):
+    enable()
+    sync()
+    world.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-market'")
+    world.queue.clear()
+    sync()
+    actual_app.undo_last_sync()
+    (line,) = [w["text"] for w in actual_app.sync_status()["warnings"] if w["kind"] == "undone"]
+    assert line.startswith("1 transaction put back by an undo is waiting")
+    enable()
+    sync()
+    assert "undone" not in {w["kind"] for w in actual_app.sync_status()["warnings"]}
