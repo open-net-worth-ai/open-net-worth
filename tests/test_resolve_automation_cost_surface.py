@@ -71,7 +71,7 @@ def test_resolve_still_binds_the_web_cost_surface_for_an_ordinary_session(monkey
 
     seen_surfaces: list[str | None] = []
 
-    async def fake_resolve_pending_tool_use(session_id, tool_use_id, decision, system, *, turn_id):
+    async def fake_resolve_pending_tool_use(session_id, tool_use_id, decision, system, **_kw):
         seen_surfaces.append(get_cost_surface())
         yield {"type": "turn_done", "usage": {}}
 

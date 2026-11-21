@@ -22,7 +22,6 @@ from backend.ai import (
 )
 from backend.ai.attachments import build_user_content
 from backend.ai.permissions import engine as permission_engine
-from backend.ai.prompts import build_system_prompt
 from backend.ai.tool_text import ONBOARDING_INIT, is_harness_note
 from backend.api import demo_visitor
 from backend.api._deps import _bearer_token
@@ -840,7 +839,6 @@ async def resolve_pending(session_id: str, req: ResolvePendingRequest):
     202 for. No ``confirm_token``, no re-call — the frontend never constructs a model
     message for this, it calls this endpoint.
     """
-    system = build_system_prompt()
     from backend.services.automations.runs import automation_run_for_session
 
     automation_owned = automation_run_for_session(session_id) is not None
@@ -854,8 +852,8 @@ async def resolve_pending(session_id: str, req: ResolvePendingRequest):
                 session_id, req.tool_use_id, req.decision, turn_id=turn_id
             )
         else:
-            source = assistant.resolve_pending_tool_use(
-                session_id, req.tool_use_id, req.decision, system, turn_id=turn_id
+            source = conversation.resume_pending(
+                session_id, req.tool_use_id, req.decision, turn_id=turn_id
             )
         try:
             async for event in source:

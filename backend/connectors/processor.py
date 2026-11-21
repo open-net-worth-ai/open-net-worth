@@ -888,8 +888,7 @@ async def resume_pending_tool_use(
     """
     import json as _json
 
-    from backend.ai import assistant
-    from backend.ai.prompts import build_system_prompt
+    from backend.ai.conversation import resume_pending
 
     _channel = getattr(connector, "connector", None)
     result: Optional[dict] = None
@@ -911,11 +910,10 @@ async def resume_pending_tool_use(
         await pump_channel_turn(
             connector,
             channel_id,
-            assistant.resolve_pending_tool_use(
+            resume_pending(
                 session_id,
                 tool_use_id,
                 decision,
-                build_system_prompt(),
                 surface=f"chat:{_channel}" if _channel else "chat:web",
                 sender_id=sender_id,
             ),
