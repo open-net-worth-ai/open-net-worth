@@ -213,6 +213,9 @@ export function RulesView({
           <p className="a3-muted rl-note">
             Rules run from top to bottom. When two change the same thing, the lower one wins. Drag a
             rule by its handle to change the order.
+            <br />
+            Rules run after payee rules, so they match the cleaned-up payee. A payee&rsquo;s default
+            category fills in only when no rule set one.
           </p>
         </>
       )}

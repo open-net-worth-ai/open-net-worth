@@ -231,8 +231,14 @@ A Rule has:
 Rules run top to bottom, and **every matching Rule applies**. Each sees what the one above left,
 and when two set the same thing the lower one wins. **Stop after this rule** keeps the Rules below from
 running. A category you picked yourself is never replaced, and neither is one already set unless
-the Rule says **Replace a category already set**. The order for a new transaction is: what you
-entered, then Rules, then the payee's default category.
+the Rule says **Replace a category already set**.
+
+For a new transaction, the steps run in this order:
+
+1. **Payee rules and aliases** turn the bank's text into a payee, so a Rule matches on the
+   cleaned-up payee, not the raw description.
+2. **Rules** run, top to bottom. A category you entered yourself still wins over any Rule.
+3. **The payee's default category** fills in only if nothing set a category yet.
 
 When Lucius applies a Rule to past transactions, its approval card names the Rule and lists each
 transaction with what will change (from → to) and any it will skip, before anything is written.
