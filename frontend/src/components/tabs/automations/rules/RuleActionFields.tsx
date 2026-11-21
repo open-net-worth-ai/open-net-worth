@@ -57,6 +57,10 @@ function actionInUse(form: RuleForm, key: ActionKey): boolean {
 
 // A split sets the category per line, so a Rule either sets one category or splits.
 const EXCLUSIVE: Partial<Record<ActionKey, ActionKey>> = { category: 'split', split: 'category' }
+const swapNoun: Partial<Record<ActionKey, string>> = {
+  split: 'one category',
+  category: 'the split',
+}
 
 export function RuleActionFields({
   form,
@@ -77,15 +81,23 @@ export function RuleActionFields({
   })
   // In the order they were added: a later action never jumps above an earlier one.
   const visible = shown.flatMap((key) => ACTIONS.filter(([k]) => k === key))
-  const addable = ACTIONS.filter(([key]) => {
+  // A split sets a category on each line, so it TAKES THE PLACE of "Set category" (and the
+  // other way round) — always offered, saying so, never hidden behind the one already there.
+  const addable = ACTIONS.filter(([key]) => !shown.includes(key)).map(([key, label]) => {
     const other = EXCLUSIVE[key]
-    return !shown.includes(key) && !(other && shown.includes(other))
+    return [
+      key,
+      other && shown.includes(other) ? `${label} (instead of ${swapNoun[key]})` : label,
+    ] as const
   })
   const add = (key: ActionKey) => {
-    setShown((current) => [...current, key])
+    const other = EXCLUSIVE[key]
+    setShown((current) => [...current.filter((k) => k !== other), key])
+    const patch: Partial<RuleForm> = other && shown.includes(other) ? { ...CLEARED[other] } : {}
     if (key === 'split' && form.splits.length === 0) {
-      onChange({ splits: [blankSplit('fixed'), blankSplit('remainder')] })
+      patch.splits = [blankSplit('fixed'), blankSplit('remainder')]
     }
+    if (Object.keys(patch).length) onChange(patch)
   }
   const remove = (key: ActionKey) => {
     setShown((current) => current.filter((k) => k !== key))

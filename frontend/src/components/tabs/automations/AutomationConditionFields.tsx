@@ -78,6 +78,7 @@ export function TransactionConditionFields({
       id="automation-add-condition"
       type="button"
       className="a3-linkbtn"
+      onMouseDown={(event) => event.preventDefault()}
       onClick={() => write([...conditions, newCondition('payee')])}
     >
       <Plus size={13} aria-hidden="true" /> Add condition

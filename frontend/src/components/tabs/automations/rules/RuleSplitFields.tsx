@@ -105,6 +105,7 @@ export function RuleSplitFields({
       <button
         type="button"
         className="a3-linkbtn"
+        onMouseDown={(event) => event.preventDefault()}
         disabled={lines.length >= MAX_SPLIT_LINES}
         onClick={() => onChange([...lines, blankSplit(lines.length === 0 ? 'fixed' : 'remainder')])}
       >

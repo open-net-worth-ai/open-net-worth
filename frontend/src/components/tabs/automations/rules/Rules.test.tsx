@@ -195,9 +195,10 @@ describe('Rule editor', () => {
     expect(screen.queryByLabelText('Set payee')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
     const offered = screen.getAllByRole('menuitem').map((item) => item.textContent)
-    // A rule sets one category or splits — never both.
+    // A rule sets one category or splits — Split is still offered, saying it takes the place of
+    // the category, never hidden behind it.
     expect(offered).not.toContain('Set category')
-    expect(offered).not.toContain('Split into lines')
+    expect(offered).toContain('Split into lines (instead of one category)')
     expect(offered).toContain('Add tags')
     fireEvent.click(screen.getByRole('menuitem', { name: 'Add tags' }))
     expect(screen.getByLabelText('Add tags').getAttribute('placeholder')).toMatch(
@@ -388,6 +389,22 @@ describe('Automations Rules tab', () => {
 })
 
 describe('Rule editor actions', () => {
+  it('choosing Split swaps out Set category, and the other way round', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Split into lines (instead of one category)' }),
+    )
+    expect(screen.queryByLabelText('Set category')).toBeNull()
+    expect(document.getElementById('rule-split-0-kind')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set category (instead of the split)' }))
+    expect(screen.getByLabelText('Set category')).toBeTruthy()
+    expect(document.getElementById('rule-split-0-kind')).toBeNull()
+  })
+
   it('lists actions in the order they were added', async () => {
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)

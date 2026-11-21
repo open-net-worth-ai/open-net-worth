@@ -335,6 +335,8 @@ export function AnchoredMenu({
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
+        // A mouse press doesn't take focus, so no keyboard ring is left on the link after a click.
+        onMouseDown={(event) => event.preventDefault()}
         onClick={() => setOpen((value) => !value)}
         onKeyDown={(event) => event.key === 'Escape' && setOpen(false)}
       >
