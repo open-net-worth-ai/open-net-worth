@@ -14,9 +14,10 @@ export interface RestorePoint {
   bytes: number
 }
 
-async function download(app: BudgetAppInfo, point: RestorePoint): Promise<string | null> {
+async function download(point: RestorePoint): Promise<string | null> {
   try {
-    const r = await authFetch(`${app.apiPrefix}/restore-points/${encodeURIComponent(point.id)}`)
+    // Actual only: YNAB keeps no copy of a plan, so there is no such route for it.
+    const r = await authFetch(`/api/actual-budget/restore-points/${encodeURIComponent(point.id)}`)
     if (!r.ok) return 'That restore point couldn’t be downloaded.'
     const url = URL.createObjectURL(await r.blob())
     const link = document.createElement('a')
@@ -59,7 +60,7 @@ export function RestorePoints({
       <Stack gap="--space-1">
         {points.map((p) => (
           <div key={p.id}>
-            <Button size="sm" variant="ghost" onClick={() => void download(app, p).then(setError)}>
+            <Button size="sm" variant="ghost" onClick={() => void download(p).then(setError)}>
               {`Before the sync ${timeAgo(p.created_at)} · ${Math.max(1, Math.round(p.bytes / 1024))} KB`}
             </Button>
           </div>
