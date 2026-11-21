@@ -1780,6 +1780,7 @@ def create_transaction(
                 automation_applied=_automation_category_provenance(
                     automation_hint, stored.get("category")
                 ),
+                provenance=meta.get("provenance"),
                 conn=conn,
             )
     # Automation match usage accounting + payee usage/category learning — moved out of the
@@ -2086,9 +2087,10 @@ def resolve_transaction_row(
                         payee_is_new = True
         row["payee_id"] = pid
     row.pop("payee", None)  # transient input — resolved into payee_id, never a stored column
+    rules_skipped: list[dict] = []
     if rules_on:
         if not skip_payee_resolve:  # an edit never re-runs Rules
-            row, automation_matches, _skipped = rule_engine.apply_rules(
+            row, automation_matches, rules_skipped = rule_engine.apply_rules(
                 row,
                 automation_rows,
                 finalize=lambda r: _apply_splits(r, category_rows=category_rows),
@@ -2111,6 +2113,11 @@ def resolve_transaction_row(
             row["category"] = payee_registry.default_category_for(
                 pid, kind, category_rows=category_rows
             )
+    payee_default = (
+        {"payee_id": row.get("payee_id"), "category": row.get("category")}
+        if not category_before_payee_default and row.get("category")
+        else None
+    )
     # Category enforcement: adjustment carries NO category (stripped to None — a balance
     # correction is never a spending label). Every other kind (expense/income/transfer/
     # investment) is OPTIONAL — keep a provided category and validate it exists; if absent,
@@ -2146,7 +2153,33 @@ def resolve_transaction_row(
             before_payee_default=category_before_payee_default,
         ),
         "payee_is_new": payee_is_new,
+        "provenance": _resolution_provenance(automation_matches, rules_skipped, payee_default),
     }
+
+
+def _resolution_provenance(
+    matches: list, skipped: list[dict], payee_default: dict | None
+) -> dict | None:
+    """What decided a created row beyond its caller, for the audit trail: every Rule that
+    changed it (with the fields it changed), every Rule that matched but could not act, and the
+    payee's default category when that filled a blank one. ``None`` when nothing did."""
+    provenance: dict = {}
+    rules = [
+        {
+            "automation_id": match.automation_id,
+            "automation_name": match.automation_name,
+            "fields": list(match.fields),
+        }
+        for match in matches
+        if getattr(match, "fields", ())
+    ]
+    if rules:
+        provenance["rules"] = rules
+    if skipped:
+        provenance["rules_skipped"] = list(skipped)
+    if payee_default:
+        provenance["payee_default"] = payee_default
+    return provenance or None
 
 
 def _category_source(
@@ -2540,6 +2573,7 @@ def bulk_create_transactions(
     # Per-row matched transforms and category provenance, parallel to ``rows``.
     automation_matches_by_row: list[list] = []
     automation_hints: list = []
+    provenances: list = []
     # Parallel to `rows`: did THIS row's payee get invented from its raw description?
     minted_row_flags: list[bool] = []
     for data in data_list:
@@ -2564,6 +2598,7 @@ def bulk_create_transactions(
         rows.append(row)
         automation_matches_by_row.append(resolution_meta["automation_matches"])
         automation_hints.append(resolution_meta["automation_hint"])
+        provenances.append(resolution_meta.get("provenance"))
         minted_row_flags.append(bool(resolution_meta["payee_is_new"]))
 
     balance_before = _capture_automation_balance_snapshot()
@@ -2598,6 +2633,10 @@ def bulk_create_transactions(
             created,
             note=f"batch:{batch_id}" if batch_id else None,
             automation_applied_by_id=automation_applied_by_id or None,
+            provenance_by_id={
+                stored["id"]: prov for stored, prov in zip(created, provenances) if prov
+            }
+            or None,
             conn=conn,
         )
     # Payee usage + silent default-category learning + automation match usage accounting —

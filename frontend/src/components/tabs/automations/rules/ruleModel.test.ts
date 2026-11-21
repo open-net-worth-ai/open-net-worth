@@ -80,8 +80,15 @@ describe('formToBody', () => {
 
 describe('ruleIssues', () => {
   it('blocks a rule with no condition or action', () => {
-    expect(ruleIssues(blankRuleForm()).blocking).toEqual([
+    expect(ruleIssues({ ...blankRuleForm(), when: {} }).blocking).toEqual([
       'Add at least one condition.',
+      'Add at least one action.',
+    ])
+  })
+
+  it('opens a new rule with one blank payee condition to fill in', () => {
+    expect(ruleIssues(blankRuleForm()).blocking).toEqual([
+      'Finish every condition.',
       'Add at least one action.',
     ])
   })

@@ -9,7 +9,12 @@ import type {
   RuleSplitLine,
 } from '../../../../api/automations'
 import { conditionConflicts } from '../txnConditionConflicts'
-import { conditionIsComplete, readConditions, transactionLabel } from '../txnConditions'
+import {
+  conditionIsComplete,
+  newCondition,
+  readConditions,
+  transactionLabel,
+} from '../txnConditions'
 
 export const MAX_SPLIT_LINES = 10
 
@@ -41,13 +46,16 @@ export interface RuleForm {
   /** The amount a transaction this Rule was made from carried — lets the editor say whether
    *  fixed split lines add up. Never sent. */
   knownAmount?: number
+  /** Actions a template wants on screen before they have a value (e.g. "Set payee"). Never sent. */
+  showActions?: string[]
 }
 
 export function blankRuleForm(): RuleForm {
   return {
     name: '',
     match: 'all',
-    when: {},
+    // One blank payee condition to fill in, so a new rule opens ready to write — not empty.
+    when: { conditions: [newCondition('payee')] },
     category: '',
     tags: [],
     noteAppend: '',
@@ -230,9 +238,6 @@ export function ruleIssues(form: RuleForm): RuleIssues {
   const splitIssues = splitProblems(form)
   blocking.push(...splitIssues.blocking)
   hints.push(...splitIssues.hints)
-  if (form.routeToAccount) {
-    hints.push('Routing to an account only applies to imported rows still in review.')
-  }
   return { blocking, hints, previewable: blocking.length === 0 }
 }
 

@@ -98,6 +98,12 @@ afterEach(() => {
   restore()
 })
 
+/** Choose `label` from one of the editor's own dropdowns (never a native <select>). */
+function pick(id: string, label: string) {
+  fireEvent.click(document.getElementById(id)!)
+  fireEvent.mouseDown(screen.getByRole('option', { name: label }))
+}
+
 function Harness({ initial }: { initial: Automation[] }) {
   const [rows, setRows] = useState(initial)
   return (
@@ -171,9 +177,60 @@ describe('Rule editor', () => {
     )
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
-    const select = (await screen.findByLabelText('Category')) as HTMLSelectElement
-    await waitFor(() => expect([...select.options].map((o) => o.value)).toContain('cat_a'))
-    expect([...select.options].map((o) => o.value)).not.toContain('split')
+    const field = await screen.findByLabelText('Set category')
+    expect(field.tagName).not.toBe('SELECT')
+    await waitFor(() => {
+      fireEvent.click(field)
+      expect(screen.getByRole('option', { name: 'Groceries' })).toBeTruthy()
+    })
+    expect(screen.queryByRole('option', { name: 'Split' })).toBeNull()
+  })
+
+  it('opens with Set category ready and offers only the actions not yet added', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+    expect(screen.getByLabelText('Set category')).toBeTruthy()
+    expect(screen.queryByLabelText('Set payee')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    const offered = screen.getAllByRole('menuitem').map((item) => item.textContent)
+    // A rule sets one category or splits — never both.
+    expect(offered).not.toContain('Set category')
+    expect(offered).not.toContain('Split into lines')
+    expect(offered).toContain('Add tags')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add tags' }))
+    expect(screen.getByLabelText('Add tags').getAttribute('placeholder')).toMatch(
+      /search or create/i,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Remove set category' }))
+    expect(screen.queryByLabelText('Set category')).toBeNull()
+  })
+
+  it('shows what is missing only after Create is pressed', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+    expect(screen.queryByText('Finish every condition.')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Create rule' }))
+    expect(await screen.findByText('Finish every condition.')).toBeTruthy()
+    expect(screen.getByText('Add at least one action.')).toBeTruthy()
+    expect(api.createRule).not.toHaveBeenCalled()
+  })
+
+  it('offers Create with Lucius from New rule', async () => {
+    const ask = vi.fn()
+    render(
+      <RulesView
+        automations={[]}
+        setAutomations={vi.fn()}
+        options={OPTIONS}
+        onError={vi.fn()}
+        onAskLucius={ask}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'New rule' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /create with lucius/i }))
+    expect(ask).toHaveBeenCalledWith(expect.stringMatching(/transaction Rule/))
   })
 
   it('builds the contract payload (match any, a split) and shows the preview', async () => {
@@ -235,20 +292,14 @@ describe('Rule editor', () => {
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Acme split' } })
-    fireEvent.change(screen.getByDisplayValue('all'), { target: { value: 'any' } })
-    fireEvent.click(document.getElementById('automation-add-condition')!)
-    fireEvent.change(document.getElementById('automation-condition-0-value')!, {
-      target: { value: 'pay_acme' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: /add a line/i }))
-    fireEvent.click(screen.getByRole('button', { name: /add a line/i }))
+    pick('rule-match', 'any')
+    pick('automation-condition-0-value', 'Acme')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove set category' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Split into lines' }))
     fireEvent.change(document.getElementById('rule-split-0-value')!, { target: { value: '30' } })
-    fireEvent.change(document.getElementById('rule-split-0-category')!, {
-      target: { value: 'cat_a' },
-    })
-    fireEvent.change(document.getElementById('rule-split-1-category')!, {
-      target: { value: 'cat_b' },
-    })
+    await waitFor(() => pick('rule-split-0-category', 'Groceries'))
+    pick('rule-split-1-category', 'Household')
 
     expect(await screen.findByText('Matches 2 transactions', {}, { timeout: 3000 })).toBeTruthy()
     expect(screen.getByText('Skipped: category picked by you')).toBeTruthy()
@@ -332,5 +383,23 @@ describe('Automations Rules tab', () => {
     render(<Automations />)
     expect(await screen.findByText('Rule r1')).toBeTruthy()
     expect(screen.queryByText('Morning brief')).toBeNull()
+  })
+})
+
+describe('Rule templates', () => {
+  it('opens the editor pre-filled from a template, leaving the owner to pick their own values', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clean up a payee template' }))
+    expect(await screen.findByLabelText('Set payee')).toBeTruthy()
+    expect(screen.queryByLabelText('Set category')).toBeNull()
+    expect(document.getElementById('automation-condition-0-field')!.textContent).toBe('Description')
+  })
+
+  it('a split template starts with half to one line and the rest to another', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Browse all templates' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Split a shared purchase template' }))
+    expect(((await screen.findByLabelText('Percent')) as HTMLInputElement).value).toBe('50')
+    expect(document.getElementById('rule-split-1-kind')!.textContent).toBe('The remainder')
   })
 })

@@ -599,6 +599,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           setAutomations={setAutomations}
           options={options}
           onError={setActionError}
+          onAskLucius={onOpenChat ? (text) => onOpenChat(text) : undefined}
         />
       ) : loading || !keepAwakeSettled ? (
         <div className="a3-wrap">

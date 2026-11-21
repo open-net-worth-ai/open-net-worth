@@ -78,6 +78,16 @@ and merge treat it as an Automation naming the category. They do this through
 As a last line of defence the pass skips a category or payee that no longer exists, reported as
 "category no longer exists". A Rule can therefore never make the ledger refuse a transaction.
 
+### Amendment (2026-11-21): the audit trail names the Rules
+Before this, only a Rule that set the CATEGORY was credited (`automation_applied` on the create);
+tags, notes, payee and splits a Rule wrote, a Rule skipped, and a payee-default category were all
+silent, and a history Apply/Run was credited only to the person. An audit event now carries a
+sparse `provenance`: `rules` (`[{automation_id, automation_name, fields}]`, each Rule that
+changed the row), `rules_skipped` (`[{automation_id, automation_name, reason}]`) and
+`payee_default` (`{payee_id, category}`). A create sets it from `resolve_transaction_row`; Apply
+/ Run on history sets `rules` through `core.audit_context.rules_applied` around each
+`update_transaction`. The payload is JSON, so no migration; `automation_applied` keeps its shape.
+
 ### Follow-ups
 Learn rules from categorizing; stages; date conditions; running Rules on edit. Remove the flag and
 the legacy pass at `remove_by`.

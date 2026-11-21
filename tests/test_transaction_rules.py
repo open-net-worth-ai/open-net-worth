@@ -751,3 +751,83 @@ def test_a_rule_naming_a_category_gone_since_never_refuses_the_transaction(book)
 
     assert row["category"] == cats["Food"]  # the payee default, not the dead id
     assert "gym" in row["tags"]
+
+
+# ── Audit trail: what a Rule (or a payee default) did is recorded, not only who saved ──────
+
+
+def _events(txn_id, op):
+    return [e for e in audit.trace(txn_id)["events"] if e["op"] == op]
+
+
+@rules_on
+def test_a_create_records_every_rule_that_changed_it_and_which_fields(book):
+    cat = _rule(book, [_payee_is(book)], {"category": "Gym"}, name="Gym it")
+    tag = _rule(book, [_payee_is(book)], {"tags": ["fitness"], "memo_append": "club"}, name="Tag")
+    stored = _txn(book, 20)
+    (create,) = _events(stored["id"], "create")
+    assert create["provenance"]["rules"] == [
+        {"automation_id": cat["id"], "automation_name": "Gym it", "fields": ["category"]},
+        {"automation_id": tag["id"], "automation_name": "Tag", "fields": ["tags", "memo"]},
+    ]
+    assert create["automation_applied"]["automation_id"] == cat["id"]  # unchanged shape
+    assert "payee_default" not in create["provenance"]
+
+
+@rules_on
+def test_a_rule_that_matched_but_could_not_act_is_recorded_with_why(book):
+    rule = _rule(book, [_payee_is(book)], splits=[_line("fixed", 30, "Gym")], name="Bad split")
+    stored = _txn(book, 100)
+    (create,) = _events(stored["id"], "create")
+    (skipped,) = create["provenance"]["rules_skipped"]
+    assert skipped["automation_id"] == rule["id"] and skipped["reason"]
+    # The payee default then filled the category — recorded as such, not as a Rule's doing.
+    assert create["provenance"]["payee_default"] == {
+        "payee_id": book["payee"],
+        "category": book["cats"]["Food"],
+    }
+
+
+@rules_on
+def test_a_payee_default_category_is_recorded(book):
+    stored = _txn(book, 20)
+    (create,) = _events(stored["id"], "create")
+    assert create["provenance"] == {
+        "payee_default": {"payee_id": book["payee"], "category": book["cats"]["Food"]}
+    }
+
+
+@rules_on
+def test_a_category_the_caller_chose_carries_no_provenance(book):
+    stored = _txn(book, 20, category=book["cats"]["Fun"])
+    (create,) = _events(stored["id"], "create")
+    assert "provenance" not in create
+
+
+@rules_on
+def test_running_rules_on_history_names_the_rules_on_each_edit(book):
+    row = _txn(book, 20, category=None)
+    svc.update_transaction(row["id"], {"category": None}, labels_as_given=True)
+    gym = _rule(book, [_payee_is(book)], {"category": "Gym"}, name="A")
+    rule_apply.run_rules([row["id"]])
+    last = _events(row["id"], "update")[-1]
+    assert last["provenance"]["rules"] == [
+        {"automation_id": gym["id"], "automation_name": "A", "fields": ["category"]}
+    ]
+
+
+@rules_on
+def test_applying_one_rule_to_history_names_it_and_ordinary_edits_name_none(book):
+    row = _txn(book, 20)
+    rule = _rule(book, [_payee_is(book)], {"tags": ["late"]}, name="Late")
+    body = {
+        "id": rule["id"],
+        "name": "Late",
+        "trigger": rule["trigger"],
+        "execution": rule["execution"],
+    }
+    rule_apply.apply_rule(body, [row["id"]])
+    applied = _events(row["id"], "update")[-1]
+    assert applied["provenance"]["rules"][0]["fields"] == ["tags"]
+    svc.update_transaction(row["id"], {"memo": "by hand"})
+    assert "provenance" not in _events(row["id"], "update")[-1]

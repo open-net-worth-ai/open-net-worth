@@ -32,9 +32,10 @@ DESIGN: ``.claude/rfcs/transaction-provenance.md``.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterator, Optional
 
 
 @dataclass(frozen=True)
@@ -188,3 +189,24 @@ def clear_audit_scope(token: "Optional[Token[Optional[AuditScope]]]" = None) -> 
             _scope.set(None)
     else:
         _scope.set(None)
+
+
+# The Rules behind the write in progress — set by "Apply to past matches" / "Run rules" around
+# each edit, so the audit event names the Rules (and the fields each changed), not only the
+# person who pressed the button. A create carries its Rules explicitly instead.
+_rules_applied: ContextVar[Optional[list[dict]]] = ContextVar("audit_rules_applied", default=None)
+
+
+@contextmanager
+def rules_applied(rules: list[dict]) -> Iterator[None]:
+    """Attribute every audit event recorded inside this block to ``rules``
+    (``[{automation_id, automation_name, fields}]``)."""
+    token = _rules_applied.set(list(rules) or None)
+    try:
+        yield
+    finally:
+        _rules_applied.reset(token)
+
+
+def get_rules_applied() -> Optional[list[dict]]:
+    return _rules_applied.get()

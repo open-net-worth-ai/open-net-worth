@@ -27,6 +27,8 @@ export interface TagFieldProps {
   onAdvance?: (dir: number, fromEl: HTMLElement | null) => void
   /** Marks the input as one of the add row's tab stops. */
   addField?: boolean
+  /** For a `<label htmlFor>` outside the field (the Rule editor). */
+  id?: string
 }
 
 export function TagField({
@@ -39,6 +41,7 @@ export function TagField({
   onCancel,
   onAdvance,
   addField,
+  id,
 }: TagFieldProps) {
   const known = useTransactionTags()
   const [query, setQuery] = useState('')
@@ -196,9 +199,10 @@ export function TagField({
       ))}
       <input
         ref={inputRef}
+        id={id}
         className="acct-tagf-in"
         data-addfield={addField ? '' : undefined}
-        aria-label="Tags"
+        aria-label={id ? undefined : 'Tags'}
         autoFocus={autoFocus}
         placeholder={value.length ? '' : placeholder}
         value={query}

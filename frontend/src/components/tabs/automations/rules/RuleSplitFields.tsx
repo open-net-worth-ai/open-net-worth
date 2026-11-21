@@ -2,7 +2,7 @@
 // what is left after the fixed lines, or the remainder (which also takes any rounding). Lines
 // are computed on the amount the transaction moved, in its own currency.
 import { Plus, Trash2 } from '../../../../ui/icons'
-import { TagInput } from '../../../ui'
+import { TagField } from '../../accounts/TagField'
 import { OptionSelect, Select } from '../automationFormControls'
 import {
   MAX_SPLIT_LINES,
@@ -32,13 +32,7 @@ export function RuleSplitFields({
   const update = (index: number, patch: Partial<SplitForm>) =>
     onChange(lines.map((line, i) => (i === index ? { ...line, ...patch } : line)))
   return (
-    <section className="rl-splits" aria-label="Split into lines">
-      {lines.length === 0 && (
-        <p className="a3-muted rl-splits-empty">
-          Split the matching transaction across categories — for example 30 to one and the rest to
-          another.
-        </p>
-      )}
+    <div className="rl-splits" id="rule-split">
       {lines.map((line, index) => (
         <div className="rl-split" key={index} role="group" aria-label={`Line ${index + 1}`}>
           <span className="rl-split-n">{index + 1}</span>
@@ -51,30 +45,35 @@ export function RuleSplitFields({
                 onChange={(kind) => update(index, { kind: kind as SplitKind })}
               />
               {line.kind !== 'remainder' && (
-                <input
-                  id={`rule-split-${index}-value`}
-                  type="number"
-                  min={0}
-                  max={line.kind === 'percent' ? 100 : undefined}
-                  className="a3-mini-select rl-split-value"
-                  aria-label={line.kind === 'percent' ? 'Percent' : 'Amount'}
-                  value={line.value}
-                  onChange={(event) =>
-                    update(index, {
-                      value: event.target.value === '' ? '' : Number(event.target.value),
-                    })
-                  }
-                />
+                <span className="rl-split-amt">
+                  <input
+                    id={`rule-split-${index}-value`}
+                    type="number"
+                    min={0}
+                    max={line.kind === 'percent' ? 100 : undefined}
+                    className="a3-mini-select rl-split-value"
+                    aria-label={line.kind === 'percent' ? 'Percent' : 'Amount'}
+                    placeholder={line.kind === 'percent' ? '%' : 'Amount'}
+                    value={line.value}
+                    onChange={(event) =>
+                      update(index, {
+                        value: event.target.value === '' ? '' : Number(event.target.value),
+                      })
+                    }
+                  />
+                  {line.kind === 'percent' && <span className="rl-split-unit">%</span>}
+                </span>
               )}
-              <span className="rl-split-unit">{line.kind === 'percent' ? '%' : ''}</span>
-              <OptionSelect
-                id={`rule-split-${index}-category`}
-                value={line.category}
-                options={choices.categories}
-                placeholder="Category"
-                needed={!line.category}
-                onChange={(category) => update(index, { category })}
-              />
+              <span className={`rl-split-cat${line.kind === 'remainder' ? ' wide' : ''}`}>
+                <OptionSelect
+                  id={`rule-split-${index}-category`}
+                  value={line.category}
+                  options={choices.categories}
+                  placeholder="Category"
+                  needed={!line.category}
+                  onChange={(category) => update(index, { category })}
+                />
+              </span>
               <button
                 type="button"
                 className="rl-icon-btn"
@@ -85,9 +84,9 @@ export function RuleSplitFields({
               </button>
             </div>
             <div className="rl-split-bottom">
-              <TagInput
+              <TagField
                 value={line.tags}
-                placeholder="Tags for this line"
+                placeholder="Tags for this line…"
                 onChange={(tags) => update(index, { tags })}
               />
               <input
@@ -107,8 +106,8 @@ export function RuleSplitFields({
         disabled={lines.length >= MAX_SPLIT_LINES}
         onClick={() => onChange([...lines, blankSplit(lines.length === 0 ? 'fixed' : 'remainder')])}
       >
-        <Plus size={13} aria-hidden="true" /> Add a line
+        <Plus size={13} aria-hidden="true" /> Add line
       </button>
-    </section>
+    </div>
   )
 }
