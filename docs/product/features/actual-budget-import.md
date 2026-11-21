@@ -417,6 +417,14 @@ budget of 10,000 transactions: its import and check took about half a minute, an
 seconds. It's tested with a server that signs in only with OpenID, through PocketID and a token. It
 hasn't been tested on Windows.
 
+**Which Actual versions.** The live tests run against Actual's server and official client
+26.11.0, pinned so every run sees the same thing. Other versions work as long as their budget
+looks the way this app expects: before it reads or writes a budget, it checks the budget's
+database for every table and column it uses, and for any upgrade step Actual still has to run on
+it. A budget that needs an upgrade step nobody here has reviewed, or lacks something this app
+uses, is refused with a message saying what to do, and nothing is read or written. If a new
+Actual release is refused this way, it's a gap here to report, not a problem with your budget.
+
 ## Guides and comparisons
 
 Longer write-ups on the Open Net Worth blog:
