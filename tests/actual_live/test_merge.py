@@ -64,3 +64,31 @@ def test_a_preview_against_a_real_server_writes_nothing(world):
     assert row_here(memo="other row"), "nothing was pulled"
     assert sync()["summary"].startswith("1 sent to Actual, 1 pulled")
     quiet()
+
+
+def test_keep_all_answers_both_in_one_session_with_one_restore_point(world, tmp_path, monkeypatch):
+    from backend.services.actual_sync import app as actual_app
+    from backend.services.actual_sync import restore_points
+    from backend.services.actual_sync.app import ACTUAL
+    from backend.services.budget_app import using
+
+    folder = tmp_path / "restore-points"
+    folder.mkdir()
+    monkeypatch.setattr(restore_points, "_folder", lambda: folder)
+    budget = world.seed()
+    world.imported(budget)
+    quiet()
+    for note in ("plain", "other row"):
+        edit_here(row_here(memo=note)["id"], memo=f"{note}, mine")
+        (theirs,) = there(budget.view(), note)
+        budget.call("updateTransaction", theirs["id"], {"notes": f"{note}, theirs"})
+    sync()
+    items = open_items()
+    assert [i["kind"] for i in items] == ["conflict", "conflict"]
+    with using(ACTUAL):
+        out = actual_app.resolve_sync_items([i["id"] for i in items], "onw")
+    assert out["resolved"] == 2 and out["failed"] == [] and open_items() == []
+    assert len(out["status"]["restore_points"]) == 1
+    view = budget.view()
+    assert there(view, "plain, mine") and there(view, "other row, mine")
+    quiet()
