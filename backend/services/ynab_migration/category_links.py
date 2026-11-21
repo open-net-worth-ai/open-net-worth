@@ -309,6 +309,8 @@ def rows(plan: dict, decisions: dict[str, dict], book: Book) -> dict[str, dict]:
             "ask": d["kind"] == "ambiguous",
             "options": d["options"],
             "assigned": has_assigned(plan, c["id"]),
+            # Income has no envelope here: what comes in raises Ready to Assign.
+            "income": is_income(c),
             "note": note(book, d, c, has_assigned(plan, c["id"])),
         }
     return out

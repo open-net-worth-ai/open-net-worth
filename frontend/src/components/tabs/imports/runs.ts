@@ -126,6 +126,8 @@ export interface PreviewCategory {
   among?: boolean
   /** The name a new category (and its new envelope) would get. */
   new_name?: string
+  /** An income category: it gets no envelope here, and what comes in raises Ready to Assign. */
+  income?: boolean
   /** One line on what its budget does. */
   note: string
 }
@@ -181,6 +183,8 @@ export interface Preview {
   currency_change: boolean
   currency_blocked: boolean
   prune: { categories: string[]; groups: string[] }
+  /** The import keeps the unused starter categories (absent on an older preview). */
+  keep_starters?: boolean
   money_data: string[]
   /** Absent on a preview recorded before the review listed them. */
   category_groups?: PreviewGroup[]

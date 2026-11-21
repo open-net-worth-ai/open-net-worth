@@ -392,7 +392,22 @@ def test_wrong_password_plain_error(store, work, fake, error, words):
 
 def _login_error(status: int) -> actual_exc.AuthorizationError:
     """What actualpy raises for a login answered with ``status`` (any above 400)."""
-    return actual_exc.AuthorizationError(f"Server returned an HTTP error '{status}': '{URL}'")
+    body = f'{{"status":"error","reason":"unauthorized","details":"{URL}"}}'
+    return actual_exc.AuthorizationError(f"Server returned an HTTP error '{status}': '{body}'")
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_plain_text_refusal_is_a_sign_in_proxy_not_actual(store, work, fake, status):
+    """Pangolin answers a request with no browser behind it 401 "Unauthorized", in plain text."""
+    fake.build_error = actual_exc.AuthorizationError(
+        f"Server returned an HTTP error '{status}': 'Unauthorized'"
+    )
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    never_leaks(err.value)
+    assert "a sign-in proxy in front of Actual wants its own sign-in" in err.value.message
+    assert "Proxy headers" in err.value.message
+    assert store.public()["last_status"] == "auth_error"
 
 
 @pytest.mark.parametrize(
@@ -970,7 +985,7 @@ def test_a_sync_run_that_cannot_connect_leaves_no_copy(store, work, fake):
 def refused(monkeypatch):
     def refuse(_creds):
         raise actual_exc.AuthorizationError(
-            f"Server returned an HTTP error '401': '{URL} {PASSWORD}'"
+            f"Server returned an HTTP error '401': '{{\"reason\":\"{URL} {PASSWORD}\"}}'"
         )
 
     monkeypatch.setattr(client, "_list_files", refuse)
@@ -1092,3 +1107,37 @@ def test_a_good_read_with_the_old_password_clears_nothing_of_the_new_one(store, 
 
 def test_a_budget_gone_doesnt_ask_to_pick_it_again():
     assert "Pick it again" not in client._GONE and "Choose another" in client._GONE
+
+
+def test_a_certificate_for_another_name_says_so(store, work, fake):
+    import ssl as _ssl
+
+    error = _ssl.SSLCertVerificationError(
+        1, "certificate verify failed: Hostname mismatch, certificate is not valid for 'x'"
+    )
+    fake.build_error = httpx.ConnectError("tls", request=httpx.Request("GET", URL))
+    fake.build_error.__cause__ = error
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    never_leaks(err.value)
+    assert "for another name than the address" in err.value.message
+
+
+def test_a_password_on_an_openid_only_server_says_to_use_a_token(store, work, fake):
+    fake.build_error = actual_exc.AuthorizationError(
+        "Something went wrong on login: Invalid redirect URL"
+    )
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    assert "signs in with OpenID" in err.value.message and "Choose Token" in err.value.message
+    assert store.public()["last_status"] == "auth_error"
+
+
+def test_an_expired_token_says_so(store, work, fake):
+    body = '{"status":"error","reason":"unauthorized","details":"token-expired"}'
+    fake.build_error = actual_exc.AuthorizationError(
+        f"Server returned an HTTP error '401': '{body}'"
+    )
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    assert "token has expired" in err.value.message

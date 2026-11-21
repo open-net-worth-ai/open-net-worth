@@ -43,6 +43,9 @@ class Context:
     )  # YNAB account id -> Starting Balance txn
     # Ledger accounts linked to this app but not to this budget (``budget_scoped_accounts``).
     other_budget_accounts: frozenset[str] = frozenset()
+    # YNAB categories whose category here was removed (deleted, or folded into another): here
+    # they hold no Assigned, so the app's figures for them are sent as 0 (``assigned``).
+    removed_here: frozenset[str] = frozenset()
 
     @property
     def live_accounts(self) -> list[dict]:
@@ -63,6 +66,13 @@ def _openings(mirror: dict[str, dict]) -> dict[str, str]:
         if is_sb and not t.get("transfer_account_id"):
             found.setdefault(t["account_id"], t["id"])
     return found
+
+
+def _removed_here(pairs: dict[str, dict], live: set[str], meta: dict) -> frozenset[str]:
+    """The app's categories, still there, whose category here is gone. One gone on both sides has
+    nothing left to send to."""
+    theirs = {c["id"] for c in meta["categories"] if not c.get("deleted")}
+    return frozenset(y for y, p in pairs.items() if p["category"] not in live and y in theirs)
 
 
 def category_plan(meta: dict, mirror: dict[str, dict], assigned: dict) -> dict:
@@ -133,6 +143,7 @@ def build(
         sub_parent=sub_parent,
         link_of=link_of,
         openings=_openings(mirror),
+        removed_here=_removed_here(pairs, live, meta),
         other_budget_accounts=others,
     )
 

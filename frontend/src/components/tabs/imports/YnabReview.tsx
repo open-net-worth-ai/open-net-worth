@@ -7,7 +7,14 @@ import { YNAB_APP, type BudgetAppInfo } from '../automations/datasync/budgetApps
 import { Accounts, Meta, Placeholder, Transactions } from './ReviewPanes'
 import { CurrencyRow, ImportBlockReader, SettleAccounts } from './ReviewSettle'
 import { importBlockKey, useAccountTypes } from './reviewTypes'
-import { BLOCKED_NOTE_ID, Notes, SettleNotes, TYPES_NOTE_ID } from './reviewNotes'
+import {
+  BLOCKED_NOTE_ID,
+  hasStarterLine,
+  Notes,
+  SettleNotes,
+  StarterLine,
+  TYPES_NOTE_ID,
+} from './reviewNotes'
 import { ASK, Categories } from './YnabCategories'
 import { messageOf, useRun } from './runs'
 import type { SyncChoice } from './sync'
@@ -75,6 +82,7 @@ export function YnabReview({
   const [links, setLinks] = useState<Record<string, string>>({})
   const [sameAs, setSameAs] = useState<Record<string, string>>({})
   const [catLinks, setCatLinks] = useState<Record<string, string>>({})
+  const [keepStarters, setKeepStarters] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [currency, setCurrency] = useState<string | null>(null)
@@ -108,6 +116,7 @@ export function YnabReview({
     accounts: Record<string, string>,
     categories: Record<string, string>,
     asked = askedCurrency,
+    keep = keepStarters,
   ) {
     if (!run) return
     setError(null)
@@ -123,6 +132,7 @@ export function YnabReview({
           recheck_of: shownId,
           ...(asks && { account_types: types.forRequest(accounts) }),
           ...(asked && { currency: asked }),
+          ...(keep && { keep_starters: true }),
         }),
       })
       const body = await r.json().catch(() => null)
@@ -205,6 +215,7 @@ export function YnabReview({
           ...(Object.keys(catLinks).length > 0 && { category_links: catLinks }),
           ...(asks && { account_types: types.forRequest(links) }),
           ...(askedCurrency && { currency: askedCurrency }),
+          ...(keepStarters && { keep_starters: true }),
         }),
       })
       if (!r.ok) {
@@ -222,6 +233,17 @@ export function YnabReview({
   }
 
   const failed = !reading && !p
+  const starter = p && hasStarterLine(p) && (
+    <StarterLine
+      app={app}
+      preview={p}
+      disabled={checking || posting}
+      onChange={(keep) => {
+        setKeepStarters(keep)
+        void recheck(links, catLinks, askedCurrency, keep)
+      }}
+    />
+  )
   return (
     <Modal
       open
@@ -300,6 +322,7 @@ export function YnabReview({
               blocked={blocked}
               unsettled={types.unsettled}
               suggested={types.acceptable}
+              starter={starter}
               onAccept={() => {
                 // The button is about to go, and focus with it: back to the top of the window.
                 document.getElementById('ui-page-tab-accounts')?.focus()
@@ -308,7 +331,12 @@ export function YnabReview({
             />
           </>
         ) : (
-          p && <Notes app={app} preview={p} asking={asking} />
+          p && <Notes app={app} preview={p} asking={asking} starter={starter} />
+        )}
+        {app.key === 'actual_budget' && (sync === 'both' || sync === 'to_ynab') && (
+          <Text size="xs" tone="faint">
+            {`The sync will write to your ${app.name} budget. Each sync that writes keeps ${app.name}'s budget from just before it, so you can undo it there, except for an encrypted budget: export that from ${app.name} first. To start without writing, choose Sync from ${app.name} only.`}
+          </Text>
         )}
         {error && !refusalIsBlock && (
           <div role="alert">

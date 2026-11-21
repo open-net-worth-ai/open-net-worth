@@ -20,7 +20,7 @@ from backend.db.actual_sync_store import (
     ActualSyncStateStore,
 )
 from backend.services import actual_flag
-from backend.services.actual_sync import client, writes
+from backend.services.actual_sync import client, restore_points, writes
 from backend.services.actual_sync.reader import ActualReader
 from backend.services.budget_app import (
     BudgetApp,
@@ -233,7 +233,26 @@ def _warnings(meta: dict, st: dict) -> list[dict]:
         found.append(differs)
     if st["awaiting_import"]:
         found.append({"kind": "import_first", "text": _import_first_line(st, differs)})
+    if failing := _failing_line(st):
+        found.append({"kind": "failing", "text": failing})
     return found
+
+
+FAILING_AFTER = 3  # runs in a row; one blip isn't worth a line
+
+
+def _failing_line(st: dict) -> str | None:
+    """A sync that keeps failing says so where it stays visible, not only in the last run's line:
+    nothing has reached either side since the last run that went through."""
+    if st.get("failures", 0) < FAILING_AFTER or not st["enabled"]:
+        return None
+    since = (st.get("last_ok_at") or "")[:10]
+    last = (st.get("last_run") or {}).get("error") or "it failed"
+    when = f"since {since}" if since else "since it was set up"
+    return (
+        f"The last {st['failures']} syncs failed, so nothing has moved between this book and "
+        f"{ACTUAL.name} {when}. The latest said: {last} It keeps trying, sooner at first."
+    )
 
 
 def _status() -> dict:
@@ -242,6 +261,9 @@ def _status() -> dict:
     return {
         **status,
         "available": True,
+        "restore_points": restore_points.listing(),
+        # Its copy here is decrypted, so none is kept: the page says to export it first.
+        "restore_points_unavailable": ActualBudgetConfigStore().public()["has_encryption_password"],
         "budget_mode": meta.get("budget_mode"),
         "warnings": _warnings(meta, st),
         "connector_paused": _paused(),
@@ -275,6 +297,22 @@ def start_sync() -> dict:
     with using(ACTUAL):
         runner.start_now()
         return _status()
+
+
+def restore_point_file(restore_id: str):
+    """The path of one restore point, for the download route only."""
+    _open()
+    return restore_points.path_of(restore_id)
+
+
+def sync_preview() -> dict:
+    """What the next sync would send and pull, decided by the run's own rules, writing nothing."""
+    from backend.services.ynab_sync.preview import preview
+
+    _open()
+    client.refuse_while_paused()
+    with using(ACTUAL):
+        return preview()
 
 
 def resolve_sync_item(conflict_id: str, keep: str, choice: str | None = None) -> dict:

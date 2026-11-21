@@ -142,6 +142,8 @@ class MigrationRequest(BaseModel):
     category_links: Optional[dict[str, str]] = None
     # A preview only: the preview this one refines (the review re-checking a changed link).
     recheck_of: Optional[str] = None
+    # Keep this book's unused starter categories rather than removing them at import.
+    keep_starters: bool = False
 
 
 def _migration(kind: str, body: MigrationRequest) -> dict:
@@ -156,6 +158,7 @@ def _migration(kind: str, body: MigrationRequest) -> dict:
             same_as=body.same_as,
             category_links=body.category_links,
             recheck_of=body.recheck_of if kind == "preview" else None,
+            keep_starters=body.keep_starters,
         )
     except ynab_migration.ConfirmationRequired as exc:
         raise HTTPException(
@@ -228,6 +231,15 @@ def ynab_sync_settings(body: SyncSettings):
 def ynab_sync_run():
     """Sync now: starts a run in the background (409 while one is running); poll the status."""
     return _sync(ynab_sync.start_now)
+
+
+@router.post("/api/ynab/sync/preview")
+async def ynab_sync_preview():
+    """A dry run: what the next sync would send and pull. Nothing is written on either side."""
+    try:
+        return await asyncio.to_thread(ynab_sync.preview_next)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 
 
 @router.post("/api/ynab/sync/conflicts/{conflict_id}/resolve")

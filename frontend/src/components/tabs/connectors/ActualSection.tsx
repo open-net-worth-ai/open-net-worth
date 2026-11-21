@@ -15,6 +15,8 @@ import { ACTUAL_APP } from '../automations/datasync/budgetApps'
 import { PlanPicker } from '../imports/YnabImport'
 import { usePlans } from '../imports/plans'
 import { detailOf } from '../imports/runs'
+import { ActualCertField, certLooksRight } from './ActualCertField'
+import { ActualCheck } from './ActualCheck'
 import { ConnectorStatusLine } from './ConnectorStatusLine'
 import { useConnectorSave, useTouched } from './formSave'
 import { CONNECTORS_KEY } from './useConnectors'
@@ -36,6 +38,7 @@ interface ActualStatus {
   has_server_url: boolean
   has_proxy_headers: boolean
   proxy_header_names: string[]
+  server_certificate_fingerprints?: string[]
   server_host: string | null
   server_scheme: string | null
   server_plain_http: boolean
@@ -128,6 +131,8 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
   const [encryption, setEncryption] = useState('')
   const [headers, setHeaders] = useState('')
   const [clearHeaders, setClearHeaders] = useState(false)
+  const [cert, setCert] = useState('')
+  const [clearCert, setClearCert] = useState(false)
   // Only what was picked here: the rest follows the server, or a stale read would be saved back.
   const [pick, setPick] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -180,6 +185,8 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
       if (encryption.trim()) body.encryption_password = encryption.trim()
       if (headersTyped) body.proxy_headers = headersTyped
       else if (clearHeaders) body.clear_proxy_headers = true
+      if (cert.trim()) body.server_certificate = cert.trim()
+      else if (clearCert) body.clear_server_certificate = true
       if (budgetChange) body.budget_id = budgetChange
       const r = await authFetch('/api/actual-budget/config', {
         method: 'PUT',
@@ -196,6 +203,8 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
       setEncryption('')
       setHeaders('')
       setClearHeaders(false)
+      setCert('')
+      setClearCert(false)
       invalidateQueryCache('/api/actual-budget/budgets')
       return true
     } catch {
@@ -209,13 +218,15 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
   }
 
   useConnectorSave({
-    ready: urlValid && secretValid && !needsEncryption && headersValid,
+    ready: urlValid && secretValid && !needsEncryption && headersValid && certLooksRight(cert),
     values: {
       url: urlTyped,
       secret: secret.trim(),
       encryption: encryption.trim(),
       headers: headersTyped,
       clearHeaders,
+      cert: cert.trim(),
+      clearCert,
       budgetChange,
     },
     baseline: {
@@ -224,6 +235,8 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
       encryption: '',
       headers: '',
       clearHeaders: false,
+      cert: '',
+      clearCert: false,
       budgetChange: '',
     },
     saving,
@@ -368,6 +381,16 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
           </Text>
         </FormField>
       )}
+      {cfg.configured && !paused && (
+        <ActualCheck
+          unsaved={
+            !!(urlTyped || secret.trim() || encryption.trim() || headersTyped || cert.trim()) ||
+            clearHeaders ||
+            clearCert ||
+            !!budgetChange
+          }
+        />
+      )}
 
       <FormField
         label="Encryption password"
@@ -435,6 +458,15 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
           }}
         />
       </FormField>
+
+      <ActualCertField
+        value={cert}
+        onChange={setCert}
+        fingerprints={cfg.server_certificate_fingerprints ?? []}
+        moved={moved}
+        clearing={clearCert}
+        onClear={setClearCert}
+      />
 
       {saveErr && (
         <Text size="xs" tone="bad">

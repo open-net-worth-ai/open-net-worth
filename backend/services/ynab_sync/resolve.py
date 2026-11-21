@@ -17,6 +17,7 @@ from backend.services.ynab_sync import (
     conflicts,
     context,
     delta,
+    openings,
     pull,
     push,
     recorder,
@@ -70,6 +71,8 @@ def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
         with app.open_client(st["plan_id"], budget) as client:
             if item["entity"] == "start":
                 starts.resolve(item, keep)
+            elif item["entity"] == "opening":
+                openings.resolve(item, keep, ctx, client, st["direction"])
             elif item["entity"] in ("category", "group", "new_category", "budget"):
                 category_resolve.apply(item, keep, choice, st, meta, base, client)
             elif _held_side(st["direction"], keep):

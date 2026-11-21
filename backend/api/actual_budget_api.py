@@ -26,7 +26,8 @@ import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
@@ -53,6 +54,8 @@ class ActualBudgetConfigUpdate(BaseModel):
     proxy_headers: Optional[str] = None
     # Removes saved proxy headers (a blank field keeps them). New ones in the same request win.
     clear_proxy_headers: bool = False
+    server_certificate: Optional[str] = Field(default=None, max_length=20_000)
+    clear_server_certificate: bool = False
     # The budget's cloud file id. Blank clears the pick; omitted leaves it.
     budget_id: Optional[str] = None
     enabled: Optional[bool] = None
@@ -65,6 +68,16 @@ def _refuse(exc: OpenNetWorthError) -> HTTPException:
 @router.get("/api/actual-budget/status")
 def actual_budget_status():
     return ActualBudgetConfigStore().public()
+
+
+@router.post("/api/actual-budget/check")
+async def actual_budget_check():
+    """Try the saved connection end to end and say what stopped it, if anything."""
+    try:
+        ActualBudgetConfigStore().require_available()
+    except OpenNetWorthError as exc:
+        raise _refuse(exc) from exc
+    return await asyncio.to_thread(actual_sync.check_connection)
 
 
 @router.get("/api/actual-budget/budgets")
@@ -83,7 +96,9 @@ async def update_actual_budget_config(body: ActualBudgetConfigUpdate):
     otherwise. The sign-in is saved FIRST, so a budget pick in the same request is checked against
     it. Returns the public status."""
     store = ActualBudgetConfigStore()
-    changes = body.model_dump(exclude={"enabled", "budget_id", "clear_proxy_headers"})
+    changes = body.model_dump(
+        exclude={"enabled", "budget_id", "clear_proxy_headers", "clear_server_certificate"}
+    )
     if body.enabled is not None:
         changes["enabled"] = body.enabled
     try:
@@ -91,6 +106,8 @@ async def update_actual_budget_config(body: ActualBudgetConfigUpdate):
         store.update(changes)
         if body.clear_proxy_headers and not (body.proxy_headers or "").strip():
             store.clear_proxy_headers()
+        if body.clear_server_certificate and not (body.server_certificate or "").strip():
+            store.clear_server_certificate()
         if body.enabled is None and not was_configured and store.is_configured():
             store.update({"enabled": True})
         if body.budget_id is not None:
@@ -128,6 +145,8 @@ class MigrationRequest(BaseModel):
     account_types: Optional[dict[str, str]] = None
     # For a budget that states no currency.
     currency: Optional[str] = None
+    # Keep this book's unused starter categories rather than removing them at import.
+    keep_starters: bool = False
 
 
 def _migration(kind: str, body: MigrationRequest) -> dict:
@@ -143,6 +162,7 @@ def _migration(kind: str, body: MigrationRequest) -> dict:
             recheck_of=body.recheck_of if kind == "preview" else None,
             account_types=body.account_types,
             currency=body.currency,
+            keep_starters=body.keep_starters,
         )
     except ConfirmationRequired as exc:
         raise HTTPException(
@@ -205,6 +225,22 @@ def _sync(call, *args) -> dict:
 def actual_budget_sync_status():
     """Schedule, last and next run, the review list and notes. Never a secret or the address."""
     return _sync(actual_app.sync_status)
+
+
+@router.get("/api/actual-budget/restore-points/{restore_id}")
+def actual_budget_restore_point(restore_id: str):
+    """Actual's budget as it was before a sync wrote to it: the zip Actual's own Import takes."""
+    path = _sync(actual_app.restore_point_file, restore_id)
+    return FileResponse(path, media_type="application/zip", filename=f"actual-{restore_id}.zip")
+
+
+@router.post("/api/actual-budget/sync/preview")
+async def actual_budget_sync_preview():
+    """A dry run: what the next sync would send and pull. Nothing is written on either side."""
+    try:
+        return await asyncio.to_thread(actual_app.sync_preview)
+    except OpenNetWorthError as exc:
+        raise _refuse(exc) from exc
 
 
 @router.put("/api/actual-budget/sync/settings")

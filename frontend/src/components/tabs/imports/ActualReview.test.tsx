@@ -369,6 +369,30 @@ describe('the notes', () => {
     expect(w.getByText(/2 starter categories and groups you never used are removed/)).toBeTruthy()
   })
 
+  it('says a sync both ways writes to Actual, and how to undo it there', async () => {
+    const w = await open()
+    expect(w.getByText(/The sync will write to your Actual budget/)).toBeTruthy()
+    expect(w.getByText(/so you can undo it there/)).toBeTruthy()
+  })
+
+  it('keeps the starter categories when asked, and imports with that choice', async () => {
+    preview = actualPreview({ prune: { categories: ['Alpha'], groups: [] } })
+    const w = await open()
+    preview = actualPreview({ prune: { categories: [], groups: [] }, keep_starters: true })
+    fireEvent.click(w.getByRole('button', { name: 'Keep them' }))
+    await waitFor(() => expect(previews().length).toBe(1))
+    expect(previews()[0]?.body.keep_starters).toBe(true)
+    expect(
+      await w.findByText(/The starter categories stay, and the sync adds them to Actual/),
+    ).toBeTruthy()
+    expect(w.getByRole('button', { name: 'Remove them' })).toBeTruthy()
+    fireEvent.click(w.getByRole('button', { name: 'Accept suggestions' }))
+    await waitFor(() => expect(importButton(w).disabled).toBe(false))
+    fireEvent.click(importButton(w))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(requests.at(-1)?.body).toMatchObject({ plan_id: 'b1', keep_starters: true })
+  })
+
   it('one more note reads as one', async () => {
     preview = actualPreview({ warnings: FOUR.slice(0, 4) })
     const w = await open()
@@ -379,6 +403,28 @@ describe('the notes', () => {
     preview = actualPreview({ warnings: FOUR.slice(0, 3) })
     const w = await open()
     expect(w.queryByRole('button', { name: /more note/ })).toBeNull()
+  })
+
+  it('shows an income category with no envelope, as the import books it', async () => {
+    const salary = {
+      id: 'ci',
+      label: 'Salary',
+      name: 'Salary',
+      hidden: false,
+      link: null,
+      chosen: false,
+      ask: false,
+      options: [],
+      income: true,
+      note: 'Income: it has no envelope here, and what comes in raises Ready to Assign',
+    }
+    preview = actualPreview({
+      category_groups: [{ id: 'gi', name: 'Income', group: null, categories: [salary] }],
+    })
+    const w = await open()
+    fireEvent.click(w.getByRole('tab', { name: /Categories/ }))
+    expect(await w.findByText('None: raises Ready to Assign')).toBeTruthy()
+    expect(w.queryByRole('combobox', { name: 'Envelope for Salary' })).toBeNull()
   })
 
   it('collapses many asks to one line', async () => {

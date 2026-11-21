@@ -25,6 +25,7 @@ const BLANK = {
   has_server_url: false,
   has_proxy_headers: false,
   proxy_header_names: [] as string[],
+  server_certificate_fingerprints: [] as string[],
   server_host: null as string | null,
   server_scheme: null as string | null,
   server_plain_http: false,
@@ -69,6 +70,11 @@ beforeEach(() => {
       const b = budgets as { status?: number; detail?: string }
       return b.status ? reply({ detail: b.detail }, b.status) : reply(budgets)
     }
+    if (url === '/api/actual-budget/check')
+      return reply({
+        ok: false,
+        text: 'The server turned the request away before it reached Actual.',
+      })
     if (url === '/api/actual-budget/config') {
       if (saveAnswer) return reply(saveAnswer.body, saveAnswer.status)
       status = { ...SAVED }
@@ -426,6 +432,39 @@ describe('ActualSection', () => {
     expect(screen.getByText(/Removed when you save/)).toBeTruthy()
     await save()
     expect(lastSave()).toEqual({ clear_proxy_headers: true })
+  })
+
+  it('trusts a pasted server certificate, shows its fingerprint, and can remove it', async () => {
+    status = SAVED
+    form()
+    await screen.findByLabelText(/Server certificate/)
+    type(/Server certificate/, 'not a certificate')
+    expect(screen.getByText(/Paste the certificate from -----BEGIN CERTIFICATE-----/)).toBeTruthy()
+    expect(canSave()).toBe(false)
+    const pem = '-----BEGIN CERTIFICATE-----\nQUNNRQ==\n-----END CERTIFICATE-----'
+    type(/Server certificate/, pem)
+    expect(canSave()).toBe(true)
+    await save()
+    expect(lastSave()).toEqual({ server_certificate: pem })
+    cleanup()
+
+    const fingerprint = Array.from({ length: 32 }, () => 'AB').join(':')
+    status = { ...SAVED, server_certificate_fingerprints: [fingerprint] }
+    form()
+    expect(await screen.findByText(/Trusted: SHA-256 AB:AB:AB/)).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' }).at(-1)!)
+    await save()
+    expect(lastSave()).toEqual({ clear_server_certificate: true })
+  })
+
+  it('tests the saved connection and says which step stopped it', async () => {
+    status = SAVED
+    form()
+    fireEvent.click(await screen.findByRole('button', { name: 'Test connection' }))
+    expect(await screen.findByText(/turned the request away before it reached Actual/)).toBeTruthy()
+    expect(requests.some((r) => r.url === '/api/actual-budget/check' && r.method === 'POST')).toBe(
+      true,
+    )
   })
 
   it('says saved headers stay behind when the address moves', async () => {

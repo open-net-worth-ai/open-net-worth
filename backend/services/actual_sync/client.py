@@ -39,7 +39,7 @@ from typing import Any, Iterator
 
 import httpx
 
-from backend.core import platform_fs
+from backend.core import platform_fs, server_certificate
 from backend.core.errors import (
     ConflictError,
     ExternalServiceError,
@@ -322,6 +322,8 @@ def _chain(exc: BaseException) -> list[BaseException]:
 class SignInRefused(Stopped):
     """The server turned the saved password or token away."""
 
+    sign_in = True  # a retry can't help: the sync waits for the person (``state.sign_in_problem``)
+
 
 # A sign-in proxy answers with a redirect or its own login page, where Actual answers JSON.
 _BEHIND_PROXY = (
@@ -329,6 +331,48 @@ _BEHIND_PROXY = (
     "front of Actual, add the header it accepts under Proxy headers, or let these paths through: "
     "/account, /info, /sync, /data and /data-file-index.txt."
 )
+
+
+# A sign-in proxy that turns away a request with no browser behind it answers 401 or 403 itself,
+# in plain text; Actual's own refusals are JSON.
+_PROXY_REFUSED = (
+    "The server turned the request away before it reached Actual: a sign-in proxy in front of "
+    "Actual wants its own sign-in. Add the header it accepts under Proxy headers, or let these "
+    "paths through: /account, /info, /sync, /data and /data-file-index.txt."
+)
+
+
+# An OpenID-only server answers a password sign-in this way; each try also counts towards its
+# limit of failed sign-ins, so the sync says what to do instead of trying again sooner.
+_OPENID_ONLY = (
+    "This Actual server signs in with OpenID, not a password. Choose Token and paste the token "
+    "from a browser signed in to it: the docs say where to find it."
+)
+_TOKEN_EXPIRED = (
+    "The Actual token has expired. Sign in to Actual in your browser, then paste the new token."
+)
+
+
+def _says(status, auth, word: str) -> bool:
+    """Whether Actual's reply names ``word`` (its reason codes, such as ``token-expired``)."""
+    body = status.response.text if status is not None else str(auth or "")
+    return word in body
+
+
+def _from_actual(status, auth) -> bool:
+    """Whether a 401/403 came from Actual (a JSON body) rather than a proxy in front of it. The
+    login's error carries the body in its text, after the status."""
+    if status is not None:
+        body = status.response.text
+    elif auth is not None and "HTTP error" in str(auth):
+        body = str(auth).partition("': '")[2].removesuffix("'")
+    else:
+        return True
+    try:
+        json.loads(body)
+    except ValueError:
+        return False
+    return True
 
 
 def _not_json(exc: BaseException) -> bool:
@@ -362,16 +406,29 @@ def _plain_error(exc: Exception) -> Stopped:
         code = int(found[1]) if found else code
         if "Could not validate password on login" in said:
             code = 401
+    if auth and "Invalid redirect URL" in str(auth):
+        return SignInRefused(_OPENID_ONLY)
+    if code in (401, 403) and _says(status, auth, "token-expired"):
+        return SignInRefused(_TOKEN_EXPIRED)
+    if code in (401, 403) and not _from_actual(status, auth):
+        return SignInRefused(_PROXY_REFUSED)
     if code in (401, 403):
         return SignInRefused("Actual refused the sign-in. Check its password or token.")
     elif has(ax.UnknownFileId):
         text = _GONE
     elif has(ax.ActualDecryptionError, ax.ActualEncryptionError):
         text = "This budget is encrypted, and its encryption password is missing or wrong."
+    elif any(
+        isinstance(e, ssl.SSLCertVerificationError) and "hostname" in str(e).lower() for e in chain
+    ):
+        text = (
+            "The Actual server's certificate is for another name than the address you saved. Use "
+            "the address the certificate names, or a certificate made for this address."
+        )
     elif has(ssl.SSLError):
         text = (
-            "The Actual server's certificate could not be verified. "
-            "Use a certificate this computer trusts."
+            "The Actual server's certificate could not be verified. If it is your own (self-signed, "
+            "or from a private authority), paste it under Server certificate."
         )
     elif (code and 300 <= code < 400) or any(_not_json(e) for e in chain):
         text = _BEHIND_PROXY
@@ -434,7 +491,11 @@ def _build(creds: dict, directory: Path | None = None):
         "base_url": url,
         "password": creds["password"] or None,
         "token": None if creds["password"] else creds["token"],
-        "cert": https_context() if url.lower().startswith("https:") else True,
+        "cert": (
+            server_certificate.trusting(https_context(), creds["server_certificate"])
+            if url.lower().startswith("https:")
+            else True
+        ),
         "encryption_password": creds["encryption_password"] or None,
         # Sent on every request, for a sign-in proxy in front of the server. The client follows
         # no redirect, so they reach only the saved address.

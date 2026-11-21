@@ -21,7 +21,14 @@ from typing import Callable, Iterator
 
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
 from backend.services import budget_app_snapshots
-from backend.services.actual_sync import apply_rows, client, raw_rows, shape, shape_delta
+from backend.services.actual_sync import (
+    apply_rows,
+    client,
+    raw_rows,
+    restore_points,
+    shape,
+    shape_delta,
+)
 from backend.services.actual_sync.shape_values import text
 from backend.services.budget_app import current
 from backend.services.ynab_migration import source
@@ -59,6 +66,7 @@ class ActualClient:
         self._seen_cats: dict[str, dict] = {}
         self._seen_groups: dict[str, dict] = {}
         self._seen_assigned: dict[tuple[str, str], int] = {}
+        self.wrote = False  # a batch reached Actual: this run's restore point is kept
 
     # ── what this run read ──
     def _note_read(self, plan: dict, rows_seen: dict[str, dict] | None = None) -> None:
@@ -128,7 +136,9 @@ class ActualClient:
             raise
         try:
             self.copy.commit()
+            self.wrote = True
         except Exception:
+            self.wrote = True  # it may have reached the server before failing
             self._broken = True
             raise
 
@@ -277,6 +287,13 @@ class ActualClient:
 
 @contextmanager
 def open_sync_client(plan_id: str, budget: Budget) -> Iterator[ActualClient]:
-    """``BudgetApp.open_client``: one fresh copy for one run, gone when it ends."""
+    """``BudgetApp.open_client``: one fresh copy for one run, gone when it ends. A run that may
+    write first saves the copy as a restore point, kept only if it then wrote."""
     with client.open_copy(None, plan_id) as copy:
-        yield ActualClient(copy, budget)
+        writes = sync_state.load()["direction"] != "from_ynab"
+        point = restore_points.take(copy) if writes else None
+        session = ActualClient(copy, budget)
+        try:
+            yield session
+        finally:
+            restore_points.settle(point, session.wrote)

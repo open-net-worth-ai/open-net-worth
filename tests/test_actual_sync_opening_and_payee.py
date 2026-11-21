@@ -59,19 +59,37 @@ def test_a_starting_balance_date_changed_in_actual_comes_across(world):
     assert sync()["summary"] == "Nothing changed"
 
 
-def test_an_opening_edited_only_here_is_left_alone(world):
+def test_an_opening_edited_here_reaches_actual(world):
     enable()
+    sync()
+    acct = account_here("ACME Checking")
+    as_person(ledger_service.set_account_opening, acct["id"], 1200.0, "2019-11-30")
+    world.calls.clear()
+    sync()
+    sent = world.row("transactions", "t-open")
+    assert sent["amount"] == 120_000
+    assert sent["date"] == 20200101, "a date here is this book's own: never sent"
+    assert _opening() == (1200.0, "2019-11-30")
+    assert open_items() == []
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_an_opening_edited_here_waits_in_from_actual_mode(world):
+    enable("from_ynab")
     sync()
     acct = account_here("ACME Checking")
     as_person(ledger_service.set_account_opening, acct["id"], 1200.0, PAST)
     world.calls.clear()
     sync()
-    assert _opening() == (1200.0, PAST)
-    assert world.row("transactions", "t-open")["amount"] == 100_000
+    assert world.row("transactions", "t-open")["amount"] == 100_000 and writes_seen(world) == []
+    enable("both")
+    sync()
+    assert world.row("transactions", "t-open")["amount"] == 120_000
 
 
-def test_both_sides_moved_keeps_the_change_made_here(world):
-    """Actual's change is applied as a difference, so an adjustment made here survives it."""
+def test_both_sides_moved_each_takes_the_others_difference(world):
+    """Actual's change is applied here as a difference, and ours there: neither is lost."""
     enable()
     sync()
     acct = account_here("ACME Checking")
@@ -80,6 +98,9 @@ def test_both_sides_moved_keeps_the_change_made_here(world):
     world.queue.clear()
     sync()
     assert _opening() == (1700.0, PAST)
+    assert world.row("transactions", "t-open")["amount"] == 170_000
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
 
 
 # ── a payee cleared here ──
@@ -114,3 +135,63 @@ def test_a_category_on_an_off_budget_row_is_not_wiped_by_actuals_blank(world):
     sync()
     assert ledger_service.transactions.find_by_id(made["id"])["category"] == food
     assert sync()["summary"] == "Nothing changed"
+
+
+# ── a Starting Balance changed before openings synced both ways ──
+
+
+def _forget_openings() -> None:
+    """The state a book upgraded from a version that never compared openings is in."""
+    from backend.services.actual_sync.app import ACTUAL
+    from backend.services.budget_app import using
+    from backend.services.ynab_sync import state as sync_state
+
+    with using(ACTUAL):
+        st = sync_state.load()
+        st.pop("openings_seen", None)
+        st.pop("openings_ours", None)
+        sync_state.save(st)
+
+
+def _opening_item() -> dict:
+    (item,) = [i for i in open_items() if i.get("entity") == "opening"]
+    return item
+
+
+@pytest.mark.parametrize("keep", ["ynab", "onw"])
+def test_an_opening_changed_before_the_upgrade_is_asked_about_then_settled(world, keep):
+    from backend.services.actual_sync import app as actual_app
+
+    enable()
+    sync()
+    _forget_openings()
+    world.edit("UPDATE transactions SET amount = 130000 WHERE id = 't-open'")
+    world.queue.clear()
+    sync()
+    item = _opening_item()
+    assert item["onw"]["amount"] == 1000.0 and item["ynab"]["amount"] == 1300.0
+    assert _opening() == (1000.0, PAST), "nothing moves before the person answers"
+    sync()
+    assert len([i for i in open_items() if i.get("entity") == "opening"]) == 1
+    actual_app.resolve_sync_item(item["id"], keep)
+    if keep == "ynab":
+        assert _opening()[0] == 1300.0
+        assert world.row("transactions", "t-open")["amount"] == 130_000
+    else:
+        assert _opening()[0] == 1000.0
+        assert world.row("transactions", "t-open")["amount"] == 100_000
+    assert open_items() == []
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_an_opening_that_already_agrees_after_the_upgrade_asks_nothing(world):
+    enable()
+    sync()
+    _forget_openings()
+    sync()
+    assert open_items() == []
+    world.edit("UPDATE transactions SET amount = 150000 WHERE id = 't-open'")
+    world.queue.clear()
+    sync()
+    assert _opening() == (1500.0, PAST)

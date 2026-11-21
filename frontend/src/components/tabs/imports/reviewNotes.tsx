@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { Button, Cluster } from '../../ui'
 import type { BudgetAppInfo } from '../automations/datasync/budgetApps'
@@ -29,11 +29,49 @@ function pruneNote(app: BudgetAppInfo, p: Preview) {
   const listed = names.slice(0, NAMES_SHOWN).join(', ')
   const rest = n - NAMES_SHOWN
   const list = rest > 0 ? `${listed} and ${rest} more` : listed
-  return `${app.name} brings its own categories, so ${n} starter ${noun} you never used ${n === 1 ? 'is' : 'are'} removed: ${list}. To keep one, pick it for ${app.aName} category in Categories.`
+  return `${app.name} brings its own categories, so ${n} starter ${noun} you never used ${n === 1 ? 'is' : 'are'} removed: ${list}. To keep one, pick it for ${app.aName} category in Categories, or keep them all to fold ${app.name}’s categories into later.`
+}
+
+/** The unused starter categories: what the import does with them, and the button that changes it. */
+export function StarterLine({
+  app,
+  preview: p,
+  disabled,
+  onChange,
+}: {
+  app: BudgetAppInfo
+  preview: Preview
+  disabled: boolean
+  onChange: (keep: boolean) => void
+}) {
+  if (!hasStarterLine(p)) return null
+  return (
+    <li className="ynr-note">
+      <Cluster justify="between" gap="--space-3">
+        <span>
+          {p.keep_starters
+            ? `The starter categories stay, and the sync adds them to ${app.name}. To fold one of ${app.name}’s categories into one, delete it in Manage categories and move its activity to the one you keep: ${app.name} follows.`
+            : pruneNote(app, p)}
+        </span>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="tap-target"
+          disabled={disabled}
+          onClick={() => onChange(!p.keep_starters)}
+        >
+          {p.keep_starters ? 'Remove them' : 'Keep them'}
+        </Button>
+      </Cluster>
+    </li>
+  )
+}
+
+export function hasStarterLine(p: Preview) {
+  return p.prune.categories.length + p.prune.groups.length > 0 || !!p.keep_starters
 }
 
 function lines(app: BudgetAppInfo, p: Preview, asking: PreviewCategory[]) {
-  const pruned = [...p.prune.categories, ...p.prune.groups]
   return {
     asks: asking.map(
       (c) =>
@@ -57,7 +95,6 @@ function lines(app: BudgetAppInfo, p: Preview, asking: PreviewCategory[]) {
     change: p.currency_change
       ? [`The book’s base currency changes from ${p.base_currency} to ${p.currency}.`]
       : [],
-    prune: pruned.length > 0 ? [pruneNote(app, p)] : [],
   }
 }
 
@@ -65,23 +102,29 @@ export function Notes({
   app,
   preview: p,
   asking,
+  starter,
 }: {
   app: BudgetAppInfo
   preview: Preview
   asking: PreviewCategory[]
+  /** The starter-categories line, first among the notes once nothing stops the import. */
+  starter?: ReactNode
 }) {
   const l = lines(app, p, asking)
-  const list: { text: string; bad?: boolean }[] = [
-    ...l.asks.map((text) => ({ text, bad: true })),
-    ...l.blocked.map((text) => ({ text, bad: true })),
-    ...[...l.prune, ...l.foreign, ...l.rerun, ...l.change, ...p.warnings].map((text) => ({ text })),
-  ]
-  if (list.length === 0) return null
+  const stops = [...l.asks, ...l.blocked]
+  const rest = [...l.foreign, ...l.rerun, ...l.change, ...p.warnings]
+  if (stops.length + rest.length === 0 && !starter) return null
   return (
     <ul className="ynr-notes">
-      {list.map((n) => (
-        <li key={n.text} className={n.bad ? 'ynr-note ynr-note--bad' : 'ynr-note'}>
-          {n.text}
+      {stops.map((text) => (
+        <li key={text} className="ynr-note ynr-note--bad">
+          {text}
+        </li>
+      ))}
+      {starter}
+      {rest.map((text) => (
+        <li key={text} className="ynr-note">
+          {text}
         </li>
       ))}
     </ul>
@@ -127,6 +170,7 @@ export function SettleNotes({
   unsettled,
   suggested,
   onAccept,
+  starter,
 }: {
   app: BudgetAppInfo
   preview: Preview
@@ -136,6 +180,8 @@ export function SettleNotes({
   unsettled: number
   suggested: number
   onAccept: () => void
+  /** The starter-categories line: the first note, never folded away. */
+  starter?: ReactNode
 }) {
   const [allShown, setAllShown] = useState(false)
   const l = lines(app, p, asking)
@@ -146,11 +192,12 @@ export function SettleNotes({
         ]
       : l.asks
   const stops = [...asks, ...l.blocked]
-  const notes = [...l.prune, ...l.change, ...l.foreign, ...p.warnings, ...l.rerun]
-  const first = useIsMobile() ? 1 : SHOWN_NOTES
+  const notes = [...l.change, ...l.foreign, ...p.warnings, ...l.rerun]
+  const first = Math.max((useIsMobile() ? 1 : SHOWN_NOTES) - (starter ? 1 : 0), 0)
   const shown = allShown ? notes : notes.slice(0, first)
   const more = notes.length - first
-  if (!blocked && unsettled === 0 && stops.length === 0 && notes.length === 0) return null
+  if (!blocked && unsettled === 0 && stops.length === 0 && notes.length === 0 && !starter)
+    return null
   return (
     <>
       <ul className="ynr-notes">
@@ -167,6 +214,7 @@ export function SettleNotes({
             {text}
           </li>
         ))}
+        {starter}
         {shown.map((text) => (
           <li key={text} className="ynr-note">
             {text}
