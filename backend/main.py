@@ -1294,12 +1294,18 @@ async def health():
     true only while gateway mode is active, so a proxy can tell an app that really enforces its
     token from one that is merely up. ``contracts`` are the versioned surfaces a peer (portal,
     desktop) checks before it talks to this instance."""
-    return {
+    from backend.core.host_memory import snapshot
+
+    body = {
         "status": "ok",
         "version": APP_VERSION,
         "gateway": gateway_active(),
         "contracts": AGENT_CONTRACTS,
     }
+    memory = snapshot()
+    if memory is not None:  # sizes only, no contents: the operator picks machine sizes from it
+        body["memory"] = memory
+    return body
 
 
 @app.post("/api/intel/scan")
