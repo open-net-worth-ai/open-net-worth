@@ -20,7 +20,7 @@ from backend.db.actual_sync_store import (
     ActualSyncStateStore,
 )
 from backend.services import actual_flag
-from backend.services.actual_sync import client, writes
+from backend.services.actual_sync import client, restore_points, writes
 from backend.services.actual_sync.reader import ActualReader
 from backend.services.budget_app import (
     BudgetApp,
@@ -261,6 +261,7 @@ def _status() -> dict:
     return {
         **status,
         "available": True,
+        "restore_points": restore_points.listing(),
         "budget_mode": meta.get("budget_mode"),
         "warnings": _warnings(meta, st),
         "connector_paused": _paused(),
@@ -294,6 +295,12 @@ def start_sync() -> dict:
     with using(ACTUAL):
         runner.start_now()
         return _status()
+
+
+def restore_point_file(restore_id: str):
+    """The path of one restore point, for the download route only."""
+    _open()
+    return restore_points.path_of(restore_id)
 
 
 def sync_preview() -> dict:

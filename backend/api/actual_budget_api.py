@@ -26,6 +26,7 @@ import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from backend.core.errors import OpenNetWorthError, to_http_status
@@ -224,6 +225,13 @@ def _sync(call, *args) -> dict:
 def actual_budget_sync_status():
     """Schedule, last and next run, the review list and notes. Never a secret or the address."""
     return _sync(actual_app.sync_status)
+
+
+@router.get("/api/actual-budget/restore-points/{restore_id}")
+def actual_budget_restore_point(restore_id: str):
+    """Actual's budget as it was before a sync wrote to it: the zip Actual's own Import takes."""
+    path = _sync(actual_app.restore_point_file, restore_id)
+    return FileResponse(path, media_type="application/zip", filename=f"actual-{restore_id}.zip")
 
 
 @router.post("/api/actual-budget/sync/preview")

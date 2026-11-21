@@ -70,6 +70,8 @@ export interface SyncStatus {
   /** Actual only: what the last read said, and what the page keeps saying while it holds. */
   budget_mode?: 'envelope' | 'tracking' | null
   warnings?: SyncWarning[]
+  /** Actual only: its budget as it was before each recent sync that wrote to it. */
+  restore_points?: { id: string; created_at: string; budget: string; bytes: number }[]
   /** Its connector is paused: nothing talks to the server, whatever the sync's own switch says. */
   connector_paused?: boolean
 }
