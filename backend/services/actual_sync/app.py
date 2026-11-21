@@ -267,6 +267,8 @@ def _status() -> dict:
         "budget_mode": meta.get("budget_mode"),
         # Ready to Assign beside Actual's own To Budget, as the last run read them.
         "to_budget": meta.get("to_budget"),
+        # When the last sync that changed this book finished, while it can be undone here.
+        "undo_at": (st.get("undo") or {}).get("at"),
         "warnings": _warnings(meta, st),
         "connector_paused": _paused(),
         "waiting": _waiting(st),
@@ -305,6 +307,15 @@ def restore_point_file(restore_id: str):
     """The path of one restore point, for the download route only."""
     _open()
     return restore_points.path_of(restore_id)
+
+
+def undo_last_sync() -> dict:
+    """Put back what the last sync changed in this book, and switch the sync off."""
+    from backend.services.ynab_sync import undo
+
+    _open()
+    with using(ACTUAL):
+        return {**undo.undo_last(), "status": _status()}
 
 
 def sync_preview() -> dict:

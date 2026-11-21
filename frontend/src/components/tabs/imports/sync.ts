@@ -80,6 +80,8 @@ export interface SyncStatus {
     difference: number
     card_payment_envelopes: number
   } | null
+  /** Actual only: when the last sync that changed this book finished, while it can be undone. */
+  undo_at?: string | null
   /** Actual only: an encrypted budget keeps none (its copy here is decrypted). */
   restore_points_unavailable?: boolean
   /** Its connector is paused: nothing talks to the server, whatever the sync's own switch says. */

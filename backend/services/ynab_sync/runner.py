@@ -398,6 +398,7 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
     rec_token = recorder.activate(rec)
     stopped = None
     retry = False
+    audit_from = TransactionAuditStore().max_seq()
     try:
         stopped = _execute(st, tally)
     except OpenNetWorthError as exc:
@@ -429,6 +430,13 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
     st["failures"] = st.get("failures", 0) + 1 if retry else 0
     if error is None:
         st["last_ok_at"] = st["last_run"]["finished_at"]
+    if tally["pulled"]:
+        # What this run changed in the book, for "Undo the last sync here" (``undo``).
+        st["undo"] = {
+            "from": audit_from,
+            "to": TransactionAuditStore().max_seq(),
+            "at": st["last_run"]["finished_at"],
+        }
     sync_state.schedule_next(st, started)
     sync_state.save(st)
     if error is None and tally["requests"]:
