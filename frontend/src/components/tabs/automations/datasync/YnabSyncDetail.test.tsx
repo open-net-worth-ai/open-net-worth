@@ -599,6 +599,14 @@ describe('YnabSyncDetail once set up', () => {
     expect(await screen.findByText('Syncing now…')).toBeTruthy()
   })
 
+  it('a sync in progress says the step it is on, with its count', async () => {
+    sync = { ...sync, running: true, step: 'sending transactions to YNAB: 400 of 9,000' }
+    page()
+    expect(
+      await screen.findByText('Syncing now: sending transactions to YNAB: 400 of 9,000…'),
+    ).toBeTruthy()
+  })
+
   it('turning it off keeps the plan', async () => {
     page()
     fireEvent.click(await screen.findByRole('switch'))

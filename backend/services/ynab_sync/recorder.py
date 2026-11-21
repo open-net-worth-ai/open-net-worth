@@ -126,10 +126,35 @@ def _safe(fn):
     return wrapper
 
 
+# app key -> the step its run in progress is on, scheduled or not (a scheduled run has no record
+# until it ends). The page reads it beside ``running``.
+steps: dict[str, str] = {}
+
+
+def step_of(app_key: str) -> str | None:
+    return steps.get(app_key)
+
+
 @_safe
 def phase(rec: Recorder, name: str) -> None:
+    steps[current().key] = name
     if rec.run_id:
         import_runs.update(rec.run_id, phase=name)
+
+
+def finished() -> None:
+    steps.pop(current().key, None)
+
+
+# A step this long or longer says how far it has got, every this many items.
+PROGRESS_EVERY = 200
+
+
+def progress(step: str, done: int, total: int) -> None:
+    """A long step's count in the run's phase ("sending transactions: 400 of 9,000"), so a big
+    first sync shows it is moving. Said every ``PROGRESS_EVERY`` items and at the end."""
+    if total >= PROGRESS_EVERY and (done % PROGRESS_EVERY == 0 or done == total):
+        phase(f"{step}: {done:,} of {total:,}")
 
 
 @_safe

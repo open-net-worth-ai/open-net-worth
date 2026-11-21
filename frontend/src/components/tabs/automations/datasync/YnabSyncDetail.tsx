@@ -128,7 +128,9 @@ export function YnabSyncDetail({
   const next = !on
     ? 'Off'
     : status.running
-      ? 'Syncing now…'
+      ? status.step
+        ? `Syncing now: ${status.step}…`
+        : 'Syncing now…'
       : paused
         ? `Waiting: the ${app.name} connection is paused.`
         : status.interval === 'manual'

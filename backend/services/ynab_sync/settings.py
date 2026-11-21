@@ -11,7 +11,7 @@ from backend.core.errors import ConflictError, ValidationError
 from backend.services import import_runs
 from backend.services import ledger as ledger_service
 from backend.services.budget_app import current, refuse_beside_others, starting
-from backend.services.ynab_sync import conflicts
+from backend.services.ynab_sync import conflicts, recorder
 from backend.services.ynab_sync import state as sync_state
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,8 @@ def status() -> dict:
         "plan_id": st["plan_id"],
         "plan_name": st["plan_name"],
         "running": app.lock.locked(),
+        # The step it is on, with a count on a long one; None when nothing runs.
+        "step": recorder.step_of(app.key) if app.lock.locked() else None,
         "run_id": manual_runs.get(app.key),
         "last_run": st["last_run"],
         "next_run_at": st["next_run_at"] if st["enabled"] else None,

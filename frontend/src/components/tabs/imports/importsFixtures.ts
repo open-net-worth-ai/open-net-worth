@@ -204,6 +204,7 @@ export function syncStatus(over: Record<string, unknown> = {}) {
     plan_id: 'p1',
     plan_name: 'Household',
     running: false,
+    step: null as string | null,
     run_id: null,
     last_run: {
       trigger: 'scheduled',

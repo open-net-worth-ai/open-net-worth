@@ -223,7 +223,9 @@ Once it's set up, **Automations → Data Sync → Actual** has the switch and **
 then **Needs your review**, **Worth checking** (only when there's something to say), **Direction**,
 **Schedule**, the budget, how it decides, and a history of its runs. The history leaves out previews
 that went fine, since each re-check of the review would add one; a failed preview stays. It reads the
-same as YNAB's page. **Actual connection…** in the menu opens the connector's form.
+same as YNAB's page. **Actual connection…** in the menu opens the connector's form. While a sync
+runs, the top of the page says the step it's on, and on a long one how far it has got, for example
+"Syncing now: sending transactions to Actual: 400 of 9,000".
 
 **Undoing a sync here.** **Undo the sync from …** on the sync page puts back what the last sync
 that changed this book did to its transactions: a row it added is removed, a row it changed gets
@@ -276,6 +278,14 @@ moved. That narrows the gap to milliseconds, plus the time a request takes to re
 can't close it, because an Actual server has no way to refuse a write over a newer one: if your edit
 lands inside that gap, on a field the sync is writing, the sync's value wins and nothing is filed. A
 device whose clock runs more than ten minutes behind can lose the same way.
+
+**Devices that were offline.** Actual's apps keep working without a connection and send their
+edits to the server when they're back. The sync sees those edits on its first run after they reach
+the server, and treats them like any other change made in Actual. Actual keeps the latest edit of each
+field, by when it was made. So if a phone edits a row's category offline, and before it reconnects the
+sync changes that same category, the sync's later edit wins and the phone's is lost.
+Two Actual devices behave the same way with each other. Different fields don't clash: the
+phone's note and the sync's category both stand.
 
 **What differs from YNAB's sync:**
 
