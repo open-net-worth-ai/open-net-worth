@@ -27,7 +27,9 @@ class GetSpendingBreakdownInput(ToolInput):
         description=(
             "How the window is compared. Omit to infer: a window of exactly one calendar "
             "month is 'month', a 7-day window is 'week', anything else is a generic "
-            "N-day window compared against N-day periods."
+            "N-day window compared against N-day periods. 'month' also accepts month-to-date "
+            "(the 1st through a day of that month), compared with the same days of earlier "
+            "months."
         ),
     )
     baseline_periods: Optional[int] = Field(

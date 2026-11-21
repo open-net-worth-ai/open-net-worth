@@ -319,7 +319,9 @@ def _day_to_day_section(
 # ── entry point ───────────────────────────────────────────────────────────────────
 
 
-def _usual_section(baseline: list[tuple[date, date]], book: _Book, requested: int, kind: str):
+def _usual_section(
+    baseline: list[tuple[date, date]], book: _Book, requested: int, kind: str, through_day=None
+):
     """The mean-per-period figures over the baseline windows, plus the rows they came from."""
     rows = [r for w in baseline for r in book.window(*w)]
     n = len(baseline)
@@ -332,7 +334,7 @@ def _usual_section(baseline: list[tuple[date, date]], book: _Book, requested: in
         "from": baseline[0][0].isoformat() if baseline else None,
         "to": baseline[-1][1].isoformat() if baseline else None,
         **_money(per_period),
-        "basis": periods.basis(kind, n),
+        "basis": periods.basis(kind, n, through_day),
     }
     return section, per_period, _cat_amounts(rows)
 
@@ -410,7 +412,9 @@ def spending_breakdown(
         for w in (periods.shift(start, end, kind, k) for k in range(requested, 0, -1))
         if first_spend and w[1].isoformat() >= first_spend
     ]
-    usual_section, usual, usual_by_cat = _usual_section(baseline, book, requested, kind)
+    usual_section, usual, usual_by_cat = _usual_section(
+        baseline, book, requested, kind, end.day if periods.is_month_to_date(start, end) else None
+    )
     # A week is compared with the SAME week last month — the Monday-to-Sunday four weeks
     # back, so weekdays line up (owner, 2026-10-05). A month's "last month" is `prior`.
     ma_win = periods.shift(start, end, kind, 4) if kind == "week" else None

@@ -284,3 +284,27 @@ async def test_names_is_bounded_and_deduped():
 
     flood = await _find(names=[f"made_up_{i}" for i in range(50)])
     assert len(flood.get("unknown", [])) <= 20
+
+
+@pytest.mark.parametrize(
+    "name,args",
+    [
+        ("email_search_messages", {"since": "2026-11-01"}),
+        ("email_get_messages", {"message_ids": ["m1"]}),
+        ("ynab_fetch_transactions", {}),
+    ],
+)
+def test_a_read_shaped_fetch_executes_like_a_read(name, args):
+    """These carry ``mutates=`` (they stash their own evidence snapshot) but the confirm gate
+    already treats them as reads; the discovery gate bounced every one, valid args or not."""
+    from backend.services.tool_permissions import GATE_EXEMPT_READ_SHAPED
+
+    assert name in GATE_EXEMPT_READ_SHAPED and mutated_domains(name)
+    execute, outcome, _problem, _valid = _discovery_gate_verdict(name, args)
+    assert (execute, outcome) == (True, "executed")
+
+
+def test_read_shaped_exemption_never_overrides_the_never_auto_execute_list():
+    from backend.services.tool_permissions import GATE_EXEMPT_READ_SHAPED
+
+    assert not (GATE_EXEMPT_READ_SHAPED & _GATE_NEVER_AUTO_EXECUTE)

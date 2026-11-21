@@ -79,6 +79,8 @@ def test_forced_false_suppresses_detection():
         ('{"error": "boom"}', "boom"),
         ('{"ok": false, "error": "handler said no"}', "handler said no"),
         ('{"ok": true}', None),
+        ('{"status": "ok", "error": null, "accounts": []}', None),
+        ('{"error": ""}', None),
         ("not json", None),
         ("[1, 2, 3]", None),
         ('"just a string"', None),
@@ -327,3 +329,10 @@ def test_unknown_account_error_lists_real_account_names(isolated_ledger):
     assert "does not exist" in msg
     assert "Meridian Savings" in msg
     assert "list_accounts" in msg
+
+
+def test_an_empty_error_slot_is_not_a_failure_in_telemetry_either():
+    from backend.ai.tools.call_log import classify_error
+
+    assert classify_error('{"status": "ok", "error": null, "accounts": []}') is None
+    assert classify_error('{"error": "boom"}') == "tool_error"

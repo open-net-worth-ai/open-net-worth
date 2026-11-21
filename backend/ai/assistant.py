@@ -51,6 +51,7 @@ from backend.core.untrusted import (
     make_fence_nonce,
     sanitize_untrusted,
 )
+from backend.services.tool_permissions import GATE_EXEMPT_READ_SHAPED
 
 
 class SkillInvocationRevoked(Exception):
@@ -271,7 +272,12 @@ def _discovery_gate_verdict(
     problem = validation_error(name, args)
     # A REST connector's send tool is named at runtime, so it cannot be in the set: a guessed
     # path or body is a different request, sent for real.
-    if mutated_domains(name) or name in _GATE_NEVER_AUTO_EXECUTE or is_rest_send(name):
+    # A read-SHAPED tool (`GATE_EXEMPT_READ_SHAPED`: an inbox or bank fetch that only stashes
+    # its own evidence snapshot) is a read for the confirm gate, so it is one here too —
+    # bouncing it cost a wasted round trip on every Automation that fetched mail or a bank
+    # (2026-11-21: 33 bounces, every one with valid arguments).
+    writes = bool(mutated_domains(name)) and name not in GATE_EXEMPT_READ_SHAPED
+    if writes or name in _GATE_NEVER_AUTO_EXECUTE or is_rest_send(name):
         # Validated anyway (cheap) so the telemetry can answer "how many bounces would the
         # write-conservatism have saved?" — the number that would justify revisiting it.
         return False, "bounced_write", problem, problem is None
@@ -1744,7 +1750,10 @@ def _tool_error_message(text: str) -> Optional[str]:
         parsed = json.loads(text)
     except Exception:
         return None
-    if isinstance(parsed, dict) and "error" in parsed:
+    # A result that REPORTS an error slot it left empty (`"error": null` beside
+    # `"status": "ok"` — the aggregator fetches) succeeded; flagging it is_error told the model
+    # every good YNAB/Plaid fetch had failed (2026-11-21).
+    if isinstance(parsed, dict) and parsed.get("error") not in (None, "", False):
         return str(parsed["error"])
     return None
 

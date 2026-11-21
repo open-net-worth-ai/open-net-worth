@@ -823,3 +823,27 @@ def test_a_breakdown_with_no_dates_says_what_to_send():
     assert json.loads(text) == {"error": "date_from required: ISO dates (YYYY-MM-DD)."}
     text, _ = asyncio.run(handler({}))
     assert "date_from and date_to required" in json.loads(text)["error"]
+
+
+def test_month_to_date_with_period_month_compares_the_same_days(book):
+    # Models ask for "this month" as the 1st..today with period='month'; that used to be
+    # refused outright (2026-11-21). Fixed dates in a past month keep this deterministic.
+    y, m = recurring._add_months(TODAY.year, TODAY.month, -2)
+    start, end = date(y, m, 1), date(y, m, 21)
+    py, pm = recurring._add_months(y, m, -1)
+    _spend(book, date(y, m, 5), 80.0, "Kopi Corner", "food")
+    _spend(book, date(py, pm, 10), 50.0, "Kopi Corner", "food")
+    _spend(book, date(py, pm, 25), 999.0, "Late Shop", "food")  # after day 21 — not compared
+
+    out = _breakdown(date_from=start.isoformat(), date_to=end.isoformat(), period="month")
+
+    assert out["window"]["period"] == "month"
+    assert out["prior"]["from"] == date(py, pm, 1).isoformat()
+    assert out["prior"]["to"] == date(py, pm, 21).isoformat()
+    assert out["prior"]["total"] == 50.0
+    assert out["usual"]["basis"].startswith("mean of days 1-21 of the ")
+
+
+def test_period_month_still_refuses_a_window_not_starting_on_the_first(book):
+    with pytest.raises(ValidationError, match="month-to-date"):
+        _breakdown(date_from="2026-10-05", date_to="2026-10-20", period="month")

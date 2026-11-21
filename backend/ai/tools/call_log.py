@@ -250,9 +250,9 @@ def classify_error(text: str) -> Optional[str]:
         if not text or not text.lstrip().startswith("{"):
             return None
         parsed = json.loads(text)
-        if not isinstance(parsed, dict) or "error" not in parsed:
+        if not isinstance(parsed, dict) or parsed.get("error") in (None, "", False):
             return None
-        message = str(parsed.get("error") or "")
+        message = str(parsed["error"])
         if message.startswith("unknown tool:"):
             return "unknown_tool"
         if message.startswith("invalid arguments for "):
