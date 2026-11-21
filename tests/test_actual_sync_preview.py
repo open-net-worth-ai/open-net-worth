@@ -115,3 +115,12 @@ def test_a_preview_says_a_fold_hides_the_category_in_actual(world):
     seen = actual_app.sync_preview()["categories"]
     assert seen["samples"].get("hide_there") == ["Fun"]
     assert world.row("categories", "c-fun")["hidden"] == 0
+
+
+def test_the_status_shows_ready_to_assign_beside_actuals_to_budget(world):
+    enable()
+    sync()
+    figures = actual_app.sync_status()["to_budget"]
+    assert figures is not None
+    assert figures["difference"] == round(figures["here"] - figures["theirs"], 2)
+    assert figures["card_payment_envelopes"] >= 0

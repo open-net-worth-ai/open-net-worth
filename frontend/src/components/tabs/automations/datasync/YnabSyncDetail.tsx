@@ -6,6 +6,7 @@ import { fDate, fScheduleWhen, timeAgo } from '../../../../utils/format'
 import { Button, ErrorState, Switch, TabSkeleton } from '../../../ui'
 import { BulkReview } from '../../imports/BulkReview'
 import { RestorePoints } from './RestorePoints'
+import { ToBudgetCompare } from './ToBudgetCompare'
 import { SyncPreviewPanel, usePreview } from './SyncPreview'
 import { ReviewCard } from '../../imports/ReviewItem'
 import { RunReportModal } from '../../imports/RunReport'
@@ -269,6 +270,7 @@ export function YnabSyncDetail({
                 onImported={sync.refresh}
               />
             )}
+            <ToBudgetCompare app={app} figures={status.to_budget} />
             <RestorePoints
               app={app}
               points={status.restore_points ?? []}

@@ -176,8 +176,11 @@ you always see them. **Show more notes** opens the rest.
 
 These never stop an import. The review says each one, and the run's log says it again.
 
-- **Ready to Assign won't match To Budget.** The two are worked out differently, so it isn't
-  compared.
+- **Ready to Assign won't match To Budget.** The two are worked out differently. Once the sync
+  is on, its page shows both side by side for this month: Actual's To Budget worked out here the
+  way Actual's own engine does (checked against it), Ready to Assign, the gap, and the part of it
+  held in card payment envelopes, which Actual has no place for. The rest comes from how each
+  treats overspending and spending with no category.
 - **Carryover.** A category with carryover on keeps its overspending in Actual. Here that clears
   at the end of the month and comes out of the next month's Ready to Assign. The review names each
   category this affects, and its check reads as a known difference.
