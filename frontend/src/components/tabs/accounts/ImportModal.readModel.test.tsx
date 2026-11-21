@@ -70,7 +70,10 @@ async function readWith(pick: boolean, effort?: string) {
   // Names the saved pin as the default, not the instance default.
   expect(picker.getAttribute('data-default')).toBe('anthropic:pinned')
   if (pick) fireEvent.click(picker)
-  if (effort) fireEvent.change(screen.getByLabelText('Effort'), { target: { value: effort } })
+  if (effort) {
+    fireEvent.click(screen.getByRole('button', { name: /Effort/ }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: effort }))
+  }
   fireEvent.click(await screen.findByText(/Read the statement/i))
   await waitFor(() => expect(onPreview).toHaveBeenCalled())
   return onPreview.mock.calls[0]
@@ -89,7 +92,7 @@ describe('ImportModal — the model that reads this statement', () => {
   })
 
   it('sends the picked effort with the read', async () => {
-    const args = await readWith(true, 'high')
+    const args = await readWith(true, 'High')
     expect(args?.[10]).toBe('anthropic:picked')
     expect(args?.[11]).toBe('high')
   })

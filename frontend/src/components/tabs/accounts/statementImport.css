@@ -521,34 +521,36 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 .imp3-read-model {
   min-width: 0;
 }
-/* The effort chip: the model chip's own trigger look, with a transparent native <select>
-   stretched over it as the menu — so the two read as one pair of equal controls. */
+/* Sized as this screen's form controls (the notes box, the file card), not the chat toolbar's
+   compact chip: ~36px tall, 13px text (owner, 2026-11-21 — "too small compared to others"). */
+.imp3-read-ctl .mp-trigger {
+  min-height: 36px;
+  padding: 7px 12px;
+  gap: 8px;
+  font-size: 13px;
+  background: var(--bg-2);
+  border-color: var(--line-strong);
+  border-radius: var(--radius-lg);
+}
+.imp3-read-ctl .mp-trigger-prov {
+  font-size: 12px;
+}
+/* The effort chip: the model chip's own trigger look; ActionMenu (the design-system menu)
+   opens beneath it. A tick marks the current tier; the others keep its space so labels align. */
+.imp3-effort-menu {
+  display: inline-flex;
+}
 .imp3-effort-chip {
-  position: relative;
-  flex: none;
-  color: var(--ink);
+  min-width: 120px;
 }
 .imp3-effort-k {
   color: var(--faint);
 }
-.imp3-effort-chip.is-disabled {
-  color: var(--faint);
-  cursor: not-allowed;
+.imp3-effort-tick {
+  visibility: hidden;
 }
-.imp3-effort-select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-  font: inherit;
-}
-.imp3-effort-select:disabled {
-  cursor: not-allowed;
-}
-.imp3-effort-chip:focus-within {
-  border-color: var(--line-strong);
+.imp3-effort-tick.is-on {
+  visibility: visible;
 }
 .imp3-cfg-note textarea {
   width: 100%;

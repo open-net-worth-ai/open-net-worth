@@ -4,7 +4,15 @@
 import { LuciusMark } from '../../../ui/LuciusMark'
 import { Fragment, useState, useRef, useMemo, useEffect, useLayoutEffect } from 'react'
 import { authFetch } from '../../../api/client'
-import { Modal, Button, FormField, Select, EmptyState, SegmentedControl } from '../../ui'
+import {
+  Modal,
+  Button,
+  FormField,
+  Select,
+  EmptyState,
+  SegmentedControl,
+  ActionMenu,
+} from '../../ui'
 import { Spark as LuciusSpark } from '../../../lucius/identity'
 import { fCur, fromApiTxn } from './data'
 import { otherSideFlow } from './format'
@@ -23,7 +31,7 @@ import {
   type EffortChoice,
 } from '../../../hooks/useModels'
 import { ModelPicker } from '../../ui/ModelPicker'
-import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight } from '../../../ui/icons'
+import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight, Check } from '../../../ui/icons'
 import { fDate, fMonthDay } from '../../../utils/format'
 import { fetchVaultItem, type VaultItem } from '../../../api/vault'
 import { PreviewLoading } from '../../vault/PreviewLoading'
@@ -3971,7 +3979,6 @@ export function ImportModal({
                     <ModelPicker
                       className="imp3-read-model"
                       label="Model for this statement"
-                      size="sm"
                       title="The model that reads this statement — this import only"
                       models={modelInfo.models}
                       value={readModel}
@@ -3981,39 +3988,36 @@ export function ImportModal({
                       onChange={setReadModel}
                     />
                     {/* Its own control, not a pane inside the model menu: both choices stay
-                      visible at a glance (owner, 2026-11-21). Styled as the model chip; the
-                      invisible native select on top is the actual menu. */}
-                    <label
-                      className={
-                        'mp-trigger mp-trigger--sm imp3-effort-chip' +
-                        (readEffortChoices.length ? '' : ' is-disabled')
+                      visible at a glance (owner, 2026-11-21). The design system's ActionMenu
+                      (never a native select, whose menu is the OS's), with a chip trigger
+                      matching the model picker beside it. */}
+                    <ActionMenu
+                      label="Effort"
+                      className="imp3-effort-menu"
+                      triggerClassName="mp-trigger imp3-effort-chip"
+                      trigger={
+                        <>
+                          <span className="imp3-effort-k">Effort</span>
+                          <span className="mp-trigger-text">
+                            {effectiveEffort ? effortChoiceLabel(effectiveEffort) : 'Auto'}
+                          </span>
+                          <ChevronDown size={14} aria-hidden="true" />
+                        </>
                       }
-                      title={
-                        readEffortChoices.length
-                          ? 'How hard the model thinks while reading — this import only'
-                          : 'This model has no effort setting'
-                      }
-                    >
-                      <span className="imp3-effort-k">Effort</span>
-                      <span className="mp-trigger-text">
-                        {effectiveEffort ? effortChoiceLabel(effectiveEffort) : 'Auto'}
-                      </span>
-                      <ChevronDown size={12} aria-hidden="true" />
-                      <select
-                        className="imp3-effort-select"
-                        aria-label="Effort"
-                        disabled={!readEffortChoices.length}
-                        value={effectiveEffort}
-                        onChange={(e) => setReadEffort(e.target.value as EffortChoice | '')}
-                      >
-                        <option value="">Auto — each step picks its own</option>
-                        {readEffortChoices.map((lvl) => (
-                          <option key={lvl} value={lvl}>
-                            {effortChoiceLabel(lvl)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                      items={(['', ...readEffortChoices] as (EffortChoice | '')[]).map((lvl) => ({
+                        label: lvl ? effortChoiceLabel(lvl) : 'Auto — each step picks its own',
+                        icon: (
+                          <Check
+                            size={14}
+                            aria-hidden="true"
+                            className={
+                              'imp3-effort-tick' + (lvl === effectiveEffort ? ' is-on' : '')
+                            }
+                          />
+                        ),
+                        onSelect: () => setReadEffort(lvl),
+                      }))}
+                    />
                   </div>
                 </div>
               </div>
