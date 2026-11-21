@@ -63,6 +63,8 @@ export interface SyncStatus {
   plan_id: string | null
   plan_name: string | null
   running: boolean
+  /** The step a sync in progress is on, with a count on a long one. */
+  step?: string | null
   run_id: string | null
   last_run: LastRun | null
   next_run_at: string | null

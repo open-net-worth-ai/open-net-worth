@@ -265,3 +265,14 @@ def actual_budget_sync_run():
 @router.post("/api/actual-budget/sync/conflicts/{conflict_id}/resolve")
 def actual_budget_sync_resolve(conflict_id: str, body: SyncResolution):
     return _sync(actual_app.resolve_sync_item, conflict_id, body.keep, body.choice)
+
+
+class SyncResolutions(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=5000)
+    keep: str  # "onw" | "ynab"
+
+
+@router.post("/api/actual-budget/sync/conflicts/resolve")
+def actual_budget_sync_resolve_many(body: SyncResolutions):
+    """One answer for many transactions both sides changed, in one session with the server."""
+    return _sync(actual_app.resolve_sync_items, body.ids, body.keep)

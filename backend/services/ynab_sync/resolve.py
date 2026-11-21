@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from backend.core import audit_context, data_events
-from backend.core.errors import ConflictError, NotFoundError, ValidationError
+from backend.core.errors import ConflictError, NotFoundError, OpenNetWorthError, ValidationError
 from backend.services import import_runs, planning
 from backend.services import ledger as ledger_service
 from backend.services.budget_app import current, refuse_while_others_run, starting
@@ -33,14 +33,49 @@ from backend.services.ynab_sync.units import Unit
 
 
 def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
-    app = current()
-    if keep not in ("onw", "ynab"):
-        raise ValidationError("keep must be 'onw' or 'ynab'")
-    if not sync_state.load()["plan_id"]:
-        raise ValidationError(f"choose the {app.name} {app.plan_word} to sync first")
+    _check(keep)
     item = conflicts.get(conflict_id)
     if item is None:
         raise NotFoundError("That review item is already resolved.")
+    _resolving([item], keep, choice, together=False)
+    return runner.status()
+
+
+def answerable_together(item: dict) -> bool:
+    """A transaction both sides changed. Anything else asks its own question, and a write the app
+    refused needs its own look."""
+    return item.get("entity", "txn") == "txn" and item["kind"] == conflicts.CONFLICT
+
+
+def resolve_many(conflict_ids: list[str], keep: str) -> dict:
+    """One answer for many review items, in ONE session with the app: one sign-in, one restore
+    point before it writes, one run record. Answering them one by one opened the budget for each,
+    and an app that keeps a restore point per write lost the one from before them.
+    ``{"resolved", "failed": [{"title", "reason"}], "status"}``: an item that fails stays in the
+    review list and the rest go on."""
+    _check(keep)
+    items = [i for i in (conflicts.get(c) for c in dict.fromkeys(conflict_ids)) if i]
+    if not items:
+        raise NotFoundError("Those review items are already resolved.")
+    if not all(answerable_together(i) for i in items):
+        raise ValidationError(
+            "Only transactions changed on both sides can be answered together; "
+            "answer the others one at a time."
+        )
+    failed = _resolving(items, keep, None, together=True)
+    return {"resolved": len(items) - len(failed), "failed": failed, "status": runner.status()}
+
+
+def _check(keep: str) -> None:
+    if keep not in ("onw", "ynab"):
+        raise ValidationError("keep must be 'onw' or 'ynab'")
+    if not sync_state.load()["plan_id"]:
+        app = current()
+        raise ValidationError(f"choose the {app.name} {app.plan_word} to sync first")
+
+
+def _claim() -> None:
+    app = current()
     if not app.lock.acquire(blocking=False):
         raise ConflictError(
             f"{app.article} {app.name} sync is running; resolve this when it finishes."
@@ -56,11 +91,19 @@ def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
     except ConflictError:
         app.lock.release()
         raise
+
+
+def _resolving(items: list[dict], keep: str, choice: str | None, together: bool) -> list[dict]:
+    """Apply ``keep`` to each item in one session. Alone, a failure is raised as it is; together,
+    it is returned (``title``, ``reason``) and the next item goes on."""
+    app = current()
+    _claim()
     token = audit_context.set_audit_scope("user", app.surface, note="review list")
     rec = recorder.Recorder()
     rec_token = recorder.activate(rec)
     started = datetime.now(timezone.utc)
-    budget = Budget(app.caps.resolve_request_cap)
+    budget = Budget(app.caps.resolve_request_cap * (len(items) if together else 1))
+    failed: list[dict] = []
     try:
         st = sync_state.load()
         meta, mirror_store = sync_state.load_meta(), app.stores.mirror()
@@ -68,31 +111,60 @@ def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
         loaded = dict(mirror)
         base = Baselines(st["plan_id"])
         ctx = context.build(st, meta, mirror, base.assigned, base.cats, base.declined)
-        with app.open_client(st["plan_id"], budget) as client:
-            if item["entity"] == "start":
-                starts.resolve(item, keep)
-            elif item["entity"] == "opening":
-                openings.resolve(item, keep, ctx, client, st["direction"])
-            elif item["entity"] in ("category", "group", "new_category", "budget"):
-                category_resolve.apply(item, keep, choice, st, meta, base, client)
-            elif _held_side(st["direction"], keep):
-                _accept(ctx, item, keep, base, st)
-            elif item["entity"] == "assigned":
-                _assigned(item, keep, client, base, meta)
-            else:
-                _transaction(ctx, item, keep, client, base)
+
+        answered: list[str] = []
+
+        def save() -> None:
             base.flush()
             delta.save_changes(mirror_store, loaded, mirror, set(), False)
             sync_state.save_meta(meta)
-            conflicts.close(item["key"])
+            for key in answered:  # closed once what answers it is saved
+                conflicts.close(key)
+
+        with app.open_client(st["plan_id"], budget) as client:
+            try:
+                for n, item in enumerate(items, 1):
+                    if together:
+                        recorder.progress("answering the review list", n, len(items))
+                    try:
+                        _one(ctx, item, keep, choice, st, meta, base, client)
+                    except OpenNetWorthError as exc:
+                        if not together:
+                            raise
+                        failed.append({"title": item.get("title") or "", "reason": exc.message})
+                        continue
+                    answered.append(item["key"])
+            except BaseException:
+                if together:  # what was answered before the session stopped stays answered
+                    save()
+                raise
+            save()
     finally:
         recorder.deactivate(rec_token)
+        recorder.finished()
         audit_context.clear_audit_scope(token)
         app.lock.release()
     if rec.sent_to_ynab():
-        runner.store_record(st, rec, "manual", started, None, "Resolved a review item", budget.used)
+        done = len(items) - len(failed)
+        summary = f"Resolved {done} review items together" if together else "Resolved a review item"
+        runner.store_record(st, rec, "manual", started, None, summary, budget.used)
     data_events.publish(["*"])
-    return runner.status()
+    return failed
+
+
+def _one(ctx, item: dict, keep: str, choice, st: dict, meta: dict, base, client) -> None:
+    if item["entity"] == "start":
+        starts.resolve(item, keep)
+    elif item["entity"] == "opening":
+        openings.resolve(item, keep, ctx, client, st["direction"])
+    elif item["entity"] in ("category", "group", "new_category", "budget"):
+        category_resolve.apply(item, keep, choice, st, meta, base, client)
+    elif _held_side(st["direction"], keep):
+        _accept(ctx, item, keep, base, st)
+    elif item["entity"] == "assigned":
+        _assigned(item, keep, client, base, meta)
+    else:
+        _transaction(ctx, item, keep, client, base)
 
 
 def _held_side(direction: str, keep: str) -> bool:

@@ -79,18 +79,18 @@ async function readWith(pick: boolean, effort?: string) {
 describe('ImportModal — the model that reads this statement', () => {
   it('sends no model when untouched (the saved pin reads it)', async () => {
     const args = await readWith(false)
-    expect(args[10]).toBeUndefined()
-    expect(args[11]).toBeUndefined() // Auto: each step keeps its own effort
+    expect(args?.[10]).toBeUndefined()
+    expect(args?.[11]).toBeUndefined() // Auto: each step keeps its own effort
   })
 
   it('sends the picked model with the read', async () => {
     const args = await readWith(true)
-    expect(args[10]).toBe('anthropic:picked')
+    expect(args?.[10]).toBe('anthropic:picked')
   })
 
   it('sends the picked effort with the read', async () => {
     const args = await readWith(true, 'high')
-    expect(args[10]).toBe('anthropic:picked')
-    expect(args[11]).toBe('high')
+    expect(args?.[10]).toBe('anthropic:picked')
+    expect(args?.[11]).toBe('high')
   })
 })

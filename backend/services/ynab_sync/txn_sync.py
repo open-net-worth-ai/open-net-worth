@@ -238,7 +238,8 @@ def settle(
     built = units.build(ctx, rows, bases, index, change.touched, gone)
     all_units = _hold_removals(ctx, built, open_items, direction, switched)
     todo: list[Unit] = []
-    for u in all_units:
+    for n, u in enumerate(all_units, 1):
+        recorder.progress("comparing transactions", n, len(all_units))
         _close_if_it_flipped(u, open_items)
         if u.missing:
             reason = _missing_reason(direction)
@@ -393,7 +394,7 @@ def _push_all(
     ctx: Context, client: YnabClient, base: Baselines, todo: list[Unit], tally: Counter
 ) -> list[str]:
     out = push.Outcome()
-    out.on_sent = lambda unit: _recorded(ctx, unit, out, base)
+    out.on_sent = lambda unit: _recorded(ctx, unit, out, base, len(todo))
     creates = [u for u in todo if not u.refs and u.onw]
     deletes = [u for u in todo if u.refs and u.onw is None]
     updates = [u for u in todo if u.refs and u.onw]
@@ -423,10 +424,11 @@ def _push_all(
     return [u.onw_id for u in out.deferred if u.onw_id]
 
 
-def _recorded(ctx: Context, unit: Unit, out: push.Outcome, base: Baselines) -> None:
+def _recorded(ctx: Context, unit: Unit, out: push.Outcome, base: Baselines, total: int = 0) -> None:
     """Link and baseline one confirmed unit now. If the ledger refuses the link, YNAB still holds
     the row: file it, and the unowned row is claimed by the ledger row on the next read."""
     recorder.txn_change("sent", ctx, unit.onw_id, unit.base, unit.onw)
+    recorder.progress(f"sending transactions to {current().name}", len(out.sent), total)
     try:
         _record_sent(unit, out, base)
     except OpenNetWorthError as exc:

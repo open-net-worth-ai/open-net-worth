@@ -32,7 +32,7 @@ import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.db.ynab_config_store import YnabConfigStore
@@ -245,3 +245,14 @@ async def ynab_sync_preview():
 @router.post("/api/ynab/sync/conflicts/{conflict_id}/resolve")
 def ynab_sync_resolve(conflict_id: str, body: SyncResolution):
     return _sync(ynab_sync.resolve_item, conflict_id, body.keep, body.choice)
+
+
+class SyncResolutions(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=5000)
+    keep: str  # "onw" | "ynab"
+
+
+@router.post("/api/ynab/sync/conflicts/resolve")
+def ynab_sync_resolve_many(body: SyncResolutions):
+    """One answer for many transactions both sides changed: ``{resolved, failed, status}``."""
+    return _sync(ynab_sync.resolve_items, body.ids, body.keep)
