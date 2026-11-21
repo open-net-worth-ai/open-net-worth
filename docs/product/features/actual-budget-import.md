@@ -257,7 +257,9 @@ Assigned set to 0. Nothing is written on either side, and nothing is filed.
 
 **Many answers at once.** With two or more transactions in **Needs your review**, **Keep all Open
 Net Worth's** and **Keep all Actual's** answer them together, after asking once more how many rows
-change and where. Categories, groups and Starting Balances still ask one at a time.
+change and where. They're answered in one go with Actual, so there's one restore point from before
+all of them, not one per row. Any that can't be answered stay in the list, and the page names
+them; the rest go through. Categories, groups and Starting Balances still ask one at a time.
 
 **Which way changes go.** You choose a direction at import or later:
 

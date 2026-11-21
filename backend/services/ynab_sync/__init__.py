@@ -21,6 +21,7 @@ start_now = ynab_flag.gated(runner.start_now)
 status = ynab_flag.gated(runner.status)
 update_settings = ynab_flag.gated(runner.update_settings)
 resolve_item = ynab_flag.gated(resolve.resolve)
+resolve_items = ynab_flag.gated(resolve.resolve_many)
 preview_next = ynab_flag.gated(_dry_run)
 
 
@@ -62,6 +63,7 @@ __all__ = [
     "preview_next",
     "resolve",
     "resolve_item",
+    "resolve_items",
     "run_if_due",
     "start_now",
     "status",

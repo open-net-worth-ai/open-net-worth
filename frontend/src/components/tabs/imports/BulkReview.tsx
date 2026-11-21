@@ -15,6 +15,17 @@ export function bulkItems(items: ReviewItem[]) {
 
 type Keep = 'onw' | 'ynab'
 
+/** What answering many at once returns: the ones that couldn't be answered stay in the list. */
+export type KeptAll = { resolved: number; failed: { title: string; reason: string }[] }
+
+/** The line naming what wasn't answered, or null when all were. */
+export function notAnswered(failed: KeptAll['failed']): string | null {
+  if (!failed.length) return null
+  const [first] = failed
+  const rest = failed.length - 1
+  return `${failed.length} ${failed.length === 1 ? 'transaction' : 'transactions'} stayed in the review list. ${first!.title || 'One'}: ${first!.reason}${rest ? ` (and ${rest} more)` : ''}`
+}
+
 export function BulkReview(props: {
   app: BudgetAppInfo
   items: ReviewItem[]

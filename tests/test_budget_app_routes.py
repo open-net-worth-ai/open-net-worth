@@ -15,7 +15,12 @@ APPS_FILE = FRONTEND / "components/tabs/automations/datasync/budgetApps.ts"
 _SUFFIX = re.compile(r"\$\{(?:app|[A-Z_]+_APP)\.apiPrefix\}(/[^`?$\s]*)")
 _PREFIX = re.compile(r"apiPrefix: `\$\{API\}(/[a-z-]+)`")
 # ``sendSync`` adds these to `${app.apiPrefix}/sync`, in the same words YNAB's page always used.
-_SYNC_PATHS = ("/sync/settings", "/sync/run", "/sync/conflicts/{}/resolve")
+_SYNC_PATHS = (
+    "/sync/settings",
+    "/sync/run",
+    "/sync/conflicts/{}/resolve",
+    "/sync/conflicts/resolve",
+)
 
 
 def _prefixes() -> list[str]:

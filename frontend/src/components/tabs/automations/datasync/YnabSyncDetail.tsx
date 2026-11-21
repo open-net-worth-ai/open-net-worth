@@ -4,7 +4,7 @@ import { authFetch } from '../../../../api/client'
 import { invalidateQueryCache } from '../../../../state/queryCache'
 import { fDate, fScheduleWhen, timeAgo } from '../../../../utils/format'
 import { Button, ErrorState, Switch, TabSkeleton } from '../../../ui'
-import { BulkReview } from '../../imports/BulkReview'
+import { BulkReview, notAnswered, type KeptAll } from '../../imports/BulkReview'
 import { RestorePoints } from './RestorePoints'
 import { ToBudgetCompare } from './ToBudgetCompare'
 import { UndoLastSync } from './UndoLastSync'
@@ -51,18 +51,26 @@ export function YnabSyncDetail({
     setBusy(null)
   }
 
-  // One at a time, through the same route a card uses: the server holds one lock per app, and the
-  // first refusal stops the rest so the person sees why.
+  // All in one request: the server answers them in one session with the app (one restore point
+  // before it writes), and names any it couldn't answer, which stay in the list.
   async function keepAll(keep: 'onw' | 'ynab', ids: string[]) {
     setBusy('bulk')
-    let failed: string | null = null
-    for (const id of ids) {
-      failed = await sendSync(`/conflicts/${id}/resolve`, 'POST', { keep }, app)
-      if (failed) break
+    setError(null)
+    try {
+      const r = await authFetch(`${app.apiPrefix}/sync/conflicts/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, keep }),
+      })
+      if (!r.ok) setError(await detailOf(r, 'That did not work.'))
+      else setError(notAnswered(((await r.json()) as KeptAll).failed))
+      invalidateQueryCache('/api/imports/runs')
+    } catch {
+      setError('Could not reach the server.')
+    } finally {
+      sync.refresh()
+      setBusy(null)
     }
-    setError(failed)
-    sync.refresh()
-    setBusy(null)
   }
 
   async function recheck() {
