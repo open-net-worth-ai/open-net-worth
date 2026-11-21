@@ -10,7 +10,7 @@ from backend.db.actual_budget_config_store import ActualBudgetConfigStore
 from backend.services.actual_sync import client
 from backend.services.actual_sync.client import open_copy, sweep_leftovers
 
-__all__ = ["list_budgets", "open_copy", "resolve_budget", "sweep_leftovers"]
+__all__ = ["check_connection", "list_budgets", "open_copy", "resolve_budget", "sweep_leftovers"]
 
 
 def list_budgets(store: ActualBudgetConfigStore | None = None) -> list[dict]:
@@ -41,3 +41,32 @@ def resolve_budget(budget_id: str, store: ActualBudgetConfigStore | None = None)
             f"That budget wasn't found on this Actual server. Available: {available}"
         )
     return {**found, "currency": _currency_of(found["id"], store)}
+
+
+def check_connection(store: ActualBudgetConfigStore | None = None) -> dict:
+    """``{"ok", "text"}``: whether the saved address and sign-in reach Actual, and if not, which
+    step stopped it (the proxy, the certificate, the sign-in, the address), in the client's own
+    plain words. Then whether the chosen budget is there, and opens."""
+    from backend.core.errors import OpenNetWorthError
+
+    store = store or ActualBudgetConfigStore()
+    try:
+        budgets = client.list_budgets(store)
+    except OpenNetWorthError as exc:
+        return {"ok": False, "text": exc.message or "Actual couldn't be reached."}
+    chosen = store.budget_id()
+    count = f"{len(budgets)} budget{'' if len(budgets) == 1 else 's'}"
+    if not chosen:
+        return {"ok": True, "text": f"Connected: Actual answered and lists {count}."}
+    found = next((b for b in budgets if b["id"] == chosen), None)
+    if found is None:
+        return {
+            "ok": False,
+            "text": f"Connected, but the chosen budget isn't among the {count} on this server.",
+        }
+    try:
+        with client.open_copy(store, chosen):
+            pass
+    except OpenNetWorthError as exc:
+        return {"ok": False, "text": f"Connected, but {found['name']} didn't open: {exc.message}"}
+    return {"ok": True, "text": f"Connected: {found['name']} downloads and opens."}

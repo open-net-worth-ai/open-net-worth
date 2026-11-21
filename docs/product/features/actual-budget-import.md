@@ -37,9 +37,13 @@ Open **Automations → Data Sync → Actual** and click **Connect Actual…**. I
 - **Sign in with** is a password or a token, whichever your server takes. Typing a new one replaces
   the other. A new server address asks for it again, so a mistyped address is never sent your saved
   password. That covers the host, the port, and a change between http and https.
-- **Budget** appears once an address and sign-in are saved. There's no test button: if the sign-in is
-  wrong, this is where it says so, and the connector shows **Auth error** until a read works again.
-  The budget you pick here is the one the import starts from.
+- **Budget** appears once an address and sign-in are saved. If the sign-in is wrong, this is where it
+  says so, and the connector shows **Auth error** until a read works again. The budget you pick here
+  is the one the import starts from.
+- **Test connection** tries what is saved, end to end: the address, a sign-in proxy, the
+  certificate, the sign-in, then the chosen budget downloading and opening. It says the step that
+  stopped it, such as a proxy wanting its own sign-in, a certificate this computer doesn't trust, or
+  a wrong password. Save first: it doesn't test what you've typed but not saved.
 - **Encryption password** is only for a budget with end-to-end encryption on in Actual. An encrypted
   budget says `(encrypted)` in the list, and **Save** waits until it has its password.
 - **Proxy headers** are only for a server behind a sign-in proxy, such as Pangolin, Authelia or
@@ -203,6 +207,20 @@ then **Needs your review**, **Worth checking** (only when there's something to s
 **Schedule**, the budget, how it decides, and a history of its runs. The history leaves out previews
 that went fine, since each re-check of the review would add one; a failed preview stays. It reads the
 same as YNAB's page. **Actual connection…** in the menu opens the connector's form.
+
+**Before the first sync that writes to Actual,** keep a copy of your budget there: in Actual,
+**Settings → Export data**. The import's backup covers this book, not your Actual budget, and a
+write to Actual can't be taken back from here.
+
+**Preview** beside **Sync now** is a dry run: it reads Actual as a sync does and decides every
+transaction and month's Assigned by the same rules, then shows what would change and where (new,
+changed or deleted, here or in Actual, what would keep both sides' changes and what would wait for
+review), with a few of the rows. Nothing is written on either side, and nothing is filed. Category
+changes aren't in it: the run's report shows those.
+
+**Many answers at once.** With two or more transactions in **Needs your review**, **Keep all Open
+Net Worth's** and **Keep all Actual's** answer them together, after asking once more how many rows
+change and where. Categories, groups and Starting Balances still ask one at a time.
 
 **Which way changes go.** You choose a direction at import or later:
 

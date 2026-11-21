@@ -16,6 +16,7 @@ import { PlanPicker } from '../imports/YnabImport'
 import { usePlans } from '../imports/plans'
 import { detailOf } from '../imports/runs'
 import { ActualCertField, certLooksRight } from './ActualCertField'
+import { ActualCheck } from './ActualCheck'
 import { ConnectorStatusLine } from './ConnectorStatusLine'
 import { useConnectorSave, useTouched } from './formSave'
 import { CONNECTORS_KEY } from './useConnectors'
@@ -379,6 +380,16 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
             Your budgets appear here once you save an address and sign-in.
           </Text>
         </FormField>
+      )}
+      {cfg.configured && !paused && (
+        <ActualCheck
+          unsaved={
+            !!(urlTyped || secret.trim() || encryption.trim() || headersTyped || cert.trim()) ||
+            clearHeaders ||
+            clearCert ||
+            !!budgetChange
+          }
+        />
       )}
 
       <FormField

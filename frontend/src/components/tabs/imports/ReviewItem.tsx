@@ -255,6 +255,9 @@ export function ReviewCard({
       <Text size="xs" tone="faint">
         {context(item.onw ?? item.ynab)}
       </Text>
+      <Text size="xs" tone="faint">
+        {`Keeping one side changes the other to match: Open Net Worth's is written to ${name}, ${name}'s is written here.`}
+      </Text>
       <Cluster gap="--space-2">
         {(item.kind !== 'unsupported' || item.ynab === null) && (
           <Button size="sm" disabled={props.busy} onClick={() => props.onKeep('onw')}>

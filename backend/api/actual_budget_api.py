@@ -69,6 +69,16 @@ def actual_budget_status():
     return ActualBudgetConfigStore().public()
 
 
+@router.post("/api/actual-budget/check")
+async def actual_budget_check():
+    """Try the saved connection end to end and say what stopped it, if anything."""
+    try:
+        ActualBudgetConfigStore().require_available()
+    except OpenNetWorthError as exc:
+        raise _refuse(exc) from exc
+    return await asyncio.to_thread(actual_sync.check_connection)
+
+
 @router.get("/api/actual-budget/budgets")
 async def actual_budget_budgets():
     try:
@@ -214,6 +224,15 @@ def _sync(call, *args) -> dict:
 def actual_budget_sync_status():
     """Schedule, last and next run, the review list and notes. Never a secret or the address."""
     return _sync(actual_app.sync_status)
+
+
+@router.post("/api/actual-budget/sync/preview")
+async def actual_budget_sync_preview():
+    """A dry run: what the next sync would send and pull. Nothing is written on either side."""
+    try:
+        return await asyncio.to_thread(actual_app.sync_preview)
+    except OpenNetWorthError as exc:
+        raise _refuse(exc) from exc
 
 
 @router.put("/api/actual-budget/sync/settings")
