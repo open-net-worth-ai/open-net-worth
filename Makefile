@@ -22,7 +22,7 @@ PRECOMMIT  := $(if $(wildcard $(VENV)/bin/pre-commit),$(VENV)/bin/pre-commit,pre
 IMPORTLINT := $(if $(wildcard $(VENV)/bin/lint-imports),$(VENV)/bin/lint-imports,lint-imports)
 
 .DEFAULT_GOAL := check
-.PHONY: release-commit check lint imports type test build format install install-hooks setup start bundle wheel seed dev serve demo demo-host demo-reset demo-rebuild demo-stop demo-layout-save demo-layout-restore qa qa-cu qa-cu-mock qa-clean qa-manual qa-manual-stop qa-fresh qa-fresh-stop qa-fresh-reset qa-ports-free ui-gate qa-e2e qa-e2e-crypto-market-data qa-e2e-setup qa-acceptance-check qa-data dedup-eval bug help db-upgrade db-revision db-check daemon-start daemon-stop daemon-status docs-site docs-site-embed docs-lint cli-smoke cli-smoke-update cli-smoke-install cli-smoke-uninstall actual-smoke memory-eval memory-eval-mock
+.PHONY: release-commit check lint imports type test build format install install-hooks setup start bundle wheel seed dev serve demo demo-host demo-reset demo-rebuild demo-stop demo-layout-save demo-layout-restore qa qa-cu qa-cu-mock qa-clean qa-manual qa-manual-stop qa-fresh qa-fresh-stop qa-fresh-reset qa-ports-free ui-gate qa-e2e qa-e2e-crypto-market-data qa-e2e-setup qa-acceptance-check qa-data dedup-eval bug help db-upgrade db-revision db-check daemon-start daemon-stop daemon-status docs-site docs-site-embed docs-lint cli-smoke cli-smoke-update cli-smoke-install cli-smoke-uninstall actual-smoke memory-eval memory-eval-mock tool-discovery-eval
 
 # QA needs a real key for any LLM-dependent spec: clone_data_for_qa deliberately strips
 # stored provider keys, so the cloned instance has none. Prefer an exported ANTHROPIC_API_KEY;
@@ -740,6 +740,17 @@ memory-eval:
 ##                   PERSONA=sloppy must FAIL the gate (it proves the scorer discriminates).
 memory-eval-mock:
 	$(PY) -m backend.evals.memory --mock --persona $(or $(PERSONA),good) --repeats $(or $(REPEATS),1)
+
+## tool-discovery-eval: OPT-IN live replay — does MODEL load a tool it needs (find_tools) or give up /
+##                      work around it? A reversed transfer + duplicate expense in a scratch book, run
+##                      with the model-family guidance off and on, scored on the resulting ledger.
+##                      SPENDS the model's quota; never part of `make check`. ADR
+##                      2026-11-21-model-family-guidance-is-chosen-by-model-name.
+##   make tool-discovery-eval MODEL=codex_cli:gpt-6-luna REPEATS=3
+TOOL_DISCOVERY_ARMS := off,on
+tool-discovery-eval:
+	$(PY) -m backend.evals.tool_discovery --model $(or $(MODEL),codex_cli:gpt-6-luna) \
+	  --arms $(or $(ARMS),$(TOOL_DISCOVERY_ARMS)) --repeats $(or $(REPEATS),1) $(if $(JSON),--json $(JSON),)
 
 ## No default path: "pre-merge" is a claim about git ancestry, not a filename you can
 ## assume — verify with `git merge-base --is-ancestor <candidate-commit> HEAD` before
