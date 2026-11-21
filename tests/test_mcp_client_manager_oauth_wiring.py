@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import urllib.error
 from email.message import Message
 
@@ -182,4 +183,61 @@ def test_discover_uses_the_refreshed_token(manager, monkeypatch):
     mgr.connect_enabled()
     # initialize + notifications/initialized + tools/list.
     assert captured["auth_headers"] == ["Bearer fresh-for-discovery"] * 3
+    assert store.find("mercury").last_status == "ok"
+
+
+def test_a_dead_refresh_is_reported_as_sign_in_even_when_the_server_answers_500(
+    manager, monkeypatch
+):
+    # A vendor that answers an expired token with HTTP 500 (seen live) must not turn a dead
+    # sign-in into "Couldn't reach": the refresh already said why, and Reconnect has to open
+    # the sign-in straight away instead of running a connection test first.
+    mgr, store = manager
+    store.record_discovery("mercury", [{"name": "list_files"}], "ok", None)
+    expired = _oauth_server(access_token="stale-access")
+    expired.oauth.expires_at = 1.0
+    store.set_oauth("mercury", expired.oauth)
+    store.record_oauth_status(
+        "mercury", "auth_error", "Connection has expired. You can reconnect to re-authenticate."
+    )
+    sent = []
+
+    def server_error(request, *a, **kw):
+        sent.append(request.full_url)
+        raise urllib.error.HTTPError(request.full_url, 500, "boom", Message(), None)
+
+    monkeypatch.setattr("backend.mcp.client._urlopen", server_error)
+    monkeypatch.setattr(
+        client_manager_mod.oauth_flow,
+        "ensure_fresh_token",
+        lambda server, **kw: store.find(server.id),
+    )
+
+    mgr.test_connect("mercury")
+
+    server = store.find("mercury")
+    assert sent == []  # nothing to learn from a call with a dead token
+    assert server.last_status == "auth_error"
+    assert server.last_error.startswith("Connection has expired")
+    assert [t["name"] for t in server.discovered_tools] == ["list_files"]
+    assert store.public_one("mercury")["oauth"]["needs_reauth"] is True
+
+
+def test_a_failed_refresh_with_a_live_token_still_tries_the_server(manager, monkeypatch):
+    # auth_error from an earlier read is not enough: while the token is still valid the
+    # server gets asked, and its answer decides the status.
+    mgr, store = manager
+    live = _oauth_server(access_token="stale-access")
+    live.oauth.expires_at = time.time() + 3600
+    store.set_oauth("mercury", live.oauth)
+    store.record_oauth_status("mercury", "auth_error", "earlier")
+    captured = {}
+    monkeypatch.setattr("backend.mcp.client._urlopen", _fake_urlopen(captured))
+    monkeypatch.setattr(
+        client_manager_mod.oauth_flow, "ensure_fresh_token", lambda server, **kw: server
+    )
+
+    mgr.test_connect("mercury")
+
+    assert captured["auth_headers"]
     assert store.find("mercury").last_status == "ok"

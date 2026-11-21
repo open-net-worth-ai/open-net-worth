@@ -197,6 +197,7 @@ def _preview(
     force_relearn: bool = False,
     password: str | None = None,
     source_attachment_id: str | None = None,
+    model: str | None = None,
 ) -> dict:
     """EVERY format previews through the ONE decision pipeline (statements/decisions.py):
     bands + weak twins + ledger check + fingerprints + a cached Statement record. A manual
@@ -208,24 +209,28 @@ def _preview(
     or ``force_reparse`` bust the cached parse. ``force_relearn`` ignores this source's
     saved tabular format profile (however it got learned) and re-infers fresh via the LLM,
     overwriting the profile in place — the escape hatch for a profile stuck with a wrong or
-    incomplete schema. ``password`` unlocks an encrypted xlsx."""
+    incomplete schema. ``password`` unlocks an encrypted xlsx. ``model`` (a "provider:model"
+    ref picked in the import popup) reads THIS file with that model instead of the saved
+    Statement import pin; a cached parse made by another model is re-read, not reused."""
     try:
         from backend.services.statements import decisions
+        from backend.services.statements.import_model import use_model
 
-        return decisions.decision_preview(
-            content,
-            fmt,
-            account_id,
-            filename=filename,
-            mime=mime,
-            mapping=mapping if fmt in ("csv", "xlsx") else None,
-            instructions=instructions,
-            remember_instructions=remember_instructions,
-            force_reparse=force_reparse,
-            force_relearn=force_relearn,
-            password=password,
-            source_attachment_id=source_attachment_id,
-        )
+        with use_model(model):
+            return decisions.decision_preview(
+                content,
+                fmt,
+                account_id,
+                filename=filename,
+                mime=mime,
+                mapping=mapping if fmt in ("csv", "xlsx") else None,
+                instructions=instructions,
+                remember_instructions=remember_instructions,
+                force_reparse=force_reparse,
+                force_relearn=force_relearn,
+                password=password,
+                source_attachment_id=source_attachment_id,
+            )
     except ImportError_ as exc:
         raise HTTPException(422, str(exc))
 
@@ -389,6 +394,7 @@ async def preview_import(
     password: Optional[str] = Form(None),
     progress_token: Optional[str] = Form(None),
     mode: str = Form("sync"),
+    model: Optional[str] = Form(None),
 ) -> dict | JSONResponse:
     """Dry-run: detect the format, parse + (for CSV) apply the mapping, and report what
     WOULD import. No write. Source is an uploaded ``file`` OR a ``source_url`` (a hosted
@@ -423,6 +429,7 @@ async def preview_import(
     ``password`` unlocks an encrypted xlsx — omitted/wrong surfaces a distinct
     ``password_required:``/``Wrong password`` 422 instead of a raw zipfile error."""
     _require_csrf(request)
+    chosen_model = _clean_model(model)
     async_mode = _clean_mode(mode) == "async"
     token = None if async_mode else _clean_progress_token(progress_token)
     if source_attachment_id and (source_url or "").strip():
@@ -490,6 +497,7 @@ async def preview_import(
                 force_relearn=force_relearn,
                 password=password,
                 source_attachment_id=source_attachment_id,
+                model=chosen_model,
             )
         except HTTPException:
             # QueueFull (429): nothing was scheduled. A record `create()` minted FRESH for
@@ -522,6 +530,7 @@ async def preview_import(
                 force_relearn=force_relearn,
                 password=password,
                 source_attachment_id=source_attachment_id,
+                model=chosen_model,
             )
     except OpenNetWorthError as exc:
         # There is no app-wide handler for our domain errors, so an uncaught one leaves here
@@ -560,6 +569,19 @@ async def peek_import_source(
     except (HTTPException, ImportError_):
         return empty
     return await run_in_threadpool(profiles_service.peek_source, content, fmt)
+
+
+def _clean_model(ref: str | None) -> str | None:
+    """A model picked in the import popup for this read, validated like the Settings pin
+    (known, enabled provider; "provider:model" shape). Blank → None (the saved pin)."""
+    from backend.services.statements.import_model import validate_model_ref
+
+    if not (ref or "").strip():
+        return None
+    try:
+        return validate_model_ref(ref or "")
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), str(exc))
 
 
 def _clean_instructions(text: str | None) -> str | None:

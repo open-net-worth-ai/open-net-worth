@@ -82,6 +82,10 @@ A good pattern: a strong model for chat and **Alert analysis**, a cheap fast one
 your default. If a task that reads images is set to a text-only model, a warning tells you that
 those runs will fail until you choose a model with vision.
 
+You can also pick a different model for one statement in the import screen (**Model**, under
+**Tell Lucius**). That choice applies to that import only; the **Statement import** task model
+stays as it is.
+
 The **Daily briefing** *Automation* is a different thing — it runs on that Automation's own
 **Model**.
 

@@ -35,6 +35,7 @@ from backend.api.import_api import (
     _attached_to_running_job,
     _clean_instructions,
     _clean_mode,
+    _clean_model,
     _parsing_response,
     _preview,
     _remember_source_accounts,
@@ -111,6 +112,7 @@ async def reopen_statement_preview(
     force_relearn: bool = Form(False),
     password: Optional[str] = Form(None),
     mode: str = Form("sync"),
+    model: Optional[str] = Form(None),
 ) -> dict | JSONResponse:
     """Reopen a statement BY ID — no re-upload. Reads the ORIGINAL bytes back off this
     record's own file (a server-owned path, never client-supplied) and runs the identical
@@ -120,6 +122,7 @@ async def reopen_statement_preview(
     path after a dropped connection, and — with ``mode="async"`` — how an ``interrupted`` or
     ``failed`` row's "Re-run" restarts the parse in the background."""
     _require_csrf(request)
+    chosen_model = _clean_model(model)
     from backend.db.statement_store import StatementStore
 
     store = StatementStore()
@@ -158,6 +161,7 @@ async def reopen_statement_preview(
             force_relearn=force_relearn,
             password=password,
             source_attachment_id=source_attachment_id,
+            model=chosen_model,
         )
     # M4: this exact record already has an async job outstanding — attach instead of running
     # a second, sync, concurrent decision_preview against the same statement.
@@ -178,6 +182,7 @@ async def reopen_statement_preview(
             force_relearn=force_relearn,
             password=password,
             source_attachment_id=source_attachment_id,
+            model=chosen_model,
         )
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), str(exc))

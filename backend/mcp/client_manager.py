@@ -1027,6 +1027,9 @@ class McpClientManager:
         """
         try:
             server = oauth_flow.ensure_fresh_token(server)
+            if oauth_flow.sign_in_is_dead(server):
+                self._record_failure(server.id, "auth_error", "", unattended=unattended, auth=True)
+                return
             if server.transport != "stdio" and deadline is None:
                 # Boot and the scheduled re-read open (or reuse) the session tool calls use.
                 pooled = self._http_session_for(server)

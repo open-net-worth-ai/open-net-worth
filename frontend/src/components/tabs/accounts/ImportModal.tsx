@@ -16,6 +16,8 @@ import { AddCategoryField, AddPayeeField, type PayeeOption } from './pickers'
 import { catOptionsFor } from './categories'
 import TxnDetail from './TxnDetail'
 import { useIsMobile } from '../../../hooks/useIsMobile'
+import { useModels } from '../../../hooks/useModels'
+import { ModelPicker } from '../../ui/ModelPicker'
 import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight } from '../../../ui/icons'
 import { fDate, fMonthDay } from '../../../utils/format'
 import { fetchVaultItem, type VaultItem } from '../../../api/vault'
@@ -794,6 +796,8 @@ export interface ReopenOptions {
   rememberInstructions?: boolean
   forceReparse?: boolean
   background?: boolean
+  /** A model picked in the popup for this read ("provider:model"); omitted = the saved pin. */
+  model?: string
 }
 
 export interface ImportModalProps {
@@ -858,6 +862,9 @@ export interface ImportModalProps {
      *  can be polled while this call is in flight. Omitted on the quiet single-row
      *  re-preview (`keepRowDecisions`), which shows no processing step to poll for. */
     progressToken?: string,
+    /** A model picked in the popup for this read ("provider:model"); omitted = the saved
+     *  Statement import pin. A cached parse made by another model is re-read. */
+    model?: string,
   ) => Promise<ImportPreviewResult>
   /** Prefill probe (`/api/statements/source-peek`): fingerprint the picked file server-side
    *  (zero AI, no writes) and return what this source taught us — its saved instructions
@@ -1273,6 +1280,11 @@ export function ImportModal({
     el.style.height = `${el.scrollHeight}px`
   }, [instructions])
   const [rememberInstr, setRememberInstr] = useState(true)
+  // The model that reads THIS statement. '' = the Statement import pin from Settings → Models
+  // (or the instance default); a pick here applies to this import only and never changes it.
+  const [readModel, setReadModel] = useState('')
+  const modelInfo = useModels(true)
+  const savedImportModel = modelInfo.taskModels.statement_import || ''
   const [instrSaving, setInstrSaving] = useState(false)
   const [instrErr, setInstrErr] = useState('')
   // The handoff's "teach" affordance: the FIRST time the user overrides one of Lucius's calls,
@@ -1373,6 +1385,7 @@ export function ImportModal({
     setReopenAccount('')
     setRereading(false)
     reopenArgs.current = {}
+    setReadModel('')
     setStep('source')
     setRoute('lucius')
     setFile(null)
@@ -1745,6 +1758,7 @@ export function ImportModal({
               instructions: instructions.trim() || undefined,
               rememberInstructions: rememberInstr,
               forceReparse,
+              model: keepRowDecisions ? undefined : readModel || undefined,
             })
           : await onPreview(
               file,
@@ -1757,6 +1771,9 @@ export function ImportModal({
               forceRelearnFlag,
               chips,
               token || undefined,
+              // Never on the quiet single-row re-preview: a model change there would mean a
+              // fresh (billed) read the user didn't ask for.
+              keepRowDecisions ? undefined : readModel || undefined,
             )
       if (res.attached && res.statementId) {
         // Code review round B, M4: this exact file is already `parsing` on the server's own
@@ -1936,6 +1953,7 @@ export function ImportModal({
         ...reopenArgs.current,
         forceReparse: true,
         background: true,
+        model: readModel || undefined,
       })
     } catch {
       setRereading(false)
@@ -3915,6 +3933,24 @@ export function ImportModal({
                       />{' '}
                       Remember for this source
                     </label>
+                  </div>
+                </div>
+                <div className="imp3-cfg-row">
+                  <span className="imp3-cfg-l">
+                    Model
+                    <em>reads this statement — this import only</em>
+                  </span>
+                  <div className="imp3-cfg-model">
+                    <ModelPicker
+                      label="Model"
+                      size="field"
+                      models={modelInfo.models}
+                      value={readModel}
+                      defaultLabel={savedImportModel ? 'Statement import model' : 'Default'}
+                      defaultModelId={savedImportModel || modelInfo.defaultModel}
+                      annotate={(m) => (m.vision === false ? '— no vision' : undefined)}
+                      onChange={setReadModel}
+                    />
                   </div>
                 </div>
               </div>

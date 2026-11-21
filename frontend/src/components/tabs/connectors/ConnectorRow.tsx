@@ -21,9 +21,16 @@ export interface ConnectorRowProps {
   onOpen: (entry: ConnectorEntry) => void
   /** The ONE row action, and only on a connector in an error state. */
   onReconnect: (entry: ConnectorEntry) => void
+  /** This row's Reconnect is still running — the button spins instead of sitting idle. */
+  reconnecting?: boolean
 }
 
-export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps): JSX.Element {
+export function ConnectorRow({
+  entry,
+  onOpen,
+  onReconnect,
+  reconnecting = false,
+}: ConnectorRowProps): JSX.Element {
   // The prototype marks the row `role="button"` and `tabIndex={0}` but wires no key
   // handler, so a keyboard user can focus a control that does nothing. Activating on
   // Enter/Space is additive — it changes no markup and no pixel.
@@ -100,7 +107,7 @@ export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps):
         )}
         {entry.attention ? (
           <span onClick={(e) => e.stopPropagation()}>
-            <Btn size="xs" variant="primary" onClick={() => onReconnect(entry)}>
+            <Btn size="xs" variant="primary" busy={reconnecting} onClick={() => onReconnect(entry)}>
               {entry.fixLabel}
             </Btn>
           </span>

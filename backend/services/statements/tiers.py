@@ -47,18 +47,16 @@ def _sanitize_full(s: str) -> str:
 
 
 def _task_model(task: str) -> str:
-    """The owner's per-stage model override (compound "provider:model"), or "" for default."""
-    try:
-        from backend.db.model_config_store import ModelConfigStore
+    """The model for the import pipeline: the popup's one-read choice, else the saved pin
+    (compound "provider:model"), else "" for the instance default."""
+    from backend.services.statements.import_model import import_model
 
-        return ModelConfigStore().task_model_override(task) or ""
-    except Exception:  # config store unavailable → instance default model
-        return ""
+    return import_model()
 
 
 # The ONE model knob for the whole import pipeline (owner, 2026-08-09: "merge all of these
 # into one settings only"). Stage `source` strings still differ — they carry cost attribution
-# — but every stage now reads the same pin.
+# — but every stage now reads the same pin (or the popup's one-read choice).
 STATEMENT_IMPORT_TASK = "statement_import"
 
 
@@ -72,8 +70,16 @@ def _import_model(source: str) -> str:
     """
     if source != "statement_vision":
         return _task_model(STATEMENT_IMPORT_TASK)
+    from backend.services.statements.import_model import chosen_model
+
+    chosen = chosen_model()
     try:
-        from backend.services.vision_capability import resolve_extractor_ref
+        from backend.services.vision_capability import resolve_extractor_ref, supports_vision
+
+        # A model picked in the popup reads the scan too — unless we KNOW it can't see, in
+        # which case the usual fallback (pin if it sees, else the default image model) applies.
+        if chosen and supports_vision(chosen, via="complete") is not False:
+            return chosen
 
         return resolve_extractor_ref(task=STATEMENT_IMPORT_TASK)
     except Exception:  # noqa: BLE001 — capability lookup must never block an import

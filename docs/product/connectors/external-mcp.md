@@ -238,7 +238,9 @@ Open the server under **Connectors**:
 - **Reconnect** — appears when a connection stops working. If the sign-in expired, the status is an
   amber **Authentication issue** and it opens the sign-in window. If the server stopped answering, the
   status is a red **Error** and it tries the connection again: a network problem never makes you
-  link the account again. While a sign-in is waiting, the page shows **Open sign-in again** and
+  link the account again. An expired sign-in shows as **Authentication issue** even when the server
+  answers it with a server error rather than "not signed in". While the retry runs, the button
+  spins and reads **Reconnecting…**. While a sign-in is waiting, the page shows **Open sign-in again** and
   **Cancel**: if you closed the sign-in window or browser tab without finishing, start a fresh one
   or drop it. (The desktop app signs in through your browser, so it can't tell the tab was closed.)
   A dot on **Connectors** in the navigation tells you a connector needs one

@@ -44,11 +44,16 @@ export interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
    *  header exists to drive. Each is a fixed `height` with `box-sizing: border-box`, and no
    *  breakpoint moves any of them (spec §9). */
   size?: 'xs' | 'lg'
+  /** Work this click started is still running: a spinner beside the label, and the button is
+   *  disabled so a second click can't start it twice. */
+  busy?: boolean
 }
 
 export function Btn({
   variant = 'secondary',
   size,
+  busy = false,
+  disabled,
   className,
   children,
   ...rest
@@ -56,8 +61,11 @@ export function Btn({
   return (
     <button
       className={`rd-btn ${variant}${size ? ' ' + size : ''}${className ? ' ' + className : ''}`}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
       {...rest}
     >
+      {busy ? <span className="cn-spinner" aria-hidden="true" /> : null}
       {children}
     </button>
   )

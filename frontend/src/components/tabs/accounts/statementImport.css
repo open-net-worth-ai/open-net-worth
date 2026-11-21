@@ -491,6 +491,10 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   align-items: baseline;
   gap: 7px;
 }
+/* The one-read model picker under "Tell Lucius" — a field-width trigger, not full bleed. */
+.imp3-cfg-model {
+  max-width: 360px;
+}
 .imp3-cfg-l em {
   font-style: normal;
   font-weight: 500;

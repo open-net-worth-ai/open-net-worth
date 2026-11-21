@@ -261,7 +261,10 @@ describe('the primary action — the only place a connector can be disabled', ()
     renderDetail(entry({ tone: 'bad', statusText: 'Error', attention: true, mcp: true }), {
       reconnecting: true,
     })
-    expect(screen.getByRole('button', { name: 'Reconnecting…' })).toBeTruthy()
+    const button = screen.getByRole('button', { name: 'Reconnecting…' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(button.getAttribute('aria-busy')).toBe('true')
+    expect(button.querySelector('.cn-spinner')).not.toBeNull()
   })
 })
 
