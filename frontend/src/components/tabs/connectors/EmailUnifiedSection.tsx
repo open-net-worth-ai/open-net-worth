@@ -285,10 +285,21 @@ export function EmailUnifiedSection() {
             Custom
           </button>
         </Cluster>
-        {preset?.note && (
-          <Text size="xs" tone="faint">
-            {preset.note}
-          </Text>
+        {preset && (
+          <ol className="conn-preset-steps">
+            {preset.steps.map((step) => (
+              <li key={step.text}>
+                <Text size="xs" tone="faint">
+                  {step.text}{' '}
+                  {step.link && (
+                    <a href={step.link.href} target="_blank" rel="noreferrer">
+                      {step.link.label} ↗
+                    </a>
+                  )}
+                </Text>
+              </li>
+            ))}
+          </ol>
         )}
         {!preset && (
           <Stack gap="--space-4">

@@ -9780,6 +9780,17 @@ body.hide-amounts .mask * {
   .conn-preset-row {
     flex-wrap: wrap;
   }
+  /* App-password steps under the email provider chips — numbered, links inline. */
+  .conn-preset-steps {
+    margin: 0;
+    padding-left: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    list-style: decimal;
+    color: var(--muted);
+    font-size: var(--text-xs);
+  }
 
   /* Linked banks (connectors/PlaidBanksStep, GoCardlessBanks) — one row per bank with its own
      Remove. */

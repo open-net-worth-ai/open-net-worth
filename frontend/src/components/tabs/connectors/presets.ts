@@ -10,8 +10,14 @@ export interface EmailPreset {
   imap_port: number
   smtp_host: string
   smtp_port: number
-  /** Provider-specific gotcha shown under the form (e.g. "needs an app password"). */
-  note?: string
+  /** How to get the app password this provider requires — numbered steps under the chips. */
+  steps: EmailPresetStep[]
+}
+
+/** One setup step; `link` opens the provider's own page for that step in a new tab. */
+export interface EmailPresetStep {
+  text: string
+  link?: { label: string; href: string }
 }
 
 // IMAP is uniformly port 993 (implicit TLS) across all four. SMTP submission is either
@@ -20,8 +26,8 @@ export interface EmailPreset {
 // picks whichever each provider's own docs list as its primary/first-listed option;
 // Gmail supports both equally but 587 keeps this list's story consistent (3 of 4 on
 // 587) with the port field's own help text ("587 is the standard... almost every
-// server"). All four require an APP-SPECIFIC password when 2FA is on — surfaced as
-// the note.
+// server"). All four refuse the account's normal password over IMAP/SMTP, so each preset
+// carries the app-password steps with a direct link to the provider's own page.
 export const EMAIL_PRESETS: EmailPreset[] = [
   {
     key: 'gmail',
@@ -30,7 +36,22 @@ export const EMAIL_PRESETS: EmailPreset[] = [
     imap_port: 993,
     smtp_host: 'smtp.gmail.com',
     smtp_port: 587,
-    note: 'Enable IMAP in Gmail settings and use an App Password (Google account → Security).',
+    steps: [
+      {
+        text: 'Your normal Gmail password will not work here — Google requires an app password.',
+      },
+      {
+        text: 'Turn on 2-Step Verification (app passwords only appear once it is on).',
+        link: {
+          label: 'Open 2-Step Verification',
+          href: 'https://myaccount.google.com/signinoptions/twosv',
+        },
+      },
+      {
+        text: 'Create an app password named "Open Net Worth" and paste the 16-letter code below.',
+        link: { label: 'Open App passwords', href: 'https://myaccount.google.com/apppasswords' },
+      },
+    ],
   },
   {
     key: 'outlook',
@@ -39,7 +60,19 @@ export const EMAIL_PRESETS: EmailPreset[] = [
     imap_port: 993,
     smtp_host: 'smtp-mail.outlook.com',
     smtp_port: 587,
-    note: 'Use an app password if your account has 2-step verification enabled.',
+    steps: [
+      {
+        text: 'Your normal Microsoft password will not work here — use an app password.',
+      },
+      {
+        text: 'Turn on two-step verification for your Microsoft account.',
+        link: { label: 'Open Microsoft security', href: 'https://account.microsoft.com/security' },
+      },
+      {
+        text: 'Create an app password and paste it below.',
+        link: { label: 'Open App passwords', href: 'https://account.live.com/proofs/AppPassword' },
+      },
+    ],
   },
   {
     key: 'icloud',
@@ -48,7 +81,15 @@ export const EMAIL_PRESETS: EmailPreset[] = [
     imap_port: 993,
     smtp_host: 'smtp.mail.me.com',
     smtp_port: 587,
-    note: 'iCloud requires an app-specific password (appleid.apple.com → Sign-In and Security).',
+    steps: [
+      {
+        text: 'Your Apple Account password will not work here — use an app-specific password.',
+      },
+      {
+        text: 'Sign in, open Sign-In and Security → App-Specific Passwords, create one and paste it below.',
+        link: { label: 'Open Apple Account', href: 'https://account.apple.com/account/manage' },
+      },
+    ],
   },
   {
     key: 'fastmail',
@@ -57,7 +98,18 @@ export const EMAIL_PRESETS: EmailPreset[] = [
     imap_port: 993,
     smtp_host: 'smtp.fastmail.com',
     smtp_port: 465,
-    note: 'Create an app password in Fastmail → Settings → Privacy & Security.',
+    steps: [
+      {
+        text: 'Your normal Fastmail password will not work here — use an app password.',
+      },
+      {
+        text: 'Open Privacy & Security → Manage app passwords, create one with Mail (IMAP/POP/SMTP) access and paste it below.',
+        link: {
+          label: 'Open Fastmail settings',
+          href: 'https://app.fastmail.com/settings/security',
+        },
+      },
+    ],
   },
 ]
 

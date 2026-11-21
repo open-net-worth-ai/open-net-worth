@@ -26,11 +26,14 @@ is on, and you can revoke an app password at any time without changing your real
 
 | Provider | Where to create one |
 |---|---|
-| **Gmail** | Turn on 2-Step Verification in your Google Account, then go to **Google Account → Security → App passwords** (or search "App passwords" in your Google Account). Name it "Open Net Worth" and copy the 16-character code. |
-| **iCloud** | [appleid.apple.com](https://appleid.apple.com) → **Sign-In and Security → App-Specific Passwords** → generate one. |
-| **Fastmail** | **Settings → Privacy & Security → Manage app passwords** → create one with access to *Mail (IMAP/POP/SMTP)*. |
-| **Outlook / Hotmail** | **Microsoft account → Security → Advanced security options → App passwords** (only shown once two-step verification is on). See the note under [Troubleshooting](#troubleshooting). |
+| **Gmail** | Turn on [2-Step Verification](https://myaccount.google.com/signinoptions/twosv), then open [App passwords](https://myaccount.google.com/apppasswords) (the page only exists once 2-Step Verification is on). Name it "Open Net Worth" and copy the 16-letter code. Work or school Google accounts may have app passwords turned off by the administrator. |
+| **iCloud** | Sign in to your [Apple Account](https://account.apple.com/account/manage) → **Sign-In and Security → App-Specific Passwords** → generate one. |
+| **Fastmail** | [Settings → Privacy & Security](https://app.fastmail.com/settings/security) → **Manage app passwords** → create one with access to *Mail (IMAP/POP/SMTP)*. |
+| **Outlook / Hotmail** | Turn on two-step verification in [Microsoft account security](https://account.microsoft.com/security), then create one under [App passwords](https://account.live.com/proofs/AppPassword). See the note under [Troubleshooting](#troubleshooting). |
 | **Other** | Look for "app password", "app-specific password" or "IMAP access" in your provider's security settings. |
+
+Your normal email password will **not** work — this is the step most people miss. When you
+click a provider chip in the form, the same steps and links appear right under it.
 
 Copy it somewhere safe for a minute — most providers only show it once.
 
