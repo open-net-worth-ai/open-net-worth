@@ -94,6 +94,7 @@ def test_defaults(store):
         "token": "",
         "encryption_password": "",
         "proxy_headers": "",
+        "server_certificate": "",
     }
 
 
@@ -113,7 +114,7 @@ def test_public_reports_presence_and_a_bare_host_only(store):
 
 def test_credentials_are_for_server_side_use(store):
     store.update(SECRETS)
-    assert store.credentials() == SECRETS
+    assert store.credentials() == {**SECRETS, "server_certificate": ""}
 
 
 def test_a_blank_secret_leaves_the_saved_one(store):
@@ -125,9 +126,10 @@ def test_a_blank_secret_leaves_the_saved_one(store):
             "encryption_password": "",
             "server_url": "",
             "proxy_headers": "",
+            "server_certificate": "",
         }
     )
-    assert store.credentials() == SECRETS
+    assert store.credentials() == {**SECRETS, "server_certificate": ""}
 
 
 def test_configured_needs_an_address_and_one_way_to_sign_in(store):
@@ -195,7 +197,7 @@ def test_behind_the_gateway_it_is_unavailable_and_refuses_config(store, behind_g
 
 def test_the_catalog_kind_keeps_every_secret_in_connector_secrets():
     kind = CATALOG["actual_budget"]
-    assert {f.name for f in kind.secret_fields} == set(SECRETS)
+    assert {f.name for f in kind.secret_fields} == set(SECRETS) | {"server_certificate"}
     assert all(f.revealable for f in kind.secret_fields)
     assert kind.config_keys == ("budget_id",)
     assert kind.moved_state == ("budget_name", "budget_currency")
@@ -253,11 +255,11 @@ def test_put_config_saves_enables_and_echoes_no_secret(client, store):
     body = r.json()
     assert body["enabled"] is True and body["configured"] is True
     _no_secret_in(body)
-    assert store.credentials() == SECRETS
+    assert store.credentials() == {**SECRETS, "server_certificate": ""}
 
     r = client.put("/api/actual-budget/config", json={"password": "", "enabled": False})
     assert r.json()["enabled"] is False and r.json()["has_password"] is True
-    assert store.credentials() == SECRETS
+    assert store.credentials() == {**SECRETS, "server_certificate": ""}
 
 
 def test_put_config_rejects_a_bad_address(client, store):
