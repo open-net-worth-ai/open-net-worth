@@ -43,6 +43,7 @@ interface EmailConfig {
   imap_folder: string
   smtp_host: string
   smtp_port: number
+  last_status: string | null
   last_error: string | null
 }
 
@@ -286,20 +287,23 @@ export function EmailUnifiedSection() {
           </button>
         </Cluster>
         {preset && (
-          <ol className="conn-preset-steps">
-            {preset.steps.map((step) => (
-              <li key={step.text}>
-                <Text size="xs" tone="faint">
+          <div className="conn-preset-steps" role="note">
+            <Text size="sm" weight={600}>
+              You need an app password — your normal password won't sign in
+            </Text>
+            <ol>
+              {preset.steps.map((step) => (
+                <li key={step.text}>
                   {step.text}{' '}
                   {step.link && (
                     <a href={step.link.href} target="_blank" rel="noreferrer">
                       {step.link.label} ↗
                     </a>
                   )}
-                </Text>
-              </li>
-            ))}
-          </ol>
+                </li>
+              ))}
+            </ol>
+          </div>
         )}
         {!preset && (
           <Stack gap="--space-4">
@@ -398,11 +402,19 @@ export function EmailUnifiedSection() {
 
       {/* ── Receive (IMAP-specific) ────────────────────────────────────── */}
       <Stack gap="--space-3">
-        {cfg.last_error && (
-          <Text size="xs" tone="bad">
-            Last error: {cfg.last_error}
-          </Text>
-        )}
+        {cfg.last_error &&
+          (cfg.last_status === 'auth_error' ? (
+            <div className="conn-email-auth-error" role="alert">
+              <Text size="sm" weight={600}>
+                Sign-in failed — check you used an app password
+              </Text>
+              <Text size="sm">{cfg.last_error}</Text>
+            </div>
+          ) : (
+            <Text size="xs" tone="bad">
+              Last error: {cfg.last_error}
+            </Text>
+          ))}
         <FormField
           label="Mail folder"
           htmlFor="email-imap-folder"

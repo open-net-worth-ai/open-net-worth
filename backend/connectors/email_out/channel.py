@@ -24,6 +24,7 @@ import smtplib
 from email.message import EmailMessage
 
 from backend.core.channels import register_channel
+from backend.core.mail_auth import explain_mail_error
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ async def _send(message: str) -> dict:
         return await asyncio.to_thread(_send_sync, cfg, message)
     except Exception as exc:  # never propagate — log without the secret
         logger.warning("email-out channel send failed: %s", exc)
-        return {"error": str(exc)}
+        return {"error": explain_mail_error(str(exc))}
 
 
 def send_email(to: str, subject: str, body: str, cc: str | None = None) -> dict:
@@ -157,7 +158,7 @@ def send_email(to: str, subject: str, body: str, cc: str | None = None) -> dict:
         return {"ok": True, "sent": 1, "to": to}
     except Exception as exc:  # never propagate — log without the secret
         logger.warning("send_email failed: %s", exc)
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": explain_mail_error(str(exc))}
 
 
 def is_active() -> bool:

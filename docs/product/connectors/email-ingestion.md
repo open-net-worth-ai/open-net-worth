@@ -124,7 +124,11 @@ password at your provider if you no longer need it.
 
 ## Troubleshooting
 
-**"Authentication failed" / "Invalid credentials"**
+**"Sign-in failed" / "Authentication failed" / "Invalid credentials"**
+
+When your provider refuses the sign-in, the Email form shows a red **Sign-in failed** box with the
+provider's own message, and Lucius tells you the same if it hits the error.
+
 - You used your normal password — create an app password (step 1) and paste that instead.
 - The app password was pasted with a space or line break at the end; paste it again.
 - **Gmail:** if your Gmail settings still show **Forwarding and POP/IMAP → IMAP access**, make sure

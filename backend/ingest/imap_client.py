@@ -40,6 +40,7 @@ from email.utils import parsedate_to_datetime
 
 from backend.core.email_ids import content_fallback_id
 from backend.core.errors import ValidationError
+from backend.core.mail_auth import explain_mail_error
 from backend.core.user_time import user_today
 
 logger = logging.getLogger(__name__)
@@ -509,13 +510,16 @@ def test_connection(creds: dict) -> tuple[bool, str]:
             except Exception:
                 pass
             raise
-    except imaplib.IMAP4.error as exc:
-        return False, str(exc)
-    except OSError as exc:
-        return False, str(exc)
     except Exception as exc:
-        return False, str(exc)
+        return False, explain_mail_error(_error_text(exc))
     return True, ""
+
+
+def _error_text(exc: BaseException) -> str:
+    """imaplib carries the server's raw response bytes; decode them instead of a bytes repr."""
+    if len(exc.args) == 1 and isinstance(exc.args[0], (bytes, bytearray)):
+        return exc.args[0].decode("utf-8", "replace")
+    return str(exc)
 
 
 def search_headers(

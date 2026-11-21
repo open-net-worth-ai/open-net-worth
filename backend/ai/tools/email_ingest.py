@@ -74,6 +74,7 @@ from backend.ai.tools.schema_from_model import (
     schema_of,
 )
 from backend.core.email_ids import internal_email_id
+from backend.core.mail_auth import explain_mail_error, is_mail_auth_failure
 from backend.core.untrusted import sanitize_untrusted
 
 logger = logging.getLogger(__name__)
@@ -375,8 +376,8 @@ def _email_search_messages_sync(input_data: dict, should_stop=None):
             should_stop=should_stop,
         )
     except Exception as exc:
-        text = _exc_text(exc)
-        status = "auth_error" if "authentication" in text.lower() else "connect_error"
+        text = explain_mail_error(_exc_text(exc))
+        status = "auth_error" if is_mail_auth_failure(text) else "connect_error"
         store.record_status(status, text)
         logger.warning("email_search_messages failed: %s", text)
         return json.dumps({"ok": False, "error": text}), None
@@ -558,8 +559,8 @@ def _email_get_messages_sync(input_data: dict, should_stop=None):
                 creds, requests, should_stop=should_stop
             )
         except Exception as exc:
-            text = _exc_text(exc)
-            status = "auth_error" if "authentication" in text.lower() else "connect_error"
+            text = explain_mail_error(_exc_text(exc))
+            status = "auth_error" if is_mail_auth_failure(text) else "connect_error"
             store.record_status(status, text)
             logger.warning("email_get_messages failed: %s", text)
             return json.dumps({"ok": False, "error": text}), None

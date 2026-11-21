@@ -38,9 +38,6 @@ export const EMAIL_PRESETS: EmailPreset[] = [
     smtp_port: 587,
     steps: [
       {
-        text: 'Your normal Gmail password will not work here — Google requires an app password.',
-      },
-      {
         text: 'Turn on 2-Step Verification (app passwords only appear once it is on).',
         link: {
           label: 'Open 2-Step Verification',
@@ -62,9 +59,6 @@ export const EMAIL_PRESETS: EmailPreset[] = [
     smtp_port: 587,
     steps: [
       {
-        text: 'Your normal Microsoft password will not work here — use an app password.',
-      },
-      {
         text: 'Turn on two-step verification for your Microsoft account.',
         link: { label: 'Open Microsoft security', href: 'https://account.microsoft.com/security' },
       },
@@ -83,9 +77,6 @@ export const EMAIL_PRESETS: EmailPreset[] = [
     smtp_port: 587,
     steps: [
       {
-        text: 'Your Apple Account password will not work here — use an app-specific password.',
-      },
-      {
         text: 'Sign in, open Sign-In and Security → App-Specific Passwords, create one and paste it below.',
         link: { label: 'Open Apple Account', href: 'https://account.apple.com/account/manage' },
       },
@@ -99,9 +90,6 @@ export const EMAIL_PRESETS: EmailPreset[] = [
     smtp_host: 'smtp.fastmail.com',
     smtp_port: 465,
     steps: [
-      {
-        text: 'Your normal Fastmail password will not work here — use an app password.',
-      },
       {
         text: 'Open Privacy & Security → Manage app passwords, create one with Mail (IMAP/POP/SMTP) access and paste it below.',
         link: {
