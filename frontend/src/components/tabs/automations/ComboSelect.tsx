@@ -5,7 +5,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Plus, X } from '../../../ui/icons'
 import { Tag } from '../../ui'
+import { useIsMobile } from '../../../hooks/useIsMobile'
 import { scrollHiIntoView, useAnchoredFixed } from '../accounts/pickers'
+import { ComboSheet } from './ComboSheet'
 
 const SEARCH_FROM = 10
 
@@ -19,6 +21,7 @@ export function ComboSelect({
   needed,
   multiple,
   colors,
+  title,
   onChange,
   onChangeMany,
   onCreate,
@@ -32,6 +35,8 @@ export function ComboSelect({
   multiple?: boolean
   /** id → colour: a chip in that colour (the ledger's category pill), and a dot in the list. */
   colors?: Record<string, string>
+  /** The phone sheet's heading; else the field's label, else the placeholder. */
+  title?: string
   onChange?: (value: string) => void
   /** With `multiple`: every chosen id, in the order picked. */
   onChangeMany?: (values: string[]) => void
@@ -58,16 +63,19 @@ export function ComboSelect({
     Boolean(onCreate) && ql !== '' && !all.some(([, label]) => label.toLowerCase() === ql)
   const labelOf = (key: string) => all.find(([k]) => k === key)?.[1] ?? key
   const fx = useAnchoredFixed(open, ref as React.RefObject<HTMLElement>, 280)
+  // On a phone the list is a bottom sheet, and the field never raises the keyboard itself.
+  const isMobile = useIsMobile()
   const emit = (next: string[]) => (multiple ? onChangeMany?.(next) : onChange?.(next[0] ?? ''))
 
   useEffect(() => {
-    if (!open) return
+    // The phone sheet is portaled outside the field and closes itself.
+    if (!open || isMobile) return
     const onDoc = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) close()
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [open])
+  }, [open, isMobile])
   useEffect(() => {
     if (open) scrollHiIntoView(popRef.current)
   }, [hi, open])
@@ -91,8 +99,8 @@ export function ComboSelect({
     close()
     inputRef.current?.blur() // a single choice is done once made
   }
-  async function create() {
-    const name = q.trim()
+  async function create(typed?: string) {
+    const name = (typed ?? q).trim()
     setError(null)
     try {
       const created = await onCreate?.(name)
@@ -188,7 +196,8 @@ export function ComboSelect({
                   : placeholder
             }
             value={q}
-            onFocus={openAt}
+            readOnly={isMobile}
+            onFocus={() => !isMobile && openAt()}
             onClick={() => !open && openAt()}
             onChange={(event) => {
               setQ(event.target.value)
@@ -221,7 +230,30 @@ export function ComboSelect({
       >
         <path d="M6 9l6 6 6-6" />
       </svg>
-      {open && (
+      {open && isMobile && (
+        <ComboSheet
+          title={
+            title ??
+            document.querySelector(`label[for="${id}"]`)?.textContent ??
+            placeholder ??
+            'Choose'
+          }
+          searchable={searchable}
+          multiple={multiple}
+          items={all.map(([key, label]) => ({
+            key,
+            label,
+            color: colors?.[key],
+            selected: chosen.includes(key),
+          }))}
+          onPick={(key) =>
+            multiple && chosen.includes(key) ? emit(chosen.filter((k) => k !== key)) : choose(key)
+          }
+          onCreate={onCreate ? (name) => void create(name) : undefined}
+          onClose={close}
+        />
+      )}
+      {open && !isMobile && (
         <div
           className="acct-payf-pop rl-combo-pop"
           style={fx ? { ...fx, width: Math.max(ref.current?.offsetWidth ?? 0, 180) } : undefined}
@@ -319,14 +351,15 @@ export function AnchoredMenu({
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
   const fx = useAnchoredFixed(open, ref as React.RefObject<HTMLElement>, 220)
+  const isMobile = useIsMobile()
   useEffect(() => {
-    if (!open) return
+    if (!open || isMobile) return
     const onDoc = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [open])
+  }, [open, isMobile])
   return (
     <div className="rl-anchored" ref={ref}>
       <button
@@ -342,7 +375,16 @@ export function AnchoredMenu({
       >
         {trigger}
       </button>
-      {open && (
+      {open && isMobile && (
+        <ComboSheet
+          title={label}
+          role="menuitem"
+          items={items.map((item) => ({ key: item.label, label: item.label }))}
+          onPick={(key) => items.find((item) => item.label === key)?.onSelect()}
+          onClose={() => setOpen(false)}
+        />
+      )}
+      {open && !isMobile && (
         <div
           className="acct-payf-pop rl-menu-pop"
           style={fx ?? undefined}

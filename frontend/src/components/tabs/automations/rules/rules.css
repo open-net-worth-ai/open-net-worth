@@ -93,8 +93,54 @@
 .rl-action-note {
   font-size: 12px;
 }
+/* As wide as its longest item ("Split into lines (instead of one category)"), never clipped. */
 .acct-payf-pop.rl-menu-pop {
-  width: 220px;
+  width: max-content;
+  min-width: 200px;
+  max-width: min(360px, calc(100vw - 16px));
+}
+.rl-menu-pop .acct-payf-item {
+  white-space: nowrap;
+}
+/* The phone sheet (ComboSheet): a search box over full-width rows. */
+.rl-sheet-search {
+  width: 100%;
+  box-sizing: border-box;
+  height: 40px;
+  margin-bottom: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+.rl-sheet-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.kebab-sheet-item.rl-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rl-sheet-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.kebab-sheet-item.rl-sheet-item.on {
+  font-weight: 600;
+  color: var(--accent);
+}
+.kebab-sheet-item.rl-sheet-done {
+  justify-content: center;
+  text-align: center;
+  font-weight: 600;
+  color: var(--accent);
+}
+.rl-sheet-empty {
+  margin: 12px;
 }
 .rl-combo-pop .rl-combo-create {
   display: flex;

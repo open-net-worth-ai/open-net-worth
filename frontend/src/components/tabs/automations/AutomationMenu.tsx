@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { MoreVertical, Check } from 'lucide-react'
+import { useIsMobile } from '../../../hooks/useIsMobile'
+import { ComboSheet } from './ComboSheet'
 
 export interface AutomationMenuItem {
   label: string
@@ -25,15 +27,17 @@ export function AutomationMenu({
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLSpanElement>(null)
+  // On a phone the menu is a bottom sheet (portaled; it closes itself).
+  const isMobile = useIsMobile()
 
   useEffect(() => {
-    if (!open) return
+    if (!open || isMobile) return
     const close = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
-  }, [open])
+  }, [open, isMobile])
 
   return (
     <span className="rd-kebab" ref={ref}>
@@ -50,7 +54,26 @@ export function AutomationMenu({
       >
         {trigger ?? <MoreVertical size={15} aria-hidden="true" />}
       </button>
-      {open && (
+      {open && isMobile && (
+        // A tap in the sheet must not reach the card under it (React bubbles portal events).
+        <span onClick={(event) => event.stopPropagation()}>
+          <ComboSheet
+            title={label}
+            role="menuitem"
+            items={items.map((item) => ({
+              key: item.label,
+              label: item.label,
+              icon: item.icon,
+              danger: item.danger,
+              disabled: item.disabled,
+              selected: item.checked,
+            }))}
+            onPick={(key) => items.find((item) => item.label === key)?.onSelect()}
+            onClose={() => setOpen(false)}
+          />
+        </span>
+      )}
+      {open && !isMobile && (
         <span
           className={`rd-kebab-pop${popoverClassName ? ` ${popoverClassName}` : ''}`}
           role="menu"
