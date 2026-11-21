@@ -4,6 +4,7 @@ import { authFetch } from '../../../../api/client'
 import { invalidateQueryCache } from '../../../../state/queryCache'
 import { fDate, fScheduleWhen, timeAgo } from '../../../../utils/format'
 import { Button, ErrorState, Switch, TabSkeleton } from '../../../ui'
+import { BulkReview } from '../../imports/BulkReview'
 import { ReviewCard } from '../../imports/ReviewItem'
 import { RunReportModal } from '../../imports/RunReport'
 import { detailOf } from '../../imports/runs'
@@ -41,6 +42,20 @@ export function YnabSyncDetail({
   async function send(label: string, path: string, method: string, body?: unknown) {
     setBusy(label)
     setError(await sendSync(path, method, body, app))
+    sync.refresh()
+    setBusy(null)
+  }
+
+  // One at a time, through the same route a card uses: the server holds one lock per app, and the
+  // first refusal stops the rest so the person sees why.
+  async function keepAll(keep: 'onw' | 'ynab', ids: string[]) {
+    setBusy('bulk')
+    let failed: string | null = null
+    for (const id of ids) {
+      failed = await sendSync(`/conflicts/${id}/resolve`, 'POST', { keep }, app)
+      if (failed) break
+    }
+    setError(failed)
     sync.refresh()
     setBusy(null)
   }
@@ -208,6 +223,12 @@ export function YnabSyncDetail({
                 <div className="a3-block-note">
                   {`The sync left these alone for you to decide. Each one says what its choice changes, here and in ${app.name}.`}
                 </div>
+                <BulkReview
+                  app={app}
+                  items={status.conflicts}
+                  busy={busy !== null || status.running}
+                  onKeepAll={keepAll}
+                />
                 {status.conflicts.map((item) => (
                   <ReviewCard
                     key={item.id}

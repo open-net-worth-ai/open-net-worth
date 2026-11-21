@@ -69,6 +69,16 @@ def actual_budget_status():
     return ActualBudgetConfigStore().public()
 
 
+@router.post("/api/actual-budget/check")
+async def actual_budget_check():
+    """Try the saved connection end to end and say what stopped it, if anything."""
+    try:
+        ActualBudgetConfigStore().require_available()
+    except OpenNetWorthError as exc:
+        raise _refuse(exc) from exc
+    return await asyncio.to_thread(actual_sync.check_connection)
+
+
 @router.get("/api/actual-budget/budgets")
 async def actual_budget_budgets():
     try:

@@ -37,9 +37,13 @@ Open **Automations → Data Sync → Actual** and click **Connect Actual…**. I
 - **Sign in with** is a password or a token, whichever your server takes. Typing a new one replaces
   the other. A new server address asks for it again, so a mistyped address is never sent your saved
   password. That covers the host, the port, and a change between http and https.
-- **Budget** appears once an address and sign-in are saved. There's no test button: if the sign-in is
-  wrong, this is where it says so, and the connector shows **Auth error** until a read works again.
-  The budget you pick here is the one the import starts from.
+- **Budget** appears once an address and sign-in are saved. If the sign-in is wrong, this is where it
+  says so, and the connector shows **Auth error** until a read works again. The budget you pick here
+  is the one the import starts from.
+- **Test connection** tries what is saved, end to end: the address, a sign-in proxy, the
+  certificate, the sign-in, then the chosen budget downloading and opening. It says the step that
+  stopped it, such as a proxy wanting its own sign-in, a certificate this computer doesn't trust, or
+  a wrong password. Save first: it doesn't test what you've typed but not saved.
 - **Encryption password** is only for a budget with end-to-end encryption on in Actual. An encrypted
   budget says `(encrypted)` in the list, and **Save** waits until it has its password.
 - **Proxy headers** are only for a server behind a sign-in proxy, such as Pangolin, Authelia or
