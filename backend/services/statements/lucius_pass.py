@@ -104,12 +104,9 @@ def _task_model() -> str:
     of these into one settings only") — `PASS_SOURCE` below stays this stage's own COST
     attribution, it is simply no longer a separate model choice. The reviewer call reuses the
     same override; it's the same task's cost/model, not an independent stage."""
-    try:
-        from backend.db.model_config_store import ModelConfigStore
+    from backend.services.statements.import_model import import_model
 
-        return ModelConfigStore().task_model_override("statement_import") or ""
-    except Exception:  # noqa: BLE001 — config store unavailable → instance default model
-        return ""
+    return import_model()
 
 
 _PASS_SYSTEM = (

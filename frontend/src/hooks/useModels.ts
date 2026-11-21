@@ -233,6 +233,8 @@ export interface UseModels {
   // (backend-derived: the chat_vision pin, else the instance default when it can see).
   // '' = nothing is configured, so an attachment to a blind model won't be read at all.
   imageReader: string
+  // Per-task pins ("provider:model") from Settings → Models; an absent key = the default.
+  taskModels: Record<string, string>
   loaded: boolean // false until both fetches resolve (success OR failure)
 }
 
@@ -248,6 +250,7 @@ const _emptyModelsState: UseModels = {
   defaultModel: '',
   defaultProvider: '',
   imageReader: '',
+  taskModels: {},
   loaded: false,
 }
 
@@ -281,6 +284,9 @@ export function useModels(multi = false): UseModels {
       const defaultModel: string = (cfg?.model || cfg?.effective_model || '').trim()
       const defaultProvider: string = (cfg?.provider || '').trim()
       const imageReader: string = (cfg?.image_reader || '').trim()
+      const taskModels: Record<string, string> = {}
+      for (const [k, v] of Object.entries(cfg?.task_models ?? {}))
+        if (typeof v === 'string' && v.trim()) taskModels[k] = v.trim()
       // Fold the configured default into the list if the provider didn't return it
       // (e.g. a custom local model that isn't in /v1/models), so it's always pickable.
       const models = list?.models ?? []
@@ -293,6 +299,7 @@ export function useModels(multi = false): UseModels {
         defaultModel,
         defaultProvider,
         imageReader,
+        taskModels,
         loaded: true,
       }
       _modelsCache.set(multi, next)

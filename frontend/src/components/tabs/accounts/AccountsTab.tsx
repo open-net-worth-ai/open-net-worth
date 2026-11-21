@@ -1754,6 +1754,7 @@ export function AccountsTab({
     forceRelearn?: boolean,
     accountIds?: string[],
     progressToken?: string,
+    model?: string,
   ) => {
     const fd = new FormData()
     if (file) {
@@ -1776,6 +1777,8 @@ export function AccountsTab({
     // B20: polled via GET /api/statements/preview-progress/{token} while this call is in
     // flight — see hooks/useImportProgress.ts.
     if (progressToken) fd.append('progress_token', progressToken)
+    // A model picked in the popup for this read only — the saved pin is untouched.
+    if (model) fd.append('model', model)
     const res = await authFetch('/api/statements/preview', { method: 'POST', body: fd })
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
@@ -1826,6 +1829,7 @@ export function AccountsTab({
       fd.append('remember_instructions', String(opts.rememberInstructions))
     if (opts.forceReparse) fd.append('force_reparse', 'true')
     if (opts.background) fd.append('mode', 'async')
+    if (opts.model) fd.append('model', opts.model)
     const res = await authFetch(`/api/statements/${statementId}/preview`, {
       method: 'POST',
       body: fd,

@@ -7,6 +7,9 @@
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
 
+vi.mock('../../../hooks/useModels', () => ({
+  useModels: () => ({ models: [], defaultModel: '', taskModels: {}, loaded: true }),
+}))
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, cleanup, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { fDate } from '../../../utils/format'

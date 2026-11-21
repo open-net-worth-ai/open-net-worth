@@ -1469,9 +1469,15 @@ def decision_preview(
             "imported_at": record.get("parsed_at") or record.get("created_at"),
             "batch_ids": live_batches,
         }
+    # A model picked in the import popup for this read: a cached parse made by another model
+    # is not reused — the choice would otherwise be silently ignored. No choice = any cache.
+    from backend.services.statements.import_model import chosen_model, import_model
+
+    model_changed = bool(chosen_model()) and record.get("parse_model") != chosen_model()
     # The review this file already finished is returned as it was left; only an explicit ask
-    # (a re-read, a mapping, another account, changed instructions) builds a new one.
-    if mapping is None and not force_reparse and not force_relearn:
+    # (a re-read, a mapping, another account, changed instructions, another model) builds a
+    # new one.
+    if mapping is None and not force_reparse and not force_relearn and not model_changed:
         kept = stored_previews.recall(
             record["id"],
             fmt=fmt,
@@ -1488,6 +1494,7 @@ def decision_preview(
         and mapping is None
         and not force_reparse
         and not force_relearn
+        and not model_changed
         and record.get("parse_instructions_hash") == instr_hash
     ):
         # Re-preview of a file we already parsed (e.g. switching the destination account so
@@ -1524,7 +1531,10 @@ def decision_preview(
 
         heal_calls = 0  # a fresh parse read its own metadata — nothing to heal
         if record.get("import_rows") and (
-            force_reparse or force_relearn or record.get("parse_instructions_hash") != instr_hash
+            force_reparse
+            or force_relearn
+            or model_changed
+            or record.get("parse_instructions_hash") != instr_hash
         ):
             # The cached parse was read under DIFFERENT instructions (or a forced re-read):
             # re-open the hint gate (full budget) so the category-hint batch also reruns
@@ -1831,6 +1841,10 @@ def decision_preview(
         # What guidance the cached rows were read under — the reuse check above compares
         # against this, so a later preview with different instructions re-parses.
         "parse_instructions_hash": instr_hash,
+        # Which model made the cached rows ("" = the instance default) — a later read with a
+        # different model picked in the popup re-parses instead of reusing them. A reuse keeps
+        # the stamp of the read that actually made the rows.
+        "parse_model": import_model() if llm_cost["fresh"] else record.get("parse_model", ""),
         # RFC §D5 preview→commit contract. THREE fields, each doing a distinct job:
         #   match_policy        — the RESOLVED policy, for display and for the audit trail.
         #   match_policy_source — the SOURCE layer's extracted fields, so decision_commit can
