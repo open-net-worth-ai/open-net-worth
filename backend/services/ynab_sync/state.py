@@ -67,6 +67,7 @@ def blank() -> dict:
         "failures": 0,  # runs in a row that failed for a reason that may pass
         "last_ok_at": None,  # when a run last finished without an error
         "undo": None,  # the audit range of the last run that changed this book (``undo``)
+        "undone": None,  # rows the last undo put back, until a run sends them
     }
 
 

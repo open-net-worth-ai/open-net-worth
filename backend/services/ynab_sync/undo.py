@@ -87,6 +87,8 @@ def undo_last() -> dict:
                 partly.append(_title(txn_id))
         st = sync_state.load()
         st["undo"], st["enabled"] = None, False
+        # Said on the page until the next run: turning the sync on sends these to the app.
+        st["undone"] = put_back or None
         sync_state.save(st)
         skipped = [_title(t) for t in sorted(later)]
         return {"put_back": put_back, "skipped": skipped, "partly": partly, "sync_off": True}
