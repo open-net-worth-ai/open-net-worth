@@ -37,6 +37,17 @@ Open **Automations → Data Sync → Actual** and click **Connect Actual…**. I
 - **Sign in with** is a password or a token, whichever your server takes. Typing a new one replaces
   the other. A new server address asks for it again, so a mistyped address is never sent your saved
   password. That covers the host, the port, and a change between http and https.
+  **A server that signs in with OpenID** (an identity provider such as PocketID, Authentik or
+  Keycloak, with no Actual password) takes a token. Actual doesn't show one, so take it from a
+  browser: sign in to Actual in a private window, and copy the long code after `token=` in the
+  address it lands on (`…/openid-cb?token=…`) as it passes, or later from the browser's history.
+  In a browser already signed in, the developer tools have it too: under storage, IndexedDB,
+  `actual`, `asyncStorage`, the key `user-token`. Then close that window without signing out:
+  signing out in Actual ends the token. It lasts while your server keeps tokens (the default never
+  expires them); if it ends, the connector says the token expired, and a new one goes in the same
+  field. Treat the token like your password: anyone holding it can open your budget. A password
+  saved for such a server is refused with a message saying so: each try counts
+  towards Actual's limit on failed sign-ins, so the sync doesn't try again sooner.
 - **Budget** appears once an address and sign-in are saved. If the sign-in is wrong, this is where it
   says so, and the connector shows **Auth error** until a read works again. The budget you pick here
   is the one the import starts from.
@@ -57,7 +68,8 @@ Open **Automations → Data Sync → Actual** and click **Connect Actual…**. I
   private authority, that this computer doesn't trust. Paste it as text, from
   `-----BEGIN CERTIFICATE-----` to the END line (up to three; never a private key). It is trusted
   for this server only, on top of the usual checks: the address must still match it. The form shows
-  its SHA-256 fingerprint, so you can compare it with your server's; **Remove** stops trusting it,
+  its SHA-256 fingerprint, so you can compare it with your server's (for example
+  `openssl s_client -connect your.server:443 </dev/null | openssl x509 -noout -fingerprint -sha256`); **Remove** stops trusting it,
   and a new server address drops it.
 
 Passwords, tokens and header values never come back from the server. A saved one shows as dots, and
@@ -66,7 +78,9 @@ leaving the field blank keeps it.
 **Behind a sign-in proxy?** If the proxy answers instead of Actual, with a redirect or its own login
 page, the connector says so. Either add the header your proxy accepts under **Proxy headers**, or let
 these paths through to Actual without the proxy's login: `/account`, `/info`, `/sync`, `/data` and
-`/data-file-index.txt`. The sync doesn't use `/api`. If the proxy turns the app away, the connector
+`/data-file-index.txt`. The sync doesn't use `/api`. Letting paths through means anyone can reach
+Actual's own sign-in on them, guarded only by Actual's password or token: a header is the safer of
+the two. If the proxy turns the app away, the connector
 says the proxy wants its own sign-in, rather than blaming your Actual password.
 
 **Pangolin**, with its own sign-in or an identity provider such as PocketID, takes either header,
@@ -208,9 +222,13 @@ then **Needs your review**, **Worth checking** (only when there's something to s
 that went fine, since each re-check of the review would add one; a failed preview stays. It reads the
 same as YNAB's page. **Actual connection…** in the menu opens the connector's form.
 
-**Before the first sync that writes to Actual,** keep a copy of your budget there: in Actual,
-**Settings → Export data**. The import's backup covers this book, not your Actual budget, and a
-write to Actual can't be taken back from here.
+**Undoing a sync in Actual.** Each sync that writes to Actual first keeps Actual's budget as it
+was, and the page lists the last five under **Before each sync that wrote**. Download one and, in
+Actual, **Import file → Actual**: it comes back as a separate budget, as it was before that sync, and
+nothing is overwritten. A run that writes nothing keeps nothing. An end-to-end encrypted budget gets
+none, and the page says so where they would be: its copy here is decrypted, and keeping it would undo that encryption on disk, so export it
+from Actual yourself (**Settings → Export data**) before a sync that writes. The import's own backup
+covers this book, not Actual.
 
 **Preview** beside **Sync now** is a dry run: it reads Actual as a sync does and decides every
 transaction and month's Assigned by the same rules, then shows what would change and where (new,
@@ -392,9 +410,12 @@ your book and other files aren't touched.
 
 **The limits.** The sync reads a fresh copy of the budget on every run and deletes it afterwards, or
 within about an hour of a later run if a crash stops that, so your decrypted budget doesn't stay on
-disk. It's tested against a real Actual server for the sync cases on this page, including end-to-end
-encrypted and tracking budgets. It hasn't been tested on Windows,
-with OpenID-only servers, or on large real budgets.
+disk. The one copy kept is a restore point, for a run that wrote to a budget that isn't encrypted, in
+this instance's backups folder (see Undoing a sync in Actual). It's tested against a real Actual
+server for the sync cases on this page, including end-to-end encrypted and tracking budgets, and a
+budget of 10,000 transactions: its import and check took about half a minute, and a sync about 5
+seconds. It's tested with a server that signs in only with OpenID, through PocketID and a token. It
+hasn't been tested on Windows.
 
 ## Guides and comparisons
 

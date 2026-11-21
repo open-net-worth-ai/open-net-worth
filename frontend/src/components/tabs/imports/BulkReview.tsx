@@ -4,14 +4,13 @@ import type { BudgetAppInfo } from '../automations/datasync/budgetApps'
 import type { ReviewItem } from './sync'
 
 // One answer for many transactions: after a budget move or a long one-way stretch the review list
-// can hold dozens of rows that all want the same side kept. Only plain transaction items qualify:
+// can hold dozens of rows that all want the same side kept. Only plain transaction conflicts qualify
+// (a refused write needs its own look):
 // a category or group asks its own question, and an account's Starting Balance its own. The
 // answer is asked twice, the second time saying how many rows change and where.
 
 export function bulkItems(items: ReviewItem[]) {
-  return items.filter(
-    (i) => (i.entity ?? 'txn') === 'txn' && (i.kind === 'conflict' || i.kind === 'failed'),
-  )
+  return items.filter((i) => (i.entity ?? 'txn') === 'txn' && i.kind === 'conflict')
 }
 
 type Keep = 'onw' | 'ynab'

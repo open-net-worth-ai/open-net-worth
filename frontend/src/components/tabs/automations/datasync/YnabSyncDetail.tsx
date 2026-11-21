@@ -5,6 +5,7 @@ import { invalidateQueryCache } from '../../../../state/queryCache'
 import { fDate, fScheduleWhen, timeAgo } from '../../../../utils/format'
 import { Button, ErrorState, Switch, TabSkeleton } from '../../../ui'
 import { BulkReview } from '../../imports/BulkReview'
+import { RestorePoints } from './RestorePoints'
 import { SyncPreviewPanel, usePreview } from './SyncPreview'
 import { ReviewCard } from '../../imports/ReviewItem'
 import { RunReportModal } from '../../imports/RunReport'
@@ -268,6 +269,11 @@ export function YnabSyncDetail({
                 onImported={sync.refresh}
               />
             )}
+            <RestorePoints
+              app={app}
+              points={status.restore_points ?? []}
+              unavailable={!!status.restore_points_unavailable}
+            />
             <section className="a3-block" data-od-id="ynab-sync-direction">
               <div className="a3-block-h">Direction</div>
               <SettingMenu

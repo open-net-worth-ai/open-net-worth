@@ -28,7 +28,7 @@ describe('one answer for many review items', () => {
       item('d', { entity: 'start', kind: 'before_start' }),
       item('e', { kind: 'unsupported' }),
     ]
-    expect(bulkItems(items).map((i) => i.id)).toEqual(['a', 'b'])
+    expect(bulkItems(items).map((i) => i.id)).toEqual(['a'])
   })
 
   it('asks twice, saying how many and where, then answers them all', async () => {
