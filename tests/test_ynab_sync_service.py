@@ -436,11 +436,14 @@ def test_a_future_dated_ledger_transaction_is_not_sent(world):
     assert item["kind"] == "unsupported" and "future" in item["reason"] and world.writes == []
 
 
-def test_a_starting_balance_is_never_sent(world):
+def test_a_starting_balance_is_never_sent_as_a_transaction(world):
+    """An opening is never a synced row. Edited here before the first compare, it is asked
+    about (the review list shows both figures) and nothing is written until the person answers."""
     edit_onw(account("Checking")["opening_txn_id"], to_amount=5100, to_currency="USD")
     enable()
     sync()
-    assert world.writes == [] and ynab_sync.status()["conflicts"] == []
+    assert world.writes == []
+    assert [c["entity"] for c in ynab_sync.status()["conflicts"]] == ["opening"]
 
 
 def test_a_rejected_write_is_filed_with_ynabs_reason_and_not_retried(world):
