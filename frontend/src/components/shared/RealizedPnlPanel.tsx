@@ -4,6 +4,7 @@ import { fBase, fDate, plClass } from '../../utils/format'
 import { authFetch } from '../../api/client'
 import { Panel, SummaryBar, Text, type StatTone } from '../ui'
 import { ChevronDown, ChevronRight } from '../../ui/icons'
+import { keyActivate } from '../../utils/keyActivate'
 
 // Map a P&L sign → a SummaryBar tone (gain green / loss red), matching the sibling panels.
 function plTone(n: number): StatTone | undefined {
@@ -113,7 +114,7 @@ export function RealizedPnlPanel({ instrumentNames }: Props) {
                   <tr
                     key={ev.id}
                     className="realized-row"
-                    onClick={() => toggle(ev.id)}
+                    {...keyActivate(() => toggle(ev.id))}
                     style={{ cursor: 'pointer' }}
                   >
                     <td>

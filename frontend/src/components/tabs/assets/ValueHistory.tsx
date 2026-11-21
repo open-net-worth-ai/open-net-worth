@@ -13,6 +13,7 @@ import { canRemoveMark, fmt, fullDate } from './assetsData'
 import { SaveError, useEditorSave } from './editorKit'
 import { CorrectValueDialog } from './ValueDialogs'
 import { ChevronRight } from '../../../ui/icons'
+import { keyActivate } from '../../../utils/keyActivate'
 
 export interface ValueHistoryProps {
   a: OwnedAsset
@@ -86,7 +87,7 @@ function HistoryTable({ rows, onOpen }: HistoryViewProps) {
           </thead>
           <tbody>
             {rows.map(({ m, change, note, label }) => (
-              <tr key={m.id} className="data" onClick={() => onOpen(m)}>
+              <tr key={m.id} className="data" {...keyActivate(() => onOpen(m))}>
                 <td className="l">{fullDate(m.date)}</td>
                 <td className="money">{fmt(m.value)}</td>
                 <td className="l dim not-money">{note || '—'}</td>

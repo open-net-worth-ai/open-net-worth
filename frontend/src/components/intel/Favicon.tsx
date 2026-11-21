@@ -23,6 +23,7 @@ export function Favicon({ url, domain, className = '' }: Props) {
   }
   return (
     <img
+      loading="lazy"
       src={src}
       alt=""
       className={className}

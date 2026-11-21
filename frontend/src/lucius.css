@@ -695,7 +695,8 @@
 
   /* thinking label shimmer + spinner */
   .lx-label-txt.thinking {
-    background: linear-gradient(90deg, var(--faint) 20%, #fff 50%, var(--faint) 80%);
+    /* Peak at --ink, not #fff: a white peak vanished on the light themes' white page. */
+    background: linear-gradient(90deg, var(--faint) 20%, var(--ink) 50%, var(--faint) 80%);
     background-size: 200% 100%;
     -webkit-background-clip: text;
     background-clip: text;
@@ -2355,7 +2356,7 @@
     margin: 0 1px;
     padding: 1px 7px 1px 6px;
     line-height: 1.5;
-    font-size: 0.96em;
+    font-size: max(var(--text-2xs), 0.96em);
     cursor: pointer;
     user-select: none;
     position: relative;
@@ -2445,7 +2446,7 @@
   .mx-detail-foot {
     padding: 8px 13px;
     border-top: 1px solid var(--line);
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     color: var(--faint);
     background: color-mix(in srgb, var(--lucius) 5%, var(--modal-bg));
   }
@@ -2496,7 +2497,7 @@
     display: block;
   }
   .chip-tt {
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -2577,7 +2578,7 @@
     height: 10px;
   }
   .chip-to {
-    font-size: 9px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -2680,7 +2681,7 @@
     color: var(--muted);
     border-radius: var(--radius-md);
     font: inherit;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     font-weight: 600;
     padding: 3px 10px;
     cursor: pointer;
@@ -2814,7 +2815,7 @@
     box-shadow: 0 -4px 14px rgba(48, 42, 30, 0.08);
   }
   .lx-scope-peek-h {
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -2839,7 +2840,7 @@
     font-variant-numeric: tabular-nums;
   }
   .lx-scope-raw {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     color: var(--muted);
     line-height: 1.5;
     margin-top: 3px;
@@ -2948,7 +2949,7 @@
     text-overflow: ellipsis;
   }
   .lx-handle-d {
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     color: var(--faint);
     white-space: nowrap;
     overflow: hidden;
@@ -2956,7 +2957,7 @@
   }
   .lx-handle-act {
     flex: none;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     color: var(--muted);
     display: inline-flex;
@@ -2992,7 +2993,7 @@
     padding: 0 9px 8px;
   }
   .lx-scope-attached-l {
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -3127,7 +3128,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     font-weight: 700;
   }
   .lx-cite-src {
@@ -3340,7 +3341,7 @@
     color: var(--muted);
     border-radius: var(--radius-sm);
     font: inherit;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.03em;
     text-transform: uppercase;
@@ -3373,7 +3374,7 @@
     border-color: var(--line-strong);
   }
   .ac-zone {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -3450,7 +3451,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     font-weight: 800;
     letter-spacing: 0.02em;
     border-radius: 7px;
@@ -3543,7 +3544,7 @@
     position: relative;
   }
   .ac-item-tt {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.03em;
     text-transform: uppercase;
@@ -3555,7 +3556,7 @@
   }
   .ac-eye {
     color: var(--lucius);
-    font-size: 9px;
+    font-size: var(--text-2xs);
   }
   .ac-onscreen {
     color: var(--lucius);
@@ -3568,7 +3569,7 @@
     flex: none;
   }
   .ac-item-remote {
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     letter-spacing: 0.03em;
     text-transform: uppercase;
@@ -3583,7 +3584,7 @@
     color: var(--lucius);
     border-radius: var(--radius-sm);
     font: inherit;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     font-weight: 700;
     padding: 3px 7px;
     cursor: pointer;
@@ -3688,7 +3689,7 @@
   .ac-foot {
     border-top: 1px solid var(--line);
     padding: 7px 12px;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     color: var(--faint);
     display: flex;
     align-items: center;
@@ -3869,7 +3870,7 @@
     text-overflow: ellipsis;
   }
   .lx-att-dim {
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-weight: 500;
     color: var(--faint);
     flex: none;
@@ -4607,7 +4608,7 @@
   /* ── mx-kbd — shared keyboard hint pill (used in autocomplete footer) ── */
   .mx-kbd {
     font-family: ui-monospace, monospace;
-    font-size: 10.5px;
+    font-size: var(--text-2xs);
     background: var(--surface2);
     border: 1px solid var(--line-strong);
     border-radius: 4px;

@@ -54,32 +54,32 @@ const SECTOR_ALIASES: Record<string, string> = {
 }
 
 const SECTOR_COLOR: Record<string, string> = {
-  Technology: '#3b86dd',
-  Communication: '#22b8cf',
-  Consumer: '#e0a032',
-  Financials: '#1d9e75',
-  Healthcare: '#9a7fd0',
-  Energy: '#e2554f',
-  Industrials: '#6b7280',
-  Materials: '#bd7a1a',
-  'Real Estate': '#d4537e',
-  Utilities: '#2ba39a',
-  'Broad market': '#5b6472',
-  'Fixed income': '#2ba39a',
-  'Digital assets': '#9a7fd0',
-  Commodities: '#c8921a',
-  Other: '#6b7280',
+  Technology: 'var(--ibkr)',
+  Communication: 'var(--act-teal)',
+  Consumer: 'var(--contingent)',
+  Financials: 'var(--onwai)',
+  Healthcare: 'var(--crypto)',
+  Energy: 'var(--bad)',
+  Industrials: 'var(--cash-c)',
+  Materials: 'var(--apt)',
+  'Real Estate': 'var(--recv)',
+  Utilities: 'var(--bond)',
+  'Broad market': 'var(--cash-c)',
+  'Fixed income': 'var(--bond)',
+  'Digital assets': 'var(--crypto)',
+  Commodities: 'var(--warn)',
+  Other: 'var(--cash-c)',
 }
 
 const REGION_COLOR: Record<string, string> = {
-  'United States': '#3b86dd',
-  Europe: '#9a7fd0',
-  Singapore: '#e0a032',
-  'Global ex-US': '#22b8cf',
-  Global: '#1d9e75',
-  'United Kingdom': '#e2554f',
-  'Hong Kong': '#bd7a1a',
-  Japan: '#d4537e',
+  'United States': 'var(--ibkr)',
+  Europe: 'var(--crypto)',
+  Singapore: 'var(--contingent)',
+  'Global ex-US': 'var(--act-teal)',
+  Global: 'var(--onwai)',
+  'United Kingdom': 'var(--bad)',
+  'Hong Kong': 'var(--apt)',
+  Japan: 'var(--recv)',
 }
 
 const REGION_BY_CCY: Record<string, string> = {
@@ -188,7 +188,10 @@ export function SectorGeo({ d }: Props) {
           <div className="sec-row" key={s.k}>
             <div className="sec-top">
               <span className="sec-k">
-                <span className="sec-dot" style={{ background: colorMap[s.k] ?? '#6b7280' }} />
+                <span
+                  className="sec-dot"
+                  style={{ background: colorMap[s.k] ?? 'var(--cash-c)' }}
+                />
                 {s.k}
               </span>
               <span className="sec-v mask">{s.pct.toFixed(0)}%</span>
@@ -196,7 +199,10 @@ export function SectorGeo({ d }: Props) {
             <div className="sec-track">
               <span
                 className="sec-fill"
-                style={{ width: (s.pct / max) * 100 + '%', background: colorMap[s.k] ?? '#6b7280' }}
+                style={{
+                  width: (s.pct / max) * 100 + '%',
+                  background: colorMap[s.k] ?? 'var(--cash-c)',
+                }}
               />
             </div>
           </div>

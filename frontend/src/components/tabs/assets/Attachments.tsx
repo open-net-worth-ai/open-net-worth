@@ -28,6 +28,7 @@ import { AttachmentNoteDialog } from './AttachmentNoteDialog'
 import { useDocUpload, type DocUpload } from './docUpload'
 import { EditorFooter, SaveError, useEditorSave } from './editorKit'
 import { Icons } from './icons'
+import { keyActivate } from '../../../utils/keyActivate'
 
 /** What the server can read — images, statements and spreadsheets (RFC §3.9). */
 const ACCEPT = 'image/*,.pdf,.csv,.xls,.xlsx,.ofx,.qfx,.qif'
@@ -81,7 +82,7 @@ function DocsTable({ a, onOpen, onToggle, onRename, onNote, onRemove }: DocsTabl
           </thead>
           <tbody>
             {a.docs.map((d) => (
-              <tr key={d.ref_id} className="data" onClick={() => onOpen(d)}>
+              <tr key={d.ref_id} className="data" {...keyActivate(() => onOpen(d))}>
                 <td className="l">
                   <button
                     type="button"

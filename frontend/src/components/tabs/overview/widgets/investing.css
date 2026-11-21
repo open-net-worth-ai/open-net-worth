@@ -50,7 +50,7 @@
 .ov-sym {
   flex: none;
   width: 48px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   border: 1px solid var(--line-strong, var(--line));
   border-radius: 4px;
@@ -177,7 +177,7 @@
   align-items: center;
   gap: 6px;
   padding: 3px 6px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
 }
 
 .ov-treemap-group-dot {
@@ -256,7 +256,7 @@
 }
 
 .ov-treemap-tile-chg {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   color: var(--muted);
 }
 
@@ -407,7 +407,7 @@
 
 .ov-gains-sym {
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--faint);
 }

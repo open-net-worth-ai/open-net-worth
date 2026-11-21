@@ -16,6 +16,7 @@ import { sortRows } from '../../hooks/usePortfolio'
 import { LuciusAskButton } from './AskLucius'
 import { EntityRow } from '../../lucius/EntityRow'
 import { ChevronDown, ChevronRight } from '../../ui/icons'
+import { keyActivate } from '../../utils/keyActivate'
 
 // Human label + badge tone for each bond subtype.
 const BOND_TYPE_LABEL: Record<string, string> = {
@@ -508,7 +509,7 @@ export function HoldingsTable({
         })}
         as="tr"
         className={drillable ? 'hold-drill-row' : undefined}
-        onClick={drillable ? () => toggleExpanded(r.position_id!) : undefined}
+        {...(drillable ? keyActivate(() => toggleExpanded(r.position_id!)) : {})}
         aria-expanded={drillable ? isOpen : undefined}
         style={drillable ? { cursor: 'pointer' } : undefined}
       >
@@ -597,7 +598,7 @@ export function HoldingsTable({
                 <tbody key={g.key} className="hold-group">
                   <tr
                     className="hold-group-head"
-                    onClick={() => toggleGroup(g.key)}
+                    {...keyActivate(() => toggleGroup(g.key))}
                     aria-expanded={!isCollapsed}
                   >
                     {/* Span everything up to the Value column, then carry the subtotal in

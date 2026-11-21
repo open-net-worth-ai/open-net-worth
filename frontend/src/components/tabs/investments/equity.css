@@ -14,7 +14,7 @@
 }
 .eq-table thead th {
   text-align: right;
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -72,7 +72,7 @@
   color: var(--faint);
 }
 .eq-drawer-h {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -157,7 +157,7 @@
   text-align: right;
 }
 .eq-dr-meta-k {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -296,7 +296,7 @@
   padding: 13px 14px;
 }
 .eq-preview-h {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--fg-3);

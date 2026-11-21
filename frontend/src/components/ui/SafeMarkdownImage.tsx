@@ -9,7 +9,7 @@ import { remoteImageHost } from '../../utils/remoteImage'
 
 export function SafeMarkdownImage({ src, alt }: ImgHTMLAttributes<HTMLImageElement>) {
   const host = remoteImageHost(src)
-  if (host === null) return <img src={src} alt={alt ?? ''} />
+  if (host === null) return <img loading="lazy" src={src} alt={alt ?? ''} />
   const openable = typeof src === 'string' && /^https?:\/\//i.test(src)
   const label = `Remote image blocked (${host})`
   return openable ? (

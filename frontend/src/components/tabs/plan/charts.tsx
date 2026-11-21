@@ -797,7 +797,7 @@ export function FanChart({
             left: (retX / W) * 100 + '%',
             top: 2,
             transform: 'translateX(-50%)',
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: 700,
             color: drag ? 'var(--bg)' : 'var(--ink)',
             background: drag ? 'var(--ink)' : 'var(--surface)',
@@ -820,7 +820,7 @@ export function FanChart({
             left: (retX / W) * 100 + '%',
             top: 4,
             transform: 'translateX(-50%)',
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: 700,
             color: 'var(--muted)',
             background: 'var(--surface)',
@@ -840,7 +840,7 @@ export function FanChart({
             left: (retX / W) * 100 + '%',
             top: yAt(dist.p10) + 'px',
             transform: `translate(${retX / W > 0.62 ? '-100%' : retX / W < 0.12 ? '0' : '-50%'}, 7px)`,
-            fontSize: 9.5,
+            fontSize: 11,
             fontWeight: 700,
             color: color,
             background: 'color-mix(in srgb, var(--surface) 92%, transparent)',
@@ -863,7 +863,7 @@ export function FanChart({
             left: 10,
             top: fireY + 'px',
             transform: 'translateY(-50%)',
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: 700,
             color: 'var(--warn)',
             background: 'var(--surface)',
@@ -886,7 +886,7 @@ export function FanChart({
             left: (fireCrossX / W) * 100 + '%',
             top: fireY + 'px',
             transform: `translate(${fireCrossX / W > 0.72 ? '-100%' : fireCrossX / W < 0.08 ? '0' : '-50%'}, -165%)`,
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: 700,
             color: 'var(--warn)',
             background: 'var(--surface)',
@@ -909,7 +909,7 @@ export function FanChart({
             left: (dryX / W) * 100 + '%',
             top: yAt(0) + 'px',
             transform: `translate(${dryX / W > 0.72 ? '-100%' : dryX / W < 0.08 ? '0' : '-50%'}, -185%)`,
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: 700,
             color: 'var(--bad)',
             background: 'var(--surface)',
@@ -931,7 +931,7 @@ export function FanChart({
             left: (safeX / W) * 100 + '%',
             top: (safeLabelLow ? 26 : 4) + 'px',
             transform: `translate(${safeX / W > 0.72 ? '-100%' : safeX / W < 0.08 ? '0' : '-50%'}, 0)`,
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: 700,
             color: 'var(--good)',
             background: 'var(--surface)',
@@ -950,7 +950,7 @@ export function FanChart({
         style={{
           display: 'flex',
           justifyContent: 'space-between',
-          fontSize: 10,
+          fontSize: 11,
           color: 'var(--faint)',
           marginTop: 4,
           fontVariantNumeric: 'tabular-nums',
@@ -969,7 +969,7 @@ export function FanChart({
             right: 10,
             top: endLabelY + 'px',
             transform: 'translateY(-50%)',
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: 700,
             color: color,
             background: 'var(--surface)',
@@ -1002,7 +1002,7 @@ export function FanChart({
                 right: 4,
                 top: y + 'px',
                 transform: 'translateY(-50%)',
-                fontSize: 8.5,
+                fontSize: 11,
                 fontWeight: 600,
                 color: 'var(--faint)',
                 pointerEvents: 'none',
@@ -1057,17 +1057,17 @@ export function RbdChart({
   // stack bottom→top: richest first, then broke, then the mortality wedge on top
   const keys: Array<[string, string]> = conditional
     ? [
-        ['rich3', '#1d9e75'],
-        ['rich2', '#46c08d'],
-        ['rich1', '#bfe3cf'],
+        ['rich3', 'var(--onwai)'],
+        ['rich2', 'var(--good)'],
+        ['rich1', 'color-mix(in srgb, var(--good) 35%, var(--bg))'],
         ['broke', 'var(--bad)'],
       ]
     : [
-        ['rich3', '#1d9e75'],
-        ['rich2', '#46c08d'],
-        ['rich1', '#bfe3cf'],
+        ['rich3', 'var(--onwai)'],
+        ['rich2', 'var(--good)'],
+        ['rich1', 'color-mix(in srgb, var(--good) 35%, var(--bg))'],
         ['broke', 'var(--bad)'],
-        ['dead', '#5b626e'],
+        ['dead', 'var(--cash-c)'],
       ]
   const val = (d: OutcomeDataRow, k: string) =>
     conditional
@@ -1133,7 +1133,7 @@ export function RbdChart({
           <div className="d">Age {Math.round(hd.age)}</div>
           {!conditional && (
             <div className="r">
-              <i style={{ background: '#5b626e' }} />
+              <i style={{ background: 'var(--cash-c)' }} />
               No longer living <b>{pct(hd.dead)}%</b>
             </div>
           )}
@@ -1142,7 +1142,7 @@ export function RbdChart({
             Money ran out <b>{pct(conditional ? hd.cond.broke : hd.broke)}%</b>
           </div>
           <div className="r">
-            <i style={{ background: '#46c08d' }} />
+            <i style={{ background: 'var(--good)' }} />
             Still have money <b>{pct(haveMoney(hd))}%</b>
           </div>
         </div>
@@ -1151,7 +1151,7 @@ export function RbdChart({
         style={{
           display: 'flex',
           justifyContent: 'space-between',
-          fontSize: 10,
+          fontSize: 11,
           color: 'var(--faint)',
           marginTop: 4,
           fontVariantNumeric: 'tabular-nums',

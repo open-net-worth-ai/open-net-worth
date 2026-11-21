@@ -130,7 +130,7 @@
   color: var(--ink);
 }
 .bo-tag {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -289,7 +289,7 @@
 }
 .bo-dg-row .v.stop {
   color: var(--bad);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -339,7 +339,7 @@
   left: 50%;
   top: -7px;
   transform: translateX(-50%);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   background: var(--surface);
   padding: 0 4px;
@@ -356,7 +356,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: rgba(0, 0, 0, 0.62);
   white-space: nowrap;
@@ -390,7 +390,7 @@
   top: -12px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   color: var(--muted);
   font-weight: 700;
   white-space: nowrap;

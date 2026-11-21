@@ -262,7 +262,7 @@
 
 .ov-cal-dow {
   text-align: center;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--faint);
@@ -459,7 +459,7 @@
 }
 
 .ov-cal-pop-d {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--faint);
   letter-spacing: 0.05em;
