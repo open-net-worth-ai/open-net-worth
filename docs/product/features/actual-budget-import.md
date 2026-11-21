@@ -201,8 +201,12 @@ same as YNAB's page. **Actual connection…** in the menu opens the connector's 
 
 What one direction held back isn't lost. Switch back to both ways and the next sync moves it.
 
-**When both sides changed the same thing.** It waits in the review list, whichever direction you
-chose, and you pick the version to keep. The same goes for a row someone edits in Actual during
+**When both sides changed the same transaction.** With the sync both ways, changes to different
+fields both stand: a note you wrote here and a category picked in Actual end up on both sides. A
+category and a split's lines count as one field, and so do a row's amount, accounts and kind. When
+both sides changed the same field to different values, it waits in the review list, whichever
+direction you chose, and you pick the version to keep. In one direction, any change on both sides
+waits there. The same goes for a row someone edits in Actual during
 the moments a sync is writing it: the sync checks each row just before writing and leaves one that
 moved. That narrows the gap to milliseconds, plus the time a request takes to reach your server. It
 can't close it, because an Actual server has no way to refuse a write over a newer one: if your edit

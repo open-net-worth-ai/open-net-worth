@@ -9,7 +9,7 @@ from collections import Counter
 from backend.core.errors import OpenNetWorthError
 from backend.services import ledger as ledger_service
 from backend.services.budget_app import current
-from backend.services.ynab_sync import conflicts, context, pull, push, recorder, units
+from backend.services.ynab_sync import conflicts, context, merge, pull, push, recorder, units
 from backend.services.ynab_sync.baselines import Baselines
 from backend.services.ynab_sync.canon import canon, view
 from backend.services.ynab_sync.client import YnabClient
@@ -182,6 +182,21 @@ def _apply_pull(ctx: Context, unit: Unit, base: Baselines, tally: Counter) -> No
     tally["pulled"] += 1
 
 
+def _merge(ctx: Context, u: Unit, both: merge.Plan, tally: Counter, todo: list[Unit]) -> None:
+    """Changed on both sides in different fields: the app's written here, ours sent there."""
+    try:
+        todo.append(merge.apply_theirs(u, both))
+    except pull.LedgerChanged:
+        _file(ctx, u, conflicts.CONFLICT, "Changed here while the sync was running.")
+        return
+    except OpenNetWorthError as exc:
+        reason = f"The ledger refused {current().name}'s change: {exc.message}"
+        _file(ctx, u, conflicts.FAILED, reason)
+        return
+    recorder.txn_change("pulled", ctx, u.onw_id, u.base, u.ynab)
+    tally["pulled"] += 1
+
+
 def _seed(unit: Unit, base: Baselines) -> None:
     """Record the agreed state of a linked transaction when nothing needed doing."""
     if not (unit.onw_id and unit.refs):
@@ -246,7 +261,9 @@ def settle(
             if action != "adopt" and not waiting_on_a_category and not back_as_it_was:
                 continue
             conflicts.close(u.key)
-        if action == "conflict":
+        if action == "conflict" and direction == "both" and (both := merge.plan(u)):
+            _merge(ctx, u, both, tally, todo)
+        elif action == "conflict":
             _file(ctx, u, conflicts.CONFLICT, _conflict_reason(u, direction))
         elif action == "pull" and direction == "to_ynab":
             held["ynab"].update(u.refs)
