@@ -373,6 +373,10 @@ discovery and resolving its `tool_permissions` owner; untagged = the `core` buck
 Functions ≤ ~60 lines, files ≤ ~400 lines. Typed exceptions from `core/errors.py`; structured
 `logging`, never `print`. No comments unless the WHY is non-obvious. CSS: never introduce a
 `className` without its definition in `frontend/src/index.css` (`npm run lint:classes`).
+A heavy server read (one that rebuilds the book) is a SOURCE of `GET /api/query`
+(`services/data_query.SOURCES`, the same service call as its route) fetched with `querySource` —
+never a new standalone GET a screen fires beside the others (ADR
+`2026-11-21-a-screens-heavy-reads-are-one-query-from-one-read-of-the-book`).
 Screen data: read through `useQueryCache` — it revalidates on every tool write, from any surface
 (`dispatch` → `GET /api/events`, ADR `2026-09-29-every-write-refreshes-every-open-screen`); a
 screen holding fetched data in local state must add `useDataVersion('*')` to its fetch deps.

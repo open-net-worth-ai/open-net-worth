@@ -47,6 +47,7 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import insert as sa_insert
 from sqlalchemy import update as sa_update
 
+from backend.core import request_memo
 from backend.core.errors import ValidationError
 from backend.core.ids import new_id
 from backend.core.io import fire_db_write_hook
@@ -110,6 +111,9 @@ class AccountStore:
         if conn is not None:
             rows = [r.data for r in conn.execute(select(self._table).order_by(self._table.c.seq))]
             return _hydrate_institutions(rows, conn=conn)
+        return request_memo.memo_rows(("accounts.all",), self._read_all)
+
+    def _read_all(self) -> list[dict]:
         with self._eng().connect() as read_conn:
             rows = [
                 r.data for r in read_conn.execute(select(self._table).order_by(self._table.c.seq))

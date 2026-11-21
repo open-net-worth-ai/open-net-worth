@@ -120,6 +120,7 @@ from backend.api.cost import router as cost_router
 from backend.api.daily_total_value import router as daily_total_value_router
 from backend.api.dashboard import router as dashboard_router
 from backend.api.data_events_api import router as data_events_router
+from backend.api.data_query import router as data_query_router
 from backend.api.demo import router as demo_router
 from backend.api.demo_lockdown import refuse_on_demo
 from backend.api.demo_visitor import DemoVisitorMiddleware, bind_visitor
@@ -1228,6 +1229,7 @@ app.include_router(setup_router)
 app.include_router(networth_history_router)
 app.include_router(daily_total_value_router)
 app.include_router(networth_api_router)
+app.include_router(data_query_router)
 app.include_router(portfolio_history_router)
 app.include_router(preferred_models_router)
 app.include_router(cost_router)

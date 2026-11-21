@@ -34,6 +34,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import Engine, and_, delete, func, insert, select
 
+from backend.core import request_memo
 from backend.db.tables import price_points
 
 # Maximum points kept per instrument (matches prune keep-window + a small buffer).
@@ -120,6 +121,10 @@ class PriceHistoryStore:
         return _row_to_point(row) if row else None
 
     def latest_map(self) -> dict[str, float]:
+        """One read per request scope (core.request_memo); each caller gets its own dict."""
+        return dict(request_memo.memo(("prices.latest_map",), self._read_latest_map))
+
+    def _read_latest_map(self) -> dict[str, float]:
         """{price_source_id: last_known_price} in a single read — for hot-path callers
         (hydrated(), /api/prices) that would otherwise do one read per instrument.
 
@@ -161,6 +166,15 @@ class PriceHistoryStore:
         return _row_to_point(row) if row else None
 
     def _prior_to_map_for_day(self, day: str) -> dict[str, float]:
+        """One read per day per request scope (core.request_memo); each caller gets its own dict
+        (`prior_to_map` pops from it)."""
+        return dict(
+            request_memo.memo(
+                ("prices.prior_to", day), lambda: self._read_prior_to_map_for_day(day)
+            )
+        )
+
+    def _read_prior_to_map_for_day(self, day: str) -> dict[str, float]:
         latest = (
             select(price_points.c.price_source_id, func.max(price_points.c.date).label("md"))
             .where(price_points.c.date < day)

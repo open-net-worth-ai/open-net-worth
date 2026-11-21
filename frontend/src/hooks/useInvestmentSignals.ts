@@ -8,7 +8,7 @@
 //
 // On any error the hook degrades silently to the on-track fallback.
 
-import { authFetch } from '../api/client'
+import { querySource } from './serverState/dataQuery'
 import { useQueryCache } from '../state/queryCache'
 import type { InvestmentSignal } from '../types/investmentSignals'
 
@@ -32,8 +32,16 @@ export function useInvestmentSignals(): SignalsResult {
   const query = useQueryCache<Omit<SignalsResult, 'loading'>>(
     '/api/investments/brief',
     async () => {
-      const response = await authFetch('/api/investments/brief')
-      const data = response.ok ? await response.json() : null
+      const data = await querySource<{ signals?: unknown; decisions_count?: number }>(
+        'investments_brief',
+        {},
+        '/api/investments/brief',
+      ).catch((err: unknown) => {
+        // An HTTP error answer means "no brief" → the fallback. A network failure stays an
+        // error, so the cache keeps the last real signals instead of replacing them.
+        if (err instanceof Error && /→ HTTP \d+$/.test(err.message)) return null
+        throw err
+      })
       if (!data || !Array.isArray(data.signals)) {
         return { signals: [ONTRACK], decisionsCount: 0 }
       }

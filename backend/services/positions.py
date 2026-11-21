@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import threading
 
+from backend.core import request_memo
 from backend.core.errors import ValidationError
 from backend.core.instrument_display import display_name
 from backend.db import read_cache
@@ -916,6 +917,12 @@ def _row_ticker(inst: dict) -> str:
 
 @read_cache.cached(lambda: None)
 def hydration_context() -> dict:
+    """Built once per request scope (core.request_memo) — `hydrated()` and its callers only read
+    it — and handed out as a fresh top-level dict. Outside a scope, built every call."""
+    return dict(request_memo.memo(("positions.hydration_context",), _build_hydration_context))
+
+
+def _build_hydration_context() -> dict:
     """The price-INDEPENDENT inputs `hydrated()` needs — split out so a caller building rows
     against two different price snapshots in one request (e.g. `portfolio_rows.projected_rows`,
     disk prices then live prices) loads every underlying store exactly once and passes the same

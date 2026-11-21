@@ -110,6 +110,10 @@ days-old vite. Rules: agents work in worktrees; the owner's daily server runs wi
 2. **Composite per-page endpoints** — compute a page's shared foundation once per wave
    (extend the `hydration_context` pattern). Overview first. This is the biggest remaining
    UX lever now that caching is off.
+   **Shipped 2026-11-21 for the Dashboard's heavy reads** as a generic query endpoint, not a
+   page DTO: `GET /api/query` (named sources, streamed) + `core/request_memo` (one raw read of
+   the book per request). Same seven answers: 4.1 s CPU as separate GETs → 1.5 s as one query.
+   ADR `2026-11-21-a-screens-heavy-reads-are-one-query-from-one-read-of-the-book`.
 3. **Worker-process split** — move price polling/RSS ingest out of the serving process
    (cheap half). Moving LLM turns is expensive surgery; only on fresh loop-watch evidence.
 4. ~~**Transcript elision + real pagination**~~ — DONE 2026-08-12 (see layer 5: 22× on the
