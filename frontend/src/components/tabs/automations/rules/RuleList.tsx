@@ -67,7 +67,11 @@ export function RuleList({
               draggable={reorderable}
               disabled={!reorderable}
               aria-label={`Reorder ${rule.name}. Use the up and down arrow keys.`}
-              title={reorderable ? 'Drag to reorder' : 'Clear the filter to reorder'}
+              title={
+                reorderable
+                  ? 'Drag to change the order rules run in'
+                  : 'Clear the search to change the order'
+              }
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = 'move'
                 event.dataTransfer.setData('text/plain', rule.id)
@@ -86,9 +90,6 @@ export function RuleList({
             >
               <GripVertical size={15} aria-hidden="true" />
             </button>
-            <span className="rl-n" aria-hidden="true">
-              {index + 1}
-            </span>
             <div className="rl-body">
               <div className="rl-name">
                 <span className="rl-name-t">{rule.name}</span>

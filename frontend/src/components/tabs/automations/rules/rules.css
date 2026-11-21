@@ -3,8 +3,9 @@
    (centred, every new row made the whole dialog jump), up to the screen, where the body scrolls. */
 .ui-modal-card.rl-editor {
   align-self: flex-start;
-  margin-top: max(24px, 8vh);
-  max-height: calc(100vh - max(24px, 8vh) - 24px);
+  /* Until the editor measures itself (RuleEditorModal): an equal gap above and below. */
+  margin-top: 0;
+  max-height: calc(100vh - 48px);
 }
 .rl-editor .ui-modal__body {
   flex: 1 1 auto;
@@ -171,13 +172,6 @@
 .rl-grip:focus-visible {
   outline: 2px solid var(--accent);
   border-radius: 4px;
-}
-.rl-n {
-  min-width: 18px;
-  padding-top: 5px;
-  font-size: 12px;
-  color: var(--faint);
-  text-align: right;
 }
 .rl-body {
   flex: 1;
@@ -346,9 +340,13 @@
   color: var(--muted);
   padding: 4px 8px;
 }
+.rl-table th,
 .rl-table td {
-  padding: 6px 8px;
-  vertical-align: top;
+  border: 0;
+}
+.rl-table td {
+  padding: 7px 8px;
+  vertical-align: baseline;
 }
 .rl-table .num {
   text-align: right;

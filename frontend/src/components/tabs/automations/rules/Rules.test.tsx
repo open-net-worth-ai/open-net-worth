@@ -122,7 +122,7 @@ describe('Rules list', () => {
     ])
     expect(screen.getByText(/When payee is Acme r1/)).toBeTruthy()
     expect(screen.getAllByText(/3 matches/).length).toBe(2)
-    expect(screen.getByText(/run top to bottom; every matching rule applies/i)).toBeTruthy()
+    expect(screen.getByText(/run from top to bottom.*lower one wins.*drag a rule/i)).toBeTruthy()
   })
 
   it('explains Rules versus Lucius when there are none', () => {

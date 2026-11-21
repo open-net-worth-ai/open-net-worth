@@ -1,7 +1,7 @@
 // The Rule editor (mounted only while open, so each opening starts from its own rule or seed):
 // "If all/any of these match" conditions, "Then" the actions it uses, and a live look at what the Rule would do to the transactions already in the book. Nothing is
 // written until Save (or Apply to N, which writes only the ticked transactions).
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Automation, RuleApplyResult } from '../../../../api/automations'
 import { Button, Modal } from '../../../ui'
 import { TransactionConditionFields } from '../AutomationConditionFields'
@@ -52,6 +52,23 @@ export function RuleEditorModal({
   const [form, setForm] = useState<RuleForm>(() =>
     rule ? formFromAutomation(rule) : (seed ?? blankRuleForm()),
   )
+  // Centred where it opens, then its top edge stays put: rows added later grow it downward
+  // (re-centring on every row made the whole dialog jump), and past the window the body scrolls.
+  const stackRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    // One frame late: the dialog layer rewrites the card's inline style as it mounts.
+    const frame = requestAnimationFrame(() => {
+      const card = stackRef.current?.closest<HTMLElement>('.ui-modal-card')
+      if (!card || window.matchMedia('(max-width: 600px)').matches) return
+      // The overlay already pads the card 24px; `gap` is its distance from the window's top, and
+      // it may only grow until the gap below is the same — never touching the bottom edge.
+      const pad = 24
+      const gap = Math.max(pad, Math.round((window.innerHeight - card.offsetHeight) / 2))
+      card.style.setProperty('margin-top', `${gap - pad}px`)
+      card.style.setProperty('max-height', `calc(100vh - ${2 * gap}px)`)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [])
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   // Problems are shown once Create is pressed, never while the rule is still being filled in.
@@ -111,7 +128,7 @@ export function RuleEditorModal({
       }
     >
       <ComboDropdowns.Provider value>
-        <div className="a3-editor-stack">
+        <div className="a3-editor-stack" ref={stackRef}>
           <div>
             <label className="a3-field-label" htmlFor="rule-name">
               Name
