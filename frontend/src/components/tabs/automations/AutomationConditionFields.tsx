@@ -25,7 +25,7 @@ import {
   type ConditionField,
   type TxnCondition,
 } from './txnConditions'
-import { Plus } from '../../../ui/icons'
+import { Plus, X } from '../../../ui/icons'
 
 export function TransactionConditionFields({
   when,
@@ -33,6 +33,7 @@ export function TransactionConditionFields({
   payees,
   baseCurrency,
   match = 'all',
+  layout = 'rows',
   onChange,
 }: {
   when: Record<string, unknown>
@@ -40,6 +41,8 @@ export function TransactionConditionFields({
   payees: AutomationOption[]
   baseCurrency?: string
   match?: 'all' | 'any'
+  /** `inline`: each condition on one line, labels on top of nothing (the Rule editor). */
+  layout?: 'rows' | 'inline'
   onChange: (patch: Record<string, unknown>, path: string) => void
 }) {
   const conditions = readConditions(when)
@@ -57,6 +60,16 @@ export function TransactionConditionFields({
   const amountCurrency =
     (account ? accounts.find((a) => a.id === account)?.currency : baseCurrency) ?? ''
   const conflicts = match === 'any' ? [] : conditionConflicts(conditions)
+  const addButton = (
+    <button
+      id="automation-add-condition"
+      type="button"
+      className="a3-linkbtn"
+      onClick={() => write([...conditions, newCondition('payee')])}
+    >
+      <Plus size={13} aria-hidden="true" /> Add condition
+    </button>
+  )
   return (
     <>
       {conditions.map((condition, index) => (
@@ -64,6 +77,7 @@ export function TransactionConditionFields({
           key={index}
           index={index}
           match={match}
+          inline={layout === 'inline'}
           condition={condition}
           accounts={accounts}
           payees={payees}
@@ -73,16 +87,13 @@ export function TransactionConditionFields({
           onRemove={() => write(conditions.filter((_, i) => i !== index))}
         />
       ))}
-      <Row label={conditions.length ? '' : 'Conditions'} htmlFor="automation-add-condition">
-        <button
-          id="automation-add-condition"
-          type="button"
-          className="a3-linkbtn"
-          onClick={() => write([...conditions, newCondition('payee')])}
-        >
-          <Plus size={13} aria-hidden="true" /> Add condition
-        </button>
-      </Row>
+      {layout === 'inline' ? (
+        addButton
+      ) : (
+        <Row label={conditions.length ? '' : 'Conditions'} htmlFor="automation-add-condition">
+          {addButton}
+        </Row>
+      )}
     </>
   )
 }
@@ -90,6 +101,7 @@ export function TransactionConditionFields({
 function ConditionRows({
   index,
   match,
+  inline,
   condition,
   accounts,
   payees,
@@ -100,6 +112,7 @@ function ConditionRows({
 }: {
   index: number
   match: 'all' | 'any'
+  inline: boolean
   condition: TxnCondition
   accounts: AutomationOption[]
   payees: AutomationOption[]
@@ -146,22 +159,64 @@ function ConditionRows({
     condition.op === 'not_contains' ||
     picked.length > 0 ||
     warnings.length > 0
+  const fieldSelect = (
+    <Select
+      id={`${id}-field`}
+      value={condition.field}
+      options={CONDITION_FIELDS}
+      onChange={(field) => onChange(newCondition(field as ConditionField))}
+    />
+  )
+  const opSelect = (
+    <Select
+      id={`${id}-op`}
+      value={condition.op}
+      options={opsFor(condition.field, picked.length > 1)}
+      onChange={(op) => onChange({ ...condition, op, value: reshapeAmount(condition, op) })}
+    />
+  )
+  const valueControl = several ? (
+    <Select
+      id={`${id}-value`}
+      value=""
+      options={options.filter(([key]) => !picked.includes(key))}
+      placeholder={pickPlaceholder(condition.field, picked.length > 0)}
+      onChange={(value) => value && setValue(storedValues([...picked, value]))}
+    />
+  ) : (
+    <ConditionValue id={`${id}-value`} condition={condition} onChange={setValue} />
+  )
+  if (inline) {
+    return (
+      <div className="rl-cond" role="group" aria-label={`Condition ${index + 1}`}>
+        <div className="rl-cond-line">
+          {fieldSelect}
+          {opSelect}
+          <span className="rl-cond-value">
+            {valueControl}
+            {condition.field === 'amount' && amountCurrency && (
+              <span className="a3-trow-unit">{amountCurrency}</span>
+            )}
+          </span>
+          <button
+            type="button"
+            className="rl-icon-btn"
+            aria-label={`Remove condition ${index + 1}`}
+            onClick={onRemove}
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
+        </div>
+        {hasBelow && <div className="rl-cond-below">{below}</div>}
+      </div>
+    )
+  }
   return (
     <>
       <Row label={index === 0 ? 'Where' : match === 'any' ? 'or' : 'and'} htmlFor={`${id}-field`}>
         <div className="a3-cond-pair">
-          <Select
-            id={`${id}-field`}
-            value={condition.field}
-            options={CONDITION_FIELDS}
-            onChange={(field) => onChange(newCondition(field as ConditionField))}
-          />
-          <Select
-            id={`${id}-op`}
-            value={condition.op}
-            options={opsFor(condition.field, picked.length > 1)}
-            onChange={(op) => onChange({ ...condition, op, value: reshapeAmount(condition, op) })}
-          />
+          {fieldSelect}
+          {opSelect}
         </div>
         <button type="button" className="a3-linkbtn" onClick={onRemove}>
           Remove
@@ -173,17 +228,7 @@ function ConditionRows({
         unit={condition.field === 'amount' ? amountCurrency : undefined}
         below={hasBelow ? below : undefined}
       >
-        {several ? (
-          <Select
-            id={`${id}-value`}
-            value=""
-            options={options.filter(([key]) => !picked.includes(key))}
-            placeholder={pickPlaceholder(condition.field, picked.length > 0)}
-            onChange={(value) => value && setValue(storedValues([...picked, value]))}
-          />
-        ) : (
-          <ConditionValue id={`${id}-value`} condition={condition} onChange={setValue} />
-        )}
+        {valueControl}
       </Row>
     </>
   )

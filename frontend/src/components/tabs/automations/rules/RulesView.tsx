@@ -2,7 +2,7 @@
 // every new transaction. Owns its list actions and the editor; the rows live in the page's
 // `automations` state so a Lucius-made Rule (or any write) shows here without a second fetch.
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { ChevronDown, Plus, Search, Wrench } from 'lucide-react'
 import {
   createRule,
   deleteAutomation,
@@ -14,7 +14,8 @@ import {
 import { authFetch } from '../../../../api/client'
 import { useQueryCache } from '../../../../state/queryCache'
 import { Button, EmptyState, Modal } from '../../../ui'
-import { Workflow } from '../../../../ui/icons'
+import { LuciusMark, Workflow } from '../../../../ui/icons'
+import { AutomationMenu } from '../AutomationMenu'
 import type { AutomationOptions } from '../AutomationTriggerSummary'
 import { RuleEditorModal } from './RuleEditorModal'
 import { RuleList } from './RuleList'
@@ -23,6 +24,10 @@ import { peekRuleSeed, takeRuleSeed } from './ruleSeed'
 import './rules.css'
 
 const CATEGORIES_KEY = '/api/categories'
+
+const NEW_RULE_PROMPT =
+  'Draft a new transaction Rule for me. Ask which transactions it should match and what it should ' +
+  'do to them, then show me the completed rule before creating it.'
 
 async function fetchCategories(): Promise<Array<{ id: string; label: string }>> {
   const response = await authFetch(CATEGORIES_KEY)
@@ -38,11 +43,14 @@ export function RulesView({
   setAutomations,
   options,
   onError,
+  onAskLucius,
 }: {
   automations: Automation[]
   setAutomations: React.Dispatch<React.SetStateAction<Automation[]>>
   options: AutomationOptions
   onError: (message: string | null) => void
+  /** Opens Lucius with this message; omitted where there is no chat. */
+  onAskLucius?: (text: string) => void
 }) {
   const [query, setQuery] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -126,20 +134,60 @@ export function RulesView({
           />
         </label>
         <span className="grow" />
-        <Button
-          size="sm"
-          variant="primary"
-          iconLeft={<Plus size={14} aria-hidden="true" />}
-          onClick={() => setEditor({})}
-        >
-          New rule
-        </Button>
+        {onAskLucius ? (
+          <AutomationMenu
+            triggerClassName="a3-new-button"
+            popoverClassName="a3-new-pop"
+            label="New rule"
+            trigger={
+              <>
+                <Plus className="a3-toolbar-ic" size={14} aria-hidden="true" />
+                <span className="a3-toolbar-label">New rule</span>
+                <ChevronDown
+                  className="a3-toolbar-chevron"
+                  size={12}
+                  strokeWidth={1.7}
+                  aria-hidden="true"
+                />
+              </>
+            }
+            items={[
+              {
+                label: 'Create with Lucius',
+                icon: (
+                  <span className="a3-menu-ic lucius">
+                    <LuciusMark size={13} aria-hidden="true" />
+                  </span>
+                ),
+                onSelect: () => onAskLucius(NEW_RULE_PROMPT),
+              },
+              {
+                label: 'Set up manually',
+                icon: (
+                  <span className="a3-menu-ic">
+                    <Wrench size={14} aria-hidden="true" />
+                  </span>
+                ),
+                onSelect: () => setEditor({}),
+              },
+            ]}
+          />
+        ) : (
+          <Button
+            size="sm"
+            variant="primary"
+            iconLeft={<Plus size={14} aria-hidden="true" />}
+            onClick={() => setEditor({})}
+          >
+            New rule
+          </Button>
+        )}
       </div>
       {rules.length === 0 ? (
         <EmptyState
           icon={<Workflow size={28} strokeWidth={1.5} aria-hidden="true" />}
           title="No rules yet"
-          body="A rule labels transactions for you: when a payee, amount or description matches, it sets the category, adds tags or splits the transaction. It uses no AI and runs instantly on every new transaction. Use a Lucius automation when a judgement call is needed."
+          body="A rule handles each new transaction for you: when its payee, amount, account or text matches, it sets the category or payee, adds tags or a note, or splits it. No AI, and it runs instantly. For older transactions, use Apply to past matches or Run rules. Use a Lucius automation when a judgement call is needed."
         />
       ) : (
         <>

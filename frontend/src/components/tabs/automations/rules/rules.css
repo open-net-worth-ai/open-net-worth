@@ -1,6 +1,125 @@
 /* Rules view of Automations: the ordered list, the editor's sections and the live preview. */
+/* The editor hangs from a fixed point near the top and only grows DOWNWARD as rows are added
+   (centred, every new row made the whole dialog jump), up to the screen, where the body scrolls. */
+.ui-modal-card.rl-editor {
+  align-self: flex-start;
+  margin-top: max(24px, 8vh);
+  max-height: calc(100vh - max(24px, 8vh) - 24px);
+}
+.rl-editor .ui-modal__body {
+  flex: 1 1 auto;
+  max-height: none;
+}
 .rl-editor .a3-editor-stack {
-  gap: 18px;
+  gap: 22px;
+}
+/* "If …" and "Then": one hairline-framed clause each, the same inner grid, so a condition and an
+   action line up as one sentence. */
+.rl-clause {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rl-clause .rl-section-title {
+  margin: 0;
+}
+.rl-cond {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rl-cond-line {
+  display: grid;
+  grid-template-columns: 150px 150px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+}
+.rl-cond-line .a3-mini-select,
+.rl-action .a3-mini-select {
+  width: 100%;
+  height: 32px;
+  font-size: 12.5px;
+}
+.rl-cond-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rl-cond-value > .a3-mini-select,
+.rl-cond-value > .ui-datefield,
+.rl-cond-value > .a3-cond-between {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rl-cond-below {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 316px;
+}
+.rl-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+.rl-actions > .rd-kebab {
+  align-self: flex-start;
+}
+.rl-empty {
+  margin: 0;
+  font-size: 12.5px;
+}
+.rl-action {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rl-action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rl-action-head .a3-field-label {
+  margin: 0;
+}
+.rl-action-note {
+  font-size: 12px;
+}
+.rd-kebab-pop.rl-add-pop {
+  left: 0;
+  right: auto;
+  min-width: 190px;
+}
+.rl-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 600px) {
+  .ui-modal-card.rl-editor {
+    align-self: auto;
+    margin-top: 0;
+  }
+  .rl-cond-line {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px;
+  }
+  .rl-cond-value {
+    grid-column: 1 / 3;
+  }
+  .rl-cond-below {
+    padding-left: 0;
+  }
+  .rl-split-top {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px;
+  }
+  .rl-split-cat,
+  .rl-split-cat.wide {
+    grid-column: 1 / 3;
+  }
 }
 .rl-note {
   margin: 0 0 10px;
@@ -94,30 +213,28 @@
   font-size: 13px;
   font-weight: 600;
 }
-.rl-trows .a3-trow-label {
-  white-space: normal;
-}
-.rl-tags {
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 420px;
-}
 .rl-splits {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-start;
-}
-.rl-splits-empty {
-  margin: 0;
 }
 .rl-split {
   display: flex;
   gap: 10px;
   width: 100%;
+  box-sizing: border-box;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
+}
+.rl-split .a3-mini-select {
+  width: 100%;
+  height: 30px;
+}
+.rl-split-bottom > * {
+  flex: 1 1 200px;
+  min-width: 0;
 }
 .rl-split-n {
   font-size: 12px;
@@ -131,23 +248,44 @@
   flex-direction: column;
   gap: 8px;
 }
-.rl-split-top,
+.rl-split-top {
+  display: grid;
+  grid-template-columns: 150px 120px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+}
+.rl-split-amt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.rl-split-value {
+  width: 100%;
+  min-width: 0;
+}
+.rl-split-unit {
+  font-size: 12px;
+  color: var(--faint);
+}
+.rl-split-cat {
+  min-width: 0;
+}
+.rl-split-cat.wide {
+  grid-column: 2 / 4;
+}
+.rl-split-cat > .a3-mini-select {
+  width: 100%;
+}
 .rl-split-bottom {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-}
-.rl-split-value {
-  width: 90px;
-  height: 30px;
-}
-.rl-split-unit {
-  font-size: 11px;
-  color: var(--faint);
 }
 .rl-icon-btn {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 6px;
   border: 0;
   background: none;
@@ -238,4 +376,12 @@
 }
 .rl-more {
   margin: 6px 0 0;
+}
+.rl-icon-btn:hover {
+  color: var(--ink);
+  background: var(--surface2);
+}
+.rl-icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }

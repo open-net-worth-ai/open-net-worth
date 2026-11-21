@@ -171,9 +171,54 @@ describe('Rule editor', () => {
     )
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
-    const select = (await screen.findByLabelText('Category')) as HTMLSelectElement
+    const select = (await screen.findByLabelText('Set category')) as HTMLSelectElement
     await waitFor(() => expect([...select.options].map((o) => o.value)).toContain('cat_a'))
     expect([...select.options].map((o) => o.value)).not.toContain('split')
+  })
+
+  it('opens with Set category ready and offers only the actions not yet added', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+    expect(screen.getByLabelText('Set category')).toBeTruthy()
+    expect(screen.queryByLabelText('Set payee')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    const offered = screen.getAllByRole('menuitem').map((item) => item.textContent)
+    // A rule sets one category or splits — never both.
+    expect(offered).not.toContain('Set category')
+    expect(offered).not.toContain('Split into lines')
+    expect(offered).toContain('Add tags')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add tags' }))
+    expect(screen.getByLabelText('Add tags')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove set category' }))
+    expect(screen.queryByLabelText('Set category')).toBeNull()
+  })
+
+  it('shows what is missing only after Create is pressed', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+    expect(screen.queryByText('Finish every condition.')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Create rule' }))
+    expect(await screen.findByText('Finish every condition.')).toBeTruthy()
+    expect(screen.getByText('Add at least one action.')).toBeTruthy()
+    expect(api.createRule).not.toHaveBeenCalled()
+  })
+
+  it('offers Create with Lucius from New rule', async () => {
+    const ask = vi.fn()
+    render(
+      <RulesView
+        automations={[]}
+        setAutomations={vi.fn()}
+        options={OPTIONS}
+        onError={vi.fn()}
+        onAskLucius={ask}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'New rule' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /create with lucius/i }))
+    expect(ask).toHaveBeenCalledWith(expect.stringMatching(/transaction Rule/))
   })
 
   it('builds the contract payload (match any, a split) and shows the preview', async () => {
@@ -236,12 +281,12 @@ describe('Rule editor', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Acme split' } })
     fireEvent.change(screen.getByDisplayValue('all'), { target: { value: 'any' } })
-    fireEvent.click(document.getElementById('automation-add-condition')!)
     fireEvent.change(document.getElementById('automation-condition-0-value')!, {
       target: { value: 'pay_acme' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /add a line/i }))
-    fireEvent.click(screen.getByRole('button', { name: /add a line/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove set category' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Split into lines' }))
     fireEvent.change(document.getElementById('rule-split-0-value')!, { target: { value: '30' } })
     fireEvent.change(document.getElementById('rule-split-0-category')!, {
       target: { value: 'cat_a' },

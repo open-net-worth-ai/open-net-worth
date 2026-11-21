@@ -1,5 +1,5 @@
-// The Rule editor (mounted only while open, so each opening starts from its own rule or seed): "If all/any of these match" conditions, "Then" actions, optional split lines,
-// and a live look at what the Rule would do to the transactions already in the book. Nothing is
+// The Rule editor (mounted only while open, so each opening starts from its own rule or seed):
+// "If all/any of these match" conditions, "Then" the actions it uses, and a live look at what the Rule would do to the transactions already in the book. Nothing is
 // written until Save (or Apply to N, which writes only the ticked transactions).
 import { useMemo, useState } from 'react'
 import type { Automation, RuleApplyResult } from '../../../../api/automations'
@@ -9,7 +9,6 @@ import { Select } from '../automationFormControls'
 import type { AutomationOptions } from '../AutomationTriggerSummary'
 import { RuleActionFields, type RuleChoices } from './RuleActionFields'
 import { RulePreviewPanel } from './RulePreviewPanel'
-import { RuleSplitFields } from './RuleSplitFields'
 import {
   blankRuleForm,
   formFromAutomation,
@@ -54,6 +53,8 @@ export function RuleEditorModal({
   )
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // Problems are shown once Create is pressed, never while the rule is still being filled in.
+  const [attempted, setAttempted] = useState(false)
 
   const choices: RuleChoices = useMemo(
     () => ({
@@ -75,6 +76,7 @@ export function RuleEditorModal({
   const patch = (next: Partial<RuleForm>) => setForm((current) => ({ ...current, ...next }))
 
   const submit = async () => {
+    setAttempted(true)
     if (issues.blocking.length > 0) return
     setSubmitting(true)
     setSubmitError(null)
@@ -92,7 +94,7 @@ export function RuleEditorModal({
   return (
     <Modal
       open
-      size="xl"
+      size="lg"
       className="a3-editor-modal rl-editor"
       title={rule ? 'Edit rule' : 'New rule'}
       onClose={onClose}
@@ -101,13 +103,7 @@ export function RuleEditorModal({
           <Button size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={issues.blocking.length > 0}
-            loading={submitting}
-            onClick={() => void submit()}
-          >
+          <Button size="sm" variant="primary" loading={submitting} onClick={() => void submit()}>
             {rule ? 'Save changes' : 'Create rule'}
           </Button>
         </>
@@ -127,7 +123,7 @@ export function RuleEditorModal({
             onChange={(event) => patch({ name: event.target.value })}
           />
         </div>
-        <section aria-label="Conditions">
+        <section className="rl-clause" aria-label="Conditions">
           <h3 className="rl-section-title">
             If{' '}
             <Select
@@ -138,32 +134,28 @@ export function RuleEditorModal({
             />{' '}
             of these match
           </h3>
-          <div className="a3-trows rl-trows">
-            <TransactionConditionFields
-              when={form.when}
-              match={form.match}
-              accounts={options.accounts}
-              payees={options.payees ?? []}
-              baseCurrency={options.base_currency}
-              onChange={(next) => patch({ when: { ...form.when, ...next } })}
-            />
-          </div>
+          <TransactionConditionFields
+            layout="inline"
+            when={form.when}
+            match={form.match}
+            accounts={options.accounts}
+            payees={options.payees ?? []}
+            baseCurrency={options.base_currency}
+            onChange={(next) => patch({ when: { ...form.when, ...next } })}
+          />
         </section>
-        <section aria-label="Actions">
+        <section className="rl-clause" aria-label="Actions">
           <h3 className="rl-section-title">Then</h3>
           <RuleActionFields form={form} choices={choices} onChange={patch} />
         </section>
-        <section>
-          <h3 className="rl-section-title">Split into lines</h3>
-          <RuleSplitFields form={form} choices={choices} onChange={(splits) => patch({ splits })} />
-        </section>
-        {(issues.blocking.length > 0 || issues.hints.length > 0) && (
+        {((attempted && issues.blocking.length > 0) || issues.hints.length > 0) && (
           <ul className="rl-issues" aria-label="Before you save">
-            {issues.blocking.map((message) => (
-              <li key={message} className="rl-issue blocking">
-                {message}
-              </li>
-            ))}
+            {attempted &&
+              issues.blocking.map((message) => (
+                <li key={message} className="rl-issue blocking">
+                  {message}
+                </li>
+              ))}
             {issues.hints.map((message) => (
               <li key={message} className="rl-issue">
                 {message}
