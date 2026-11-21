@@ -38,8 +38,7 @@ export function ActualCertField(props: {
           </>
         ) : saved ? (
           <>
-            Trusted: SHA-256 {fingerprints.map((f) => f.slice(0, 23)).join(', ')}…. Paste another to
-            replace it.{' '}
+            Trusted: SHA-256 {fingerprints.join(', ')}. Paste another to replace it.{' '}
             <Button size="sm" variant="ghost" onClick={() => props.onClear(true)}>
               Remove
             </Button>

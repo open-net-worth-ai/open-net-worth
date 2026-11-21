@@ -26,13 +26,17 @@ export function BulkReview(props: {
   const [asking, setAsking] = useState<Keep | null>(null)
   if (items.length < 2) return null
   const n = items.length
+  // Rows the kept side no longer has: keeping it deletes them on the other side.
+  const deletes = asking
+    ? items.filter((i) => (asking === 'onw' ? i.onw : i.ynab) === null).length
+    : 0
   const where = asking === 'onw' ? app.name : 'this book'
   return (
     <Cluster gap="--space-2" align="center">
       {asking ? (
         <>
           <Text size="sm">
-            {`Keep ${asking === 'onw' ? 'Open Net Worth' : app.name}'s version of all ${n} transactions? Each one is changed in ${where} to match.`}
+            {`Keep ${asking === 'onw' ? 'Open Net Worth' : app.name}'s version of all ${n} transactions? Each one is changed in ${where} to match${deletes ? `, and ${deletes} ${deletes === 1 ? 'is' : 'are'} deleted there, as the kept side no longer has ${deletes === 1 ? 'it' : 'them'}` : ''}.`}
           </Text>
           <Button
             size="sm"

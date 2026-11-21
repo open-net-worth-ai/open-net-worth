@@ -13,7 +13,7 @@ function ndjson(lines: object[], status = 200): Response {
 }
 
 function sentQueries(call = 0): { refId: string; source: string; params: object }[] {
-  const url = new URL(String(authFetch.mock.calls[call][0]), 'http://x')
+  const url = new URL(String(authFetch.mock.calls[call]![0]), 'http://x')
   return JSON.parse(url.searchParams.get('q') ?? '{}').queries
 }
 
@@ -53,12 +53,12 @@ describe('querySource', () => {
     await querySource('commitments_coverage', { months: 12, floor: undefined }, '/x').catch(
       () => {},
     )
-    expect(sentQueries()[0].params).toEqual({ months: 12 })
+    expect(sentQueries()[0]!.params).toEqual({ months: 12 })
   })
 
   it('rejects a query whose answer is an error, the way fetchJson would', async () => {
     authFetch.mockImplementation(async () => {
-      const { refId } = sentQueries()[0]
+      const { refId } = sentQueries()[0]!
       return ndjson([{ refId, status: 409, error: 'nope' }])
     })
     await expect(querySource('net_worth', {}, '/api/net-worth')).rejects.toThrow(
@@ -81,7 +81,7 @@ describe('querySource', () => {
     authFetch.mockImplementation(async (url: string) => {
       if (!url.startsWith('/api/query')) return new Response('{"via":"get"}', { status: 200 })
       const [first] = sentQueries()
-      return ndjson([{ refId: first.refId, status: 200, data: 1 }])
+      return ndjson([{ refId: first!.refId, status: 200, data: 1 }])
     })
     const [a, b] = await Promise.all([
       querySource('net_worth', {}, '/api/net-worth'),

@@ -142,7 +142,7 @@ describe('useInvestmentSignals (thin fetch)', () => {
     const { result } = renderHook(() => useInvestmentSignals())
 
     await waitFor(() => expect(result.current.signals).toHaveLength(2))
-    const url = new URL(String(mockAuthFetch.mock.calls[0][0]), 'http://x')
+    const url = new URL(String(mockAuthFetch.mock.calls[0]![0]), 'http://x')
     expect(url.pathname).toBe('/api/query')
     expect(JSON.parse(url.searchParams.get('q') ?? '{}').queries[0].source).toBe(
       'investments_brief',

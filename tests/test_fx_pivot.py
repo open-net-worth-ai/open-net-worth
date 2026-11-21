@@ -33,6 +33,10 @@ def prices(monkeypatch, tmp_path):
     # Keep these offline: disable the batched v7 quote (which would hit Yahoo) so every
     # rate flows through the monkeypatched per-ticker `_fetch_one` fallback these tests assert on.
     monkeypatch.setattr(prices_mod, "_yf_batch_quote", lambda syms: {}, raising=False)
+    # fetch_live keeps a 60s in-memory cache keyed by holdings and currencies: an earlier test in
+    # the same worker could leave a result here for the same key (a cached EUR rate turned up in
+    # an "empty cache" test on CI once the shards shifted).
+    monkeypatch.setattr(prices_mod, "_price_cache", {})
     return prices_mod
 
 

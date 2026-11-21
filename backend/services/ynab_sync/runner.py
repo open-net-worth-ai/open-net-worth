@@ -433,6 +433,7 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
         st["last_ok_at"] = st["last_run"]["finished_at"]
     # What this run changed in the book's transactions, for "Undo the last sync here" (``undo``):
     # only the latest run's, and only when it changed one.
+    st["undone"] = None  # a run has now sent (or held) what an undo put back
     audit_to = TransactionAuditStore().max_seq()
     wrote = undo.changes(
         TransactionAuditStore().of_surface(audit_from, upto=audit_to, surface=current().surface)

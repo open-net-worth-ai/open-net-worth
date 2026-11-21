@@ -233,6 +233,20 @@ def _warnings(meta: dict, st: dict) -> list[dict]:
         found.append(differs)
     if st["awaiting_import"]:
         found.append({"kind": "import_first", "text": _import_first_line(st, differs)})
+    if undone := st.get("undone"):
+        many = undone != 1
+        found.append(
+            {
+                "kind": "undone",
+                "text": (
+                    f"{undone} transaction{'s' if many else ''} put back by an undo "
+                    f"{'are' if many else 'is'} waiting. Turning the sync on sends "
+                    f"{'them' if many else 'it'} to {ACTUAL.name} as changes made here, which "
+                    f"undoes {ACTUAL.name}'s side too. To keep {ACTUAL.name} as it is, import a "
+                    "restore point there first."
+                ),
+            }
+        )
     if failing := _failing_line(st):
         found.append({"kind": "failing", "text": failing})
     return found
