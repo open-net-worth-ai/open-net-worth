@@ -301,3 +301,19 @@ def test_find_tools_names_scoped_to_the_agents_own_offer():
     result = asyncio.run(_go())
     assert "loaded" not in result
     assert "no such tool" in result.get("error", "")
+
+
+def test_bounded_inline_sends_the_offers_writes_before_reads():
+    """A deferred write always bounces at the discovery gate, so a bounded offer inlines its
+    writes first — a paper Autopilot review lost its memo when propose_paper_orders and
+    record_autopilot_memo sorted past the budget."""
+    from backend.services.paper_trading.autopilot_run import TOOLS
+
+    offer = frozenset(TOOLS)
+    assert len(offer) > len(CORE_TOOL_NAMES)  # sanity: the review offer is bounded
+    inline, catalog = split_agent_offer(offer)
+    assert inline is not None
+    for name in ("propose_paper_orders", "record_autopilot_memo", "cancel_paper_orders"):
+        assert name in inline
+        assert name not in catalog
+    assert len(inline) <= len(CORE_TOOL_NAMES)
