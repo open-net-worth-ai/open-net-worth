@@ -128,6 +128,34 @@ def test_a_starting_balance_changed_here_goes_there(world):
     quiet()
 
 
+def test_a_starting_balance_changed_before_the_upgrade_is_asked_about(world):
+    from backend.services.actual_sync import app as actual_app
+    from backend.services.ynab_sync import state as sync_state
+
+    budget = world.seed()
+    world.imported(budget)
+    quiet()
+    with using(ACTUAL):
+        st = sync_state.load()
+        st.pop("openings_seen", None)
+        st.pop("openings_ours", None)
+        sync_state.save(st)
+    (opening,) = [
+        r
+        for r in budget.view()["rows"]
+        if r["account"] == "ACME Checking" and r["amount"] == 500000
+    ]
+    budget.steps(["call", "updateTransaction", opening["id"], {"amount": 610000}])
+    sync()
+    (item,) = [i for i in actual_app.sync_status()["conflicts"] if i.get("entity") == "opening"]
+    assert item["ynab"]["amount"] == 6100.0
+    with using(ACTUAL):
+        actual_app.resolve_sync_item(item["id"], "ynab")
+    assert ledger_service.opening_amount(account_here("ACME Checking")) == 6100.0
+    assert balances_here() == balances_there(budget.view())
+    quiet()
+
+
 def test_a_payee_cleared_here_is_cleared_there(world):
     budget = world.seed()
     world.imported(budget)

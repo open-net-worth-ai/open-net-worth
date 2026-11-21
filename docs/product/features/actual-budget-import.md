@@ -228,6 +228,8 @@ device whose clock runs more than ten minutes behind can lose the same way.
   Balance moves by that amount. Changed on both sides, each takes the other's difference, so
   neither change is lost. Actual's date follows here when it still matched yours; a date you set
   here stays here. **To Actual** holds Actual's changes back, and **To this book** holds yours.
+  The first sync after this arrived compares the two once: if they already differ, because one
+  was changed before, nothing moves on its own. The review list shows both and you keep one.
 - A payee you clear here is cleared in Actual too.
 - Actual has no category on an off-budget row, or on a transfer between two budget accounts. A
   category you give one here stays here and isn't sent; Actual's blank doesn't clear it.

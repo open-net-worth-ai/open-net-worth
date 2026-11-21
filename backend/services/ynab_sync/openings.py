@@ -16,7 +16,8 @@ from collections import Counter
 from backend.core.errors import ExternalServiceError, OpenNetWorthError
 from backend.services import ledger as ledger_service
 from backend.services.budget_app import current
-from backend.services.ynab_sync import recorder
+from backend.services.ynab_sync import conflicts, recorder
+from backend.services.ynab_sync import state as sync_state
 from backend.services.ynab_sync.client import RateCapReached, YnabClient
 from backend.services.ynab_sync.context import Context
 
@@ -55,7 +56,7 @@ def sync(ctx: Context, st: dict, tally: Counter, client: YnabClient | None = Non
         mine = _ours(acct)
         was_theirs, was_mine = seen.get(ynab_acct), ours_seen.get(ynab_acct)
         if was_theirs is None or was_mine is None:
-            seen[ynab_acct], ours_seen[ynab_acct] = theirs, mine  # first run: nothing to compare
+            _first(ctx, ynab_acct, acct, theirs, mine, seen, ours_seen)
             continue
         if theirs != was_theirs and pulls:
             if _pull(acct, mine, was_theirs, theirs, tally) is None:
@@ -74,6 +75,82 @@ def sync(ctx: Context, st: dict, tally: Counter, client: YnabClient | None = Non
         sends = pushes and client is not None
         was_mine = mine if sends or mine[0] == was_mine[0] else [was_mine[0], mine[1]]
         seen[ynab_acct], ours_seen[ynab_acct] = was_theirs, was_mine
+
+
+def key(account_id: str) -> str:
+    return f"opening:{account_id}"
+
+
+def _expected(ctx: Context, ynab_acct: str) -> int:
+    """This book's opening as the import books the app's Starting Balance: less any part the app
+    put in one of the categories here, which became a row of its own."""
+    t = ctx.mirror[ctx.openings[ynab_acct]]
+    lines = [x for x in t.get("subtransactions") or [] if not x.get("deleted")]
+    parts = [x for x in lines or [t] if x.get("amount") and ctx.cat_ids.get(x.get("category_id"))]
+    return int(t["amount"]) - sum(int(x["amount"]) for x in parts)
+
+
+def _first(ctx, ynab_acct, acct, theirs, mine, seen, ours_seen) -> None:
+    """No baseline yet (the first run since openings synced). When the two already agree they
+    become it. When they don't, one side changed since the import and nothing says which: the
+    person is asked, and the account waits until they answer."""
+    expected = _expected(ctx, ynab_acct)
+    if abs(mine[0] - expected) < 10:
+        conflicts.close(key(acct["id"]))
+        seen[ynab_acct], ours_seen[ynab_acct] = theirs, mine
+        return
+    if key(acct["id"]) in conflicts.open_keys():
+        return
+    app = current().name
+    conflicts.file(
+        conflicts.CONFLICT,
+        key(acct["id"]),
+        f"{acct['name']} Starting Balance",
+        f"{acct['name']}'s Starting Balance here and in {app} don't match, and nothing says "
+        f"which changed since the import. Keep one: the other side is set to match it.",
+        _view(acct, mine[0], mine[1]),
+        _view(acct, expected, theirs[1]),
+        entity="opening",
+        account_id=acct["id"],
+        ynab_account=ynab_acct,
+    )
+
+
+def _view(acct: dict, milli: int, date: str | None) -> dict:
+    return {
+        "date": date,
+        "account": acct["name"],
+        "payee": "Starting Balance",
+        "memo": "",
+        "category": None,
+        "amount": milli / 1000,
+        "cleared": True,
+    }
+
+
+def resolve(item: dict, keep: str, ctx: Context, client: YnabClient, direction: str) -> None:
+    """``onw``: the app's Starting Balance is moved to match this book; ``ynab``: this book's
+    opening is set to the app's. A direction that protects the side to be written leaves both
+    as they are and takes them as agreed."""
+    acct = ledger_service.accounts.find_by_id(item["account_id"])
+    ynab_acct = item["ynab_account"]
+    if acct is None or ynab_acct not in ctx.openings or ctx.openings[ynab_acct] not in ctx.mirror:
+        return
+    t = ctx.mirror[ctx.openings[ynab_acct]]
+    theirs, mine, expected = [int(t["amount"]), t["date"]], _ours(acct), _expected(ctx, ynab_acct)
+    writes_app = keep == "onw" and direction != "from_ynab"
+    writes_here = keep == "ynab" and direction != "to_ynab"
+    if writes_app:
+        amount = theirs[0] + mine[0] - expected
+        client.save_transactions("PATCH", [{"id": ctx.openings[ynab_acct], "amount": amount}])
+        t["amount"], theirs = amount, [amount, theirs[1]]
+    elif writes_here:
+        ledger_service.set_account_opening(acct["id"], round(expected / 1000, 2), mine[1])
+        mine = _ours(ledger_service.accounts.find_by_id(acct["id"]) or acct)
+    st = sync_state.load()
+    st.setdefault("openings_seen", {})[ynab_acct] = theirs
+    st.setdefault("openings_ours", {})[ynab_acct] = mine
+    sync_state.save(st)
 
 
 def _pull(acct: dict, mine: list, was: list, now: list, tally: Counter) -> list | None:
