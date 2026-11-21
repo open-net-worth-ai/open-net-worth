@@ -9,7 +9,7 @@ import { AddAccountSelect } from '../accounts/pickers'
 import type { Account } from '../accounts/types'
 import { fCur } from '../accounts/format'
 import { TYPE_COLOR, TYPE_ICON } from '../accounts/categories'
-import { isHeld, isOwed, shownBalance, type ProviderAccountRow } from './accountRows'
+import { isOwed, shownBalance, type ProviderAccountRow } from './accountRows'
 
 /** " · Enable Banking" for an account already linked through another connector. */
 function linkedElsewhere(a: Account): string | null {
@@ -75,7 +75,6 @@ export function ConnectorAccountRow({
         <div className="conn-acct-bal">
           {fCur(shownBalance(row) as number, row.currency, { cents: true })}
           {isOwed(row) && <span className="conn-acct-owed"> owed</span>}
-          {isHeld(row) && <span className="conn-acct-owed"> in credit</span>}
         </div>
       )}
       <div className="conn-acct-actions">

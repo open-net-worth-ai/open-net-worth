@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 //
-// A card the bank says is IN CREDIT holds its balance: the list must not call it "owed"
-// (the server works that out, `in_credit`, by the rule the balance check reads).
+// A card the bank says is IN CREDIT holds its balance: the list shows it as a plain amount,
+// like money in a bank account, never "owed" (the server works that out, `in_credit`, by the
+// rule the balance check reads).
 import { afterEach, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { ConnectorAccountRow } from './ConnectorAccountRow'
@@ -34,14 +35,13 @@ function show(row: ProviderAccountRow) {
   )
 }
 
-it('a card in credit reads "in credit", never "owed"', () => {
+it('a card in credit shows its amount plainly, never "owed"', () => {
   show({ ...card, in_credit: true })
-  expect(screen.getByText('in credit')).toBeTruthy()
-  expect(screen.queryByText('owed')).toBeNull()
+  expect(screen.getByText('€50.00')).toBeTruthy()
+  expect(screen.queryByText(/owed/)).toBeNull()
 })
 
 it('a card that owes still reads "owed"', () => {
   show({ ...card, in_credit: false })
   expect(screen.getByText('owed')).toBeTruthy()
-  expect(screen.queryByText('in credit')).toBeNull()
 })

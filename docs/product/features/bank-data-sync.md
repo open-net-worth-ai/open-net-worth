@@ -186,7 +186,8 @@ A card or loan's balance is money owed, so it's compared as a negative figure wh
 bank reports it. The exception is a card **in credit** (you paid more than you owed): when the
 card's credit limit is set and the bank's available credit is more than the limit by exactly
 the card's balance, that balance is money the card holds, not money owed. The connector's
-account list then shows it as "in credit" rather than "owed", and **Add** starts the card at 0
+account list then shows the amount on its own, like money in a bank account, without "owed",
+and **Add** starts the card at 0
 owed: the first import sets the money it holds. The card's limit comes from the bank when it
 states one (Enable Banking does), else from the linked account. GoCardless and Enable Banking say which figure is settled, and that's the one
 compared with your cleared balance. Plaid sends a single figure that leaves out pending
