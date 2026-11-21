@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 import backend.ai.tools  # noqa: F401 — registers every tool
+from backend.ai.auto_judge_context import Standing
 from backend.ai.tools import registry
 from backend.evals.auto_judge.cases import BATCH_CASES, CASES
 from backend.evals.auto_judge.runner import (
@@ -50,6 +51,9 @@ def test_every_case_builds_a_production_prompt(case):
         assert text.count("«owner-message:") == sum(
             1 for m in case.owner if getattr(m, "speaker", "owner") == "owner"
         )
+        assert "«owner-messages:" not in text
+    elif any(isinstance(m, Standing) for m in case.owner):
+        assert text.count("«automation-instructions:") == 1  # an unattended run's instructions
         assert "«owner-messages:" not in text
     else:
         assert text.count("«owner-messages:") == 1  # one fence open per block, no leakage

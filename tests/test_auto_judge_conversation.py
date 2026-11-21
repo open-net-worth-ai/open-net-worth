@@ -15,7 +15,7 @@ import json
 import pytest
 
 from backend.ai import auto_judge, auto_judge_context
-from backend.ai.auto_judge_context import Said, conversation_from_rows, named_rows
+from backend.ai.auto_judge_context import Said, Standing, conversation_from_rows, named_rows
 from backend.ai.auto_judge_prompt import SYSTEM, build_prompt
 
 pytestmark = pytest.mark.flags(permissions_v2=True)
@@ -259,6 +259,6 @@ def test_an_automation_run_still_reads_only_its_instructions(monkeypatch):
         AutomationApprovalContext(automation_id="a1", run_id="r1", session_id="s1", mode="auto")
     )
     try:
-        assert auto_judge.owner_intent() == ["Log receipts"]
+        assert auto_judge.owner_intent() == [Standing("Log receipts")]
     finally:
         reset_automation_approval(token)

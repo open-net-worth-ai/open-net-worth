@@ -151,6 +151,11 @@ unsure, it stops.
   attached to your message (mentions, the screen, news) — so text from outside can't vouch for a
   change. In an Automation it reads only the instructions you saved, never the email or webhook
   that started the run.
+- **In an Automation, your instructions cover what the run finds.** Saved instructions describe
+  kinds of work ("log each payment my bank emails confirm"), and can't name the payments a run will
+  find. So a call that does exactly what the instructions ask, to something the run found, runs
+  without a card. A different kind of action (deleting when the instructions only say to log), a
+  bulk change, or a message to someone the instructions don't name still gets the card.
 - **Which model judges.** The **Auto-approval judge** under **Settings → AI**; unset, it uses the
   model this conversation is running on — a Claude Code or Codex model included. Each judgement
   (a group of calls counts as one) waits at most 10 seconds; if the model is slower, you get the

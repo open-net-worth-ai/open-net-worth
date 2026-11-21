@@ -40,6 +40,16 @@ class Said:
     text: str
 
 
+@dataclass(frozen=True)
+class Standing:
+    """An Automation's saved instructions: the owner's intent for an unattended run, written
+    before it. They describe KINDS of work, never the rows a run finds, so the judge is told
+    they are standing instructions — read as a chat message, every write a run made looked
+    like a row "the owner never named" (owner, 2026-11-22)."""
+
+    text: str
+
+
 def _lucius_text(content: Any) -> str:
     """The prose of a stored assistant row — its text blocks, never a tool call or thinking."""
     if isinstance(content, str):
