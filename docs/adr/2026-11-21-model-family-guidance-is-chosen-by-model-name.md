@@ -49,18 +49,21 @@ prompt per model.
 
 ## Evidence
 
-`codex_cli:gpt-6-luna`, two runs (2 + 3 repeats per arm), measured before the scenario's
-account names, amount and date were swapped for the synthetic ones it now ships with (same
-shape: one move booked as a reversed transfer plus a duplicate expense):
+`codex_cli:gpt-6-luna`, 13 replays per arm over four sessions. The first 5 used the report's
+own account names, amount and date; the last 8 use the synthetic scenario the eval ships with
+(same shape: one move booked as a reversed transfer plus a duplicate expense).
 
 | guidance | fixed | not fixed |
 |---|---|---|
-| off | 1 / 5 | 4 — converted the expense into a second transfer (movement booked twice) |
-| on | 4 / 5 | 1 — fixed the transfer, left the expense, asked whether to delete it |
+| off | 8 / 13 | 5 — four turned the expense into a second transfer (money booked twice), one stopped to ask which entry to keep |
+| on | 11 / 13 | 2 — one turned the expense into a second transfer, one fixed the transfer and asked before deleting the expense |
 
-Without guidance the model rarely gave up outright here; it did something worse, a silent
-double-count, because the only write it held was `update_transactions`. Small samples: re-run
-before tightening or extending the block.
+That points the right way but is not statistically established at this sample size, and it
+is noisy: the first session showed 0/2 vs 2/2, a later one 3/3 vs 3/3. Without guidance the model rarely gave up outright, as in the report; more often it
+did something worse, a double-count, because the only write it held was `update_transactions`.
+The block reduces that, it does not remove it, so the block is a mitigation, not a guarantee.
+Control: `claude_cli:sonnet` gets no block (verified) and fixed 2/2. Re-run before tightening or
+extending the block.
 
 ## Consequences
 

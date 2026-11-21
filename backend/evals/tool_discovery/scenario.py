@@ -127,6 +127,22 @@ def score(ids: dict[str, str], events: list[dict], error: str = "") -> Score:
     )
 
 
+def capture(ev: dict) -> dict | None:
+    """The part of one ``assistant.run`` event the score reads, or None to drop it.
+
+    A called tool is observable only as ``tool_executing`` — ``tool_use`` is a transcript
+    block, never yielded — so it is recorded here under ``tool_use``.
+    """
+    kind = ev.get("type")
+    if kind == "text_delta":
+        return {"type": kind, "text": ev.get("text", "")}
+    if kind == "tool_executing":
+        return {"type": "tool_use", "name": ev.get("name"), "input": ev.get("input")}
+    if kind == "error":
+        return {"type": kind, "text": str(ev.get("message") or ev)[:200]}
+    return None
+
+
 def _after_last_user_turn(events: list[dict]) -> list[dict]:
     marks = [i for i, e in enumerate(events) if e.get("type") == "turn_start"]
     return events[marks[-1] + 1 :] if marks else events

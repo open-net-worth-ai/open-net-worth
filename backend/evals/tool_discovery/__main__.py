@@ -111,15 +111,9 @@ class Replay:
         async for ev in assistant.run(
             session, [{"role": "user", "content": text}], system, model=model_ref
         ):
-            kind = ev.get("type")
-            if kind == "text_delta":
-                events.append({"type": kind, "text": ev.get("text", "")})
-            elif kind == "tool_executing":  # the one event that names a called tool
-                events.append(
-                    {"type": "tool_use", "name": ev.get("name"), "input": ev.get("input")}
-                )
-            elif kind == "error":
-                events.append({"type": kind, "text": str(ev.get("message") or ev)[:200]})
+            kept = scenario.capture(ev)
+            if kept is not None:
+                events.append(kept)
 
     async def shutdown(self) -> None:
         try:

@@ -82,3 +82,44 @@ def test_the_block_sits_in_the_cached_half_with_the_catalog_it_points_at():
 def test_the_block_names_the_loader_and_forbids_the_give_up():
     assert 'find_tools(names=["<tool>"])' in GPT_TOOL_LOADING
     assert "Never tell the user you cannot make a change" in GPT_TOOL_LOADING
+
+
+def _default_model(monkeypatch, model):
+    from backend.db.model_config_store import ModelConfigStore
+
+    real = ModelConfigStore.resolved
+
+    def resolved(self):
+        if model is Exception:
+            raise RuntimeError("config unreadable")
+        return {**real(self), "model": model}
+
+    monkeypatch.setattr(ModelConfigStore, "resolved", resolved)
+
+
+def test_a_prompt_built_without_a_model_follows_the_instance_default(monkeypatch):
+    """``capture.py`` builds the prompt with no model — it is served by the default."""
+    _default_model(monkeypatch, "gpt-6-luna")
+    assert GPT_TOOL_LOADING in _text(build_system_prompt())
+    _default_model(monkeypatch, "sonnet")
+    assert GPT_TOOL_LOADING not in _text(build_system_prompt())
+
+
+def test_an_explicit_model_wins_over_the_default(monkeypatch):
+    _default_model(monkeypatch, "sonnet")
+    assert GPT_TOOL_LOADING in _text(build_system_prompt(model="openai/gpt-6-luna"))
+
+
+def test_an_unreadable_config_leaves_the_prompt_whole_without_the_block(monkeypatch):
+    from backend.ai.prompts import _fmt_model_guidance
+
+    _default_model(monkeypatch, Exception)
+    assert _fmt_model_guidance(None) == ""
+
+
+def test_an_empty_model_id_is_not_resolved_to_the_default(monkeypatch):
+    """``""`` is a real (blank) answer from the turn's context, not "unknown"."""
+    from backend.ai.prompts import _fmt_model_guidance
+
+    _default_model(monkeypatch, "gpt-6-luna")
+    assert _fmt_model_guidance("") == ""
