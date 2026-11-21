@@ -186,6 +186,9 @@ the same comparison again whenever you like, against Actual's figures at that mo
 
 The sync runs on a schedule, every 15 or 30 minutes, hourly, every 6 hours, daily or only when you
 ask. It covers transactions, each month's Assigned, categories and groups. No AI model is involved.
+A run that fails for a reason that may pass, such as the server being down, tries again sooner:
+after 5 minutes, then 15, then an hour, never later than the schedule. A refused sign-in waits for
+you instead.
 
 Once it's set up, **Automations → Data Sync → Actual** has the switch and **Sync now** at the top,
 then **Needs your review**, **Worth checking** (only when there's something to say), **Direction**,

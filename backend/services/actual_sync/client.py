@@ -322,6 +322,8 @@ def _chain(exc: BaseException) -> list[BaseException]:
 class SignInRefused(Stopped):
     """The server turned the saved password or token away."""
 
+    sign_in = True  # a retry can't help: the sync waits for the person (``state.sign_in_problem``)
+
 
 # A sign-in proxy answers with a redirect or its own login page, where Actual answers JSON.
 _BEHIND_PROXY = (

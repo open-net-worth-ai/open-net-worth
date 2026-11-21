@@ -64,6 +64,7 @@ def blank() -> dict:
         "awaiting_import": False,
         "last_run": None,
         "next_run_at": None,
+        "failures": 0,  # runs in a row that failed for a reason that may pass
     }
 
 
@@ -119,9 +120,25 @@ def validate_interval(interval: str) -> str:
     return interval
 
 
+# After a run that failed for a reason that may pass (the server down, a timeout, the rate limit),
+# the next one comes sooner: 5 minutes, then 15, then an hour, never later than the schedule.
+RETRY_AFTER = (300, 900, 3600)
+
+
 def schedule_next(state: dict, started: datetime) -> None:
     seconds = INTERVALS[state["interval"]]
+    failures = state.get("failures", 0)
+    if seconds and failures:
+        seconds = min(seconds, RETRY_AFTER[min(failures, len(RETRY_AFTER)) - 1])
     state["next_run_at"] = iso(started + timedelta(seconds=seconds)) if seconds else None
+
+
+def sign_in_problem(exc: Exception) -> bool:
+    """A refused sign-in or token: trying again changes nothing until the person fixes it."""
+    text = str(getattr(exc, "message", "") or exc).lower()
+    return bool(getattr(exc, "sign_in", False)) or any(
+        w in text for w in ("sign-in", "sign in", "token", "unauthorized", "401", "403")
+    )
 
 
 def parse(stamp: str) -> datetime:
