@@ -48,10 +48,10 @@ DEFAULT = {
     "running_since": None,
     # What Lucius recorded with record_autopilot_memo during the running review.
     "memo_draft": None,
-    # What he proposed with propose_paper_orders (flag autopilot_committee): placed by code
+    # What he proposed with propose_paper_orders: placed by code
     # once his turn ends (autopilot_proposals).
     "proposals_draft": None,
-    # The challenge and risk turns' verdicts on those proposals (autopilot_committee).
+    # The challenge and risk turns' verdicts on those proposals (autopilot_committee.py).
     "challenge_draft": None,
     "risk_draft": None,
     # Why the next review runs early ("Review now", "ACME fell 6.1% today"), and why the running
@@ -277,7 +277,7 @@ def finish(pid: str, record: dict) -> dict:
             # One sentence each on stocks it fully sold: later reviews read them as its earlier
             # opinion (autopilot_memory), kept apart from the facts.
             "lessons": (draft.get("lessons") or []) if status == "done" else [],
-            # Flag autopilot_committee: each proposal and what happened to it.
+            # Each proposal and what happened to it.
             "proposals": record.get("proposals") or [],
             "error": error,
         }

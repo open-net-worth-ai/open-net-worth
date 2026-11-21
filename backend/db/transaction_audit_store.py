@@ -170,6 +170,31 @@ class TransactionAuditStore:
         with self._eng().connect() as conn:
             return [{**payload, "seq": n} for n, payload in conn.execute(stmt)]
 
+    def of_surface(self, seq: int, *, upto: int, surface: str) -> list[dict]:
+        """Events with ``seq`` in (``seq``, ``upto``] written through ``surface``, oldest first,
+        each payload carrying its ``seq``: what one run of a sync did to the ledger."""
+        stmt = (
+            select(self._table.c.seq, self._table.c.payload)
+            .where(
+                self._table.c.seq > seq,
+                self._table.c.seq <= upto,
+                self._table.c.surface == surface,
+            )
+            .order_by(self._table.c.seq)
+        )
+        with self._eng().connect() as conn:
+            return [{**payload, "seq": n} for n, payload in conn.execute(stmt)]
+
+    def touched_after(self, seq: int, txn_ids: set[str]) -> set[str]:
+        """Which of ``txn_ids`` have any event after ``seq``, through any surface."""
+        if not txn_ids:
+            return set()
+        stmt = select(self._table.c.txn_id).where(
+            self._table.c.seq > seq, self._table.c.txn_id.in_(sorted(txn_ids))
+        )
+        with self._eng().connect() as conn:
+            return {row[0] for row in conn.execute(stmt)}
+
     def edits_of(self, txn_ids: set[str], *, not_surface: str) -> dict[str, list[dict]]:
         """Every update/delete/restore event of the given transactions, oldest first."""
         stmt = (

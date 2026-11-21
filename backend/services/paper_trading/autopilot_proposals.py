@@ -1,4 +1,4 @@
-"""Autopilot proposals (flag ``autopilot_committee``): the review proposes, code sizes and places.
+"""Autopilot proposals: the review proposes, code sizes and places.
 
 A review records proposals with ``propose_paper_orders`` — buy (a new name, or more of one it
 holds), trim or sell, each with a reason and, for a buy or trim, a conviction. After the review's

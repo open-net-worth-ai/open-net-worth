@@ -1,8 +1,8 @@
 # Paper Autopilot upgrades — plan
 
-Status: all four steps built 2026-11-21. Step 1 (memory, with lessons) ships unflagged; steps 2–4
-(propose and the app sizes, challenge, risk review) ship behind `autopilot_committee`, off by
-default (ADR `2026-11-21-autopilot-proposes-the-app-sizes`).
+Status: all four steps built 2026-11-21 and on for every review. Steps 2–4 first shipped behind
+`autopilot_committee`; the owner dropped the flag the same day (ADR
+`2026-11-21-autopilot-proposes-the-app-sizes`). The flag notes below are the plan as written.
 
 ## Why
 

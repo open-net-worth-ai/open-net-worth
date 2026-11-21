@@ -225,6 +225,16 @@ then **Needs your review**, **Worth checking** (only when there's something to s
 that went fine, since each re-check of the review would add one; a failed preview stays. It reads the
 same as YNAB's page. **Actual connection…** in the menu opens the connector's form.
 
+**Undoing a sync here.** **Undo the sync from …** on the sync page puts back what the last sync
+that changed this book did to its transactions: a row it added is removed, a row it changed gets
+its values back, a row it deleted comes back. A row anyone has changed since stays as it is, and
+the result names it, as it does one that couldn't be put back in full because a category or account
+it used is gone. Only the latest sync can be undone, and only if it changed a transaction here. The sync is switched off afterwards and Actual isn't changed then. When you
+turn the sync on again, what was put back here is sent to Actual like any change made here, so it
+undoes Actual's side too, edits made in Actual included. To keep Actual as it is instead, import a
+restore point there (below) before turning the sync back on. Assigned, categories and Starting
+Balances aren't part of it.
+
 **Undoing a sync in Actual.** Each sync that writes to Actual first keeps Actual's budget as it
 was, and the page lists the last five under **Before each sync that wrote**. Download one and, in
 Actual, **Import file → Actual**: it comes back as a separate budget, as it was before that sync, and
@@ -418,8 +428,8 @@ disk. The one copy kept is a restore point, for a run that wrote to a budget tha
 this instance's backups folder (see Undoing a sync in Actual). It's tested against a real Actual
 server for the sync cases on this page, including end-to-end encrypted and tracking budgets, and a
 budget of 10,000 transactions: its import and check took about half a minute, and a sync about 5
-seconds. It's tested with a server that signs in only with OpenID, through PocketID and a token. It
-hasn't been tested on Windows.
+seconds. It's tested with a server that signs in only with OpenID, through PocketID and a token. The sync's
+tests also run on Windows; the live server tests run on macOS and Linux.
 
 **Which Actual versions.** The live tests run against Actual's server and official client
 26.11.0, pinned so every run sees the same thing. Other versions work as long as their budget
