@@ -25,6 +25,7 @@ const BLANK = {
   has_server_url: false,
   has_proxy_headers: false,
   proxy_header_names: [] as string[],
+  server_certificate_fingerprints: [] as string[],
   server_host: null as string | null,
   server_scheme: null as string | null,
   server_plain_http: false,

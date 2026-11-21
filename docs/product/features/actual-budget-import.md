@@ -195,7 +195,8 @@ The sync runs on a schedule, every 15 or 30 minutes, hourly, every 6 hours, dail
 ask. It covers transactions, each month's Assigned, categories and groups. No AI model is involved.
 A run that fails for a reason that may pass, such as the server being down, tries again sooner:
 after 5 minutes, then 15, then an hour, never later than the schedule. A refused sign-in waits for
-you instead.
+you instead. After three failed runs in a row, **Worth checking** says so, with the date of the
+last run that went through and the latest error, until a run succeeds.
 
 Once it's set up, **Automations → Data Sync → Actual** has the switch and **Sync now** at the top,
 then **Needs your review**, **Worth checking** (only when there's something to say), **Direction**,
@@ -280,7 +281,8 @@ category you're folding away and pick the one to keep under **Reassign activity 
 on, both ways or To Actual, Actual follows: its transactions move to the category you kept, which
 is created in Actual if it's new there, and the folded one is hidden in Actual, never deleted. Its
 Assigned in Actual is set to 0 in every month, as it holds nothing here any more, so Actual's To
-Budget doesn't count it twice. With the sync set to To this book, Actual isn't changed.
+Budget doesn't count it twice. With the sync set to To this book, Actual isn't changed. While a
+sync that writes to Actual is on, the delete dialog says so before you confirm.
 Renaming a category or moving it to another group here reaches Actual too. See
 [Categories and payees](categories-payees.md#manage-categories).
 

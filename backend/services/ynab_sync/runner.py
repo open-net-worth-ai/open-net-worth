@@ -424,6 +424,8 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
         "run_id": stored,
     }
     st["failures"] = st.get("failures", 0) + 1 if retry else 0
+    if error is None:
+        st["last_ok_at"] = st["last_run"]["finished_at"]
     sync_state.schedule_next(st, started)
     sync_state.save(st)
     if error is None and tally["requests"]:

@@ -233,7 +233,26 @@ def _warnings(meta: dict, st: dict) -> list[dict]:
         found.append(differs)
     if st["awaiting_import"]:
         found.append({"kind": "import_first", "text": _import_first_line(st, differs)})
+    if failing := _failing_line(st):
+        found.append({"kind": "failing", "text": failing})
     return found
+
+
+FAILING_AFTER = 3  # runs in a row; one blip isn't worth a line
+
+
+def _failing_line(st: dict) -> str | None:
+    """A sync that keeps failing says so where it stays visible, not only in the last run's line:
+    nothing has reached either side since the last run that went through."""
+    if st.get("failures", 0) < FAILING_AFTER or not st["enabled"]:
+        return None
+    since = (st.get("last_ok_at") or "")[:10]
+    last = (st.get("last_run") or {}).get("error") or "it failed"
+    when = f"since {since}" if since else "since it was set up"
+    return (
+        f"The last {st['failures']} syncs failed, so nothing has moved between this book and "
+        f"{ACTUAL.name} {when}. The latest said: {last} It keeps trying, sooner at first."
+    )
 
 
 def _status() -> dict:

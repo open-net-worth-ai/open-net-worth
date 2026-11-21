@@ -65,6 +65,7 @@ def blank() -> dict:
         "last_run": None,
         "next_run_at": None,
         "failures": 0,  # runs in a row that failed for a reason that may pass
+        "last_ok_at": None,  # when a run last finished without an error
     }
 
 

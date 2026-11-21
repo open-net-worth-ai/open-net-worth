@@ -61,3 +61,20 @@ def test_a_refused_sign_in_waits_for_the_schedule(world):
     run = engine._run()
     assert run["ok"] is False and "sign-in" in run["error"]
     assert _gap() == timedelta(hours=6)
+
+
+def test_a_sync_that_keeps_failing_says_so_in_worth_checking(world):
+    from backend.services.actual_sync import app as actual_app
+
+    enable(interval="6h")
+    sync()
+    world.open_error = down()
+    for _ in range(2):
+        engine._run()
+    assert "failing" not in {w["kind"] for w in actual_app.sync_status()["warnings"]}
+    engine._run()
+    (line,) = [w["text"] for w in actual_app.sync_status()["warnings"] if w["kind"] == "failing"]
+    assert line.startswith("The last 3 syncs failed") and "since 20" in line
+    world.open_error = None
+    sync()
+    assert "failing" not in {w["kind"] for w in actual_app.sync_status()["warnings"]}
