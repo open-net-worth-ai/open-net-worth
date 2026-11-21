@@ -13,6 +13,7 @@ import {
   setPaperAutopilot,
   type AutopilotCadence,
   type AutopilotEffort,
+  type AutopilotProposal,
   type AutopilotRun,
   type PaperAutopilot,
   type PaperMandate,
@@ -380,6 +381,19 @@ function SettingsDialog({
   )
 }
 
+const ACTION: Record<AutopilotProposal['action'], string> = {
+  buy: 'Buy',
+  trim: 'Trim',
+  sell: 'Sell',
+}
+
+/** "Buy ACME (high): placed, to 10% (high conviction). Paper buy filled: 98 ACME at 100.05" */
+export function proposalLine(p: AutopilotProposal): string {
+  const sure = p.conviction ? ` (${p.conviction})` : ''
+  const order = p.order ? `. ${p.order}` : ''
+  return `${ACTION[p.action]} ${p.symbol}${sure}: ${p.status}, ${p.detail}${order}`
+}
+
 function outcome(r: AutopilotRun): string {
   if (r.status === 'failed') return "Didn't finish"
   if (!r.orders.length) return 'No trades'
@@ -427,16 +441,42 @@ function History({ runs, auto }: { runs: AutopilotRun[]; auto: boolean }) {
                     Looked up: {(r.looked_up ?? []).map(lookupLabel).join('; ')}
                   </p>
                 )}
+                {(r.lessons ?? []).map((l) => (
+                  <p key={l.symbol} className="paper-ap-watching">
+                    Lesson on {l.symbol}: {l.lesson}
+                  </p>
+                ))}
                 <div className="a3-muted">
                   {r.trigger ? `Started by: ${r.trigger}` : 'Started on schedule'} • Ran on{' '}
                   {modelLabel(r.model)} • {effortLabel(r.effort)}
                 </div>
-                {r.orders.length > 0 && (
+                {(r.proposals?.length ?? 0) > 0 ? (
                   <ul className="paper-ap-trades">
-                    {r.orders.map((o) => (
-                      <li key={o.id}>{o.label}</li>
+                    {(r.proposals ?? []).map((p) => (
+                      <li key={p.asset}>
+                        {proposalLine(p)}
+                        <span className="paper-ap-why">Why: {p.why}</span>
+                        {p.challenge && (
+                          <span className="paper-ap-why">
+                            Against ({p.challenge.verdict}): {p.challenge.against}
+                          </span>
+                        )}
+                        {p.risk && (
+                          <span className="paper-ap-why">
+                            Risk ({p.risk.verdict}): {p.risk.reason}
+                          </span>
+                        )}
+                      </li>
                     ))}
                   </ul>
+                ) : (
+                  r.orders.length > 0 && (
+                    <ul className="paper-ap-trades">
+                      {r.orders.map((o) => (
+                        <li key={o.id}>{o.label}</li>
+                      ))}
+                    </ul>
+                  )
                 )}
               </div>
             )}

@@ -48,6 +48,12 @@ DEFAULT = {
     "running_since": None,
     # What Lucius recorded with record_autopilot_memo during the running review.
     "memo_draft": None,
+    # What he proposed with propose_paper_orders (flag autopilot_committee): placed by code
+    # once his turn ends (autopilot_proposals).
+    "proposals_draft": None,
+    # The challenge and risk turns' verdicts on those proposals (autopilot_committee).
+    "challenge_draft": None,
+    "risk_draft": None,
     # Why the next review runs early ("Review now", "ACME fell 6.1% today"), and why the running
     # one is running; None = its schedule.
     "pending_trigger": None,
@@ -268,6 +274,11 @@ def finish(pid: str, record: dict) -> dict:
             "orders": record.get("orders") or [],
             # What it looked up off the machine (searches, price histories), in order.
             "looked_up": record.get("looked_up") or [],
+            # One sentence each on stocks it fully sold: later reviews read them as its earlier
+            # opinion (autopilot_memory), kept apart from the facts.
+            "lessons": (draft.get("lessons") or []) if status == "done" else [],
+            # Flag autopilot_committee: each proposal and what happened to it.
+            "proposals": record.get("proposals") or [],
             "error": error,
         }
         failures = a["failures"] + 1 if status == "failed" else 0
@@ -278,6 +289,9 @@ def finish(pid: str, record: dict) -> dict:
             running_since=None,
             running_trigger=None,
             memo_draft=None,
+            proposals_draft=None,
+            challenge_draft=None,
+            risk_draft=None,
             failures=failures,
             paused_reason=paused,
             runs=[*a["runs"], entry][-MAX_RUNS_KEPT:],
@@ -285,9 +299,10 @@ def finish(pid: str, record: dict) -> dict:
         return _save(row, a, conn=conn)
 
 
-def save_memo(pid: str, memo: str, watching: str | None) -> dict:
+def save_memo(pid: str, memo: str, watching: str | None, lessons: list | None = None) -> dict:
     """Record the running review's memo (op "autopilot_memo"). Only during a review; a second
-    call replaces the first, so the memo is his final word."""
+    call replaces the first, so the memo is his final word. ``lessons``: one sentence each on
+    stocks it fully sold, read back by later reviews as its earlier opinion."""
     from backend.services.paper_trading import service
 
     text = str(memo or "").strip()
@@ -295,6 +310,7 @@ def save_memo(pid: str, memo: str, watching: str | None) -> dict:
         raise ValidationError("Write the memo: what you checked, what you did and why.")
     if len(text) > MAX_MEMO:
         raise ValidationError(f"Keep the memo under {MAX_MEMO} characters.")
+    clean_lessons = _clean_lessons(lessons)
     with locked_unit_of_work(*ALL_TABLES) as conn:
         row = service.portfolio(pid, conn=conn)
         a = of(row)
@@ -303,8 +319,65 @@ def save_memo(pid: str, memo: str, watching: str | None) -> dict:
         a["memo_draft"] = {
             "memo": text,
             "watching": str(watching or "").strip()[:MAX_WATCHING] or None,
+            "lessons": clean_lessons,
         }
         return _save(row, a, conn=conn)
+
+
+def save_draft(pid: str, key: str, value, *, what: str) -> dict:
+    """Record one of the running review's drafts (the committee's verdicts). Only during a
+    review; a later call replaces the earlier one."""
+    from backend.services.paper_trading import service
+
+    with locked_unit_of_work(*ALL_TABLES) as conn:
+        row = service.portfolio(pid, conn=conn)
+        a = of(row)
+        if not a["running_since"]:
+            raise ConflictError(f"{what} is recorded only during an autopilot review.")
+        a[key] = value
+        return _save(row, a, conn=conn)
+
+
+def save_proposals(pid: str, proposals: list | None) -> dict:
+    """Record the running review's proposals (op "autopilot_proposals"). Only during a review;
+    a later call replaces the earlier one, so the last list is his final word."""
+    from backend.services.paper_trading import autopilot_proposals, service
+
+    clean = autopilot_proposals.clean(proposals)
+    with locked_unit_of_work(*ALL_TABLES) as conn:
+        row = service.portfolio(pid, conn=conn)
+        a = of(row)
+        if not a["running_since"]:
+            raise ConflictError("Proposals are recorded only during an autopilot review.")
+        a["proposals_draft"] = clean
+        return _save(row, a, conn=conn)
+
+
+def proposals_draft(pid: str) -> list[dict]:
+    """The running review's proposals, as recorded."""
+    from backend.services.paper_trading import service
+
+    return list(of(service.portfolio(pid)).get("proposals_draft") or [])
+
+
+def _clean_lessons(lessons: list | None) -> list[dict]:
+    from backend.services.paper_trading.autopilot_memory import MAX_LESSON, MAX_LESSONS
+
+    items = list(lessons or [])
+    if len(items) > MAX_LESSONS:
+        raise ValidationError(f"Write at most {MAX_LESSONS} lessons a review.")
+    out = []
+    for item in items:
+        symbol = str((item or {}).get("symbol") or "").strip().upper()[:20]
+        lesson = str((item or {}).get("lesson") or "").strip()
+        if not symbol:
+            raise ValidationError("A lesson names the symbol of the stock it is about.")
+        if not lesson:
+            raise ValidationError(f"Write the lesson on {symbol}: one sentence.")
+        if len(lesson) > MAX_LESSON:
+            raise ValidationError(f"Keep each lesson under {MAX_LESSON} characters.")
+        out.append({"symbol": symbol, "lesson": lesson})
+    return out
 
 
 def run_started_at(row: dict) -> str | None:

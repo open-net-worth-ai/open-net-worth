@@ -47,6 +47,26 @@ export type AutopilotMode = 'manual' | 'auto'
 export type AutopilotCadence = 'daily' | 'weekly'
 export type AutopilotEffort = 'low' | 'medium' | 'high'
 
+/** One proposal of a review (flag autopilot_committee): Lucius proposes, the app sizes it. */
+export interface AutopilotProposal {
+  asset: string
+  symbol: string
+  action: 'buy' | 'trim' | 'sell'
+  conviction: 'low' | 'medium' | 'high' | null
+  why: string
+  case?: string | null
+  /** placed: an order went in; skipped: nothing to do (detail says why); refused: it failed;
+   *  dropped: the challenge or the risk review stopped it. */
+  status: 'placed' | 'skipped' | 'refused' | 'dropped'
+  detail: string
+  /** The order's own line, when one was placed ("Paper buy filled: 98 ACME at 100.05"). */
+  order: string | null
+  /** A buy's challenge: the case against it, and keep / shrink / drop. */
+  challenge?: { verdict: 'keep' | 'shrink' | 'drop'; against: string }
+  /** A buy's risk review: approve / trim (or drop, when the review didn't finish). */
+  risk?: { verdict: 'approve' | 'trim' | 'drop'; reason: string }
+}
+
 /** One autopilot review: what Lucius wrote, and the paper orders it placed. */
 export interface AutopilotRun {
   id: string
@@ -61,6 +81,10 @@ export interface AutopilotRun {
   orders: { id: string; label: string; status: string }[]
   /** What it looked up off the machine, in order: web and X searches, price histories. */
   looked_up?: { tool: string; query: string }[]
+  /** One sentence each on stocks it fully sold; later reviews read them as its earlier read. */
+  lessons?: { symbol: string; lesson: string }[]
+  /** Flag autopilot_committee: what the review proposed, and what the app did with each. */
+  proposals?: AutopilotProposal[]
   error: string | null
   /** What it ran on: '' is the app's default model. */
   model?: string

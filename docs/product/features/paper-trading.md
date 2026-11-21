@@ -55,8 +55,8 @@ says what happens next ("Fills now…", "Market closed. Fills at the next open�
 **Place paper buy** or **Place paper sell**.
 
 An order that waits shows under **Orders** with what it waits for, and you can cancel it there.
-Each order shows when it was **Placed**; one that filled later (an order placed after the close
-fills at the open) shows its fill time under its status.
+Each order shows when it was **Placed**, and a filled one shows when it filled after its status
+(with the date too when it filled on a later day, as an order placed after the close does).
 The page picks up a fill on its own, without a reload.
 
 The page shows your **Paper value** (holdings plus cash) and **Cash left** (not yet invested),
@@ -114,13 +114,20 @@ The **Autopilot** tab's switch sets who trades a paper portfolio:
 
 Autopilot needs a mandate: it is what you approve in advance. Every review:
 
+- starts from its track record, worked out fresh from the portfolio's own history: its last five
+  reviews and what it said it was watching, how each paper buy has done since, and how each stock
+  it sold has moved since the sale (whether selling avoided a drop or left money behind). It
+  checks what it was watching first, and says in the memo where the record changed a decision;
+- writes a one-sentence **lesson** on each stock it has fully sold, and reads its last five
+  lessons back in later reviews, marked as its earlier opinion rather than fact. **History** shows
+  a review's lessons under its memo;
 - reads the portfolio, then checks the last two weeks' headlines for each holding (the same
   stories its asset page shows), your investment thesis for each one that has it, and the chart
   and company figures of anything that moved a lot or is near a limit, before it decides
   anything;
 - looks for new names that fit the mandate's goal: it searches for companies in the theme it
   doesn't hold yet, shortlists two or three, and checks their figures and charts against what it
-  holds. A holding it sold leaves a slot it tries to fill, and cash well above the floor needs a
+  holds (a stock the app hasn't seen before is looked up for it). A holding it sold leaves a slot it tries to fill, and cash well above the floor needs a
   reason (an event it is waiting for, a price it wants) or it buys the strongest candidate. The
   memo names the names it weighed and why it bought or passed;
 - ends with a memo Lucius writes for you, plus what he is watching next. A review that ends
@@ -136,6 +143,41 @@ Autopilot needs a mandate: it is what you approve in advance. Every review:
   connector, and never writes anything outside the paper portfolio;
 - can never break the mandate (no **Place anyway** for it), and fixes a broken limit first,
   such as a holding past its stop loss or over its cap.
+
+**Autopilot committee** (Settings → Developer → Experimental, off by default). With
+it on, a review no longer places orders itself. It proposes them: **buy** (a new stock, or more of
+one it holds), **trim** or **sell**, each with a one-sentence reason and, for a buy or trim, how sure
+it is. The app then decides the size:
+
+| Conviction | Target share of the portfolio |
+|---|---|
+| Low | 4% |
+| Medium | 7% |
+| High | 10% |
+
+A buy fills the gap to its target, never above the mandate's per-stock cap and never below its
+cash floor; a trim sells down to its target; a sell sells it all. A stock it already holds competes
+with a new one for the same cash.
+
+Before any buy is placed, two more checks run, each a separate pass by Lucius:
+
+- **Challenge** — makes the strongest honest case *against* each buy (valuation, crowding, recent
+  news, a better use of the same cash) and decides: **keep** it, **shrink** it one size (high to
+  medium, medium to low, low is dropped) or **drop** it.
+- **Risk review** — looks at the buys left together with what the portfolio already holds, for
+  what the per-stock limits miss: two stocks that are really the same bet, too much riding on one
+  story, too little cash left for the next dip. It **approves** each buy or **trims** it one size.
+
+Neither can add an order or make one bigger, and neither touches a sell: a broken limit is always
+fixed. If either is unsure, it errs small: a challenge that doesn't finish buys everything one
+size smaller, and a risk review that doesn't finish buys nothing new that review.
+
+Sells go first, then buys from the most convinced down, each through the same checks as any paper
+order. **History** lists every proposal with what happened to it — placed (with its order),
+skipped (and why, such as "already at its target" or "no cash above the floor"), refused or
+dropped — and, for a buy, the case against it and the risk note. Off: the review places its own
+orders, as before. The track record and lessons above are not part of this setting: every review
+uses them either way.
 
 A review also starts early, between scheduled ones, when a holding moves 5% or more in its last session,
 falls past the stop loss, or breaks a mandate limit (checked every few minutes, each reason once a

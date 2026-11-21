@@ -271,14 +271,21 @@ async def get_paper_news(input_data: dict):
         return _dump({"error": _err(exc), "simulated": True})
 
 
+class AutopilotLessonInput(NestedInput):
+    symbol: str
+    lesson: str
+
+
 class RecordAutopilotMemoInput(ToolInput):
     memo: str = Field(
-        description="What the owner reads: 3 to 6 plain sentences on what you checked, what "
-        "you did or why you did nothing (1,200 characters at most)."
+        description="What the owner reads: what you checked, did and why (1,200 characters "
+        "at most)."
     )
     watching: Optional[str] = Field(
         default=None, description="What you are watching before the next review, one sentence."
     )
+    # Which stocks need one, and how to write it, is in the review's own prompt.
+    lessons: Optional[list[AutopilotLessonInput]] = None
 
 
 def _record_memo(input_data: dict) -> dict:
@@ -287,15 +294,20 @@ def _record_memo(input_data: dict) -> dict:
     ctx = get_automation_approval()
     if ctx is None or not ctx.automation_id.startswith("autopilot:") or not ctx.paper_portfolio_id:
         raise ConflictError("record_autopilot_memo is only for a paper autopilot review.")
-    facade.record_memo(ctx.paper_portfolio_id, input_data["memo"], input_data.get("watching"))
+    facade.record_memo(
+        ctx.paper_portfolio_id,
+        input_data["memo"],
+        input_data.get("watching"),
+        input_data.get("lessons"),
+    )
     return {"ok": True, "simulated": True}
 
 
 @tool(
     "record_autopilot_memo",
     description=(
-        "Inside a paper portfolio's autopilot review only: record the review's memo, the one "
-        "thing the owner reads. Call it once, last; a later call replaces the memo. A review "
+        "Inside a paper portfolio's autopilot review only: record the review's memo. Call it "
+        "once, last; a later call replaces the memo. A review "
         "that ends without it counts as failed."
     ),
     input_schema=schema_of(RecordAutopilotMemoInput, tool_name="record_autopilot_memo"),
@@ -306,6 +318,118 @@ async def record_autopilot_memo(input_data: dict):
         return refused
     try:
         return _dump(await asyncio.to_thread(_record_memo, input_data))
+    except OpenNetWorthError as exc:
+        return _dump({"error": _err(exc), "simulated": True})
+
+
+class AutopilotProposalInput(NestedInput):
+    asset: str = Field(description="A ticker (ACME) or an asset_key from a holding.")
+    action: Literal["buy", "trim", "sell"] = Field(
+        description="buy: a new name or more of a holding; trim: down to its weight; sell: all."
+    )
+    conviction: Optional[Literal["low", "medium", "high"]] = Field(
+        default=None, description="For buy and trim: sets its size (4%, 7%, 10%)."
+    )
+    why: str = Field(description="One sentence: the journal note on its order.")
+    case: Optional[str] = None
+
+
+class ProposePaperOrdersInput(ToolInput):
+    proposals: list[AutopilotProposalInput] = Field(description="10 at most; [] for none.")
+
+
+def _record_proposals(input_data: dict) -> dict:
+    from backend.core.errors import ConflictError
+
+    ctx = get_automation_approval()
+    if ctx is None or not ctx.automation_id.startswith("autopilot:") or not ctx.paper_portfolio_id:
+        raise ConflictError("propose_paper_orders is only for a paper autopilot review.")
+    return facade.record_proposals(ctx.paper_portfolio_id, input_data.get("proposals") or [])
+
+
+@tool(
+    "propose_paper_orders",
+    description=(
+        "Inside a paper autopilot review only: propose this review's orders. The app sizes "
+        "them by conviction and places them after your turn; a later call replaces the list."
+    ),
+    input_schema=schema_of(ProposePaperOrdersInput, tool_name="propose_paper_orders"),
+    mutates=("paper",),
+)
+async def propose_paper_orders(input_data: dict):
+    if refused := _refusal():
+        return refused
+    try:
+        return _dump(await asyncio.to_thread(_record_proposals, input_data))
+    except OpenNetWorthError as exc:
+        return _dump({"error": _err(exc), "simulated": True})
+
+
+class ChallengeVerdictInput(NestedInput):
+    asset: str
+    verdict: Literal["keep", "shrink", "drop"]
+    against: str
+
+
+class RecordChallengeInput(ToolInput):
+    verdicts: list[ChallengeVerdictInput]
+
+
+class RiskVerdictInput(NestedInput):
+    asset: str
+    verdict: Literal["approve", "trim"]
+    reason: str
+
+
+class RecordRiskReviewInput(ToolInput):
+    verdicts: list[RiskVerdictInput]
+
+
+def _in_review(tool_name: str) -> str:
+    from backend.core.errors import ConflictError
+
+    ctx = get_automation_approval()
+    if ctx is None or not ctx.automation_id.startswith("autopilot:") or not ctx.paper_portfolio_id:
+        raise ConflictError(f"{tool_name} is only for a paper autopilot review.")
+    return ctx.paper_portfolio_id
+
+
+@tool(
+    "record_challenge",
+    description="Inside a paper autopilot review's challenge only: your verdict on each buy.",
+    input_schema=schema_of(RecordChallengeInput, tool_name="record_challenge"),
+    mutates=("paper",),
+)
+async def record_challenge(input_data: dict):
+    if refused := _refusal():
+        return refused
+
+    def _run() -> dict:
+        pid = _in_review("record_challenge")
+        return facade.record_challenge(pid, input_data.get("verdicts") or [])
+
+    try:
+        return _dump(await asyncio.to_thread(_run))
+    except OpenNetWorthError as exc:
+        return _dump({"error": _err(exc), "simulated": True})
+
+
+@tool(
+    "record_risk_review",
+    description="Inside a paper autopilot review's risk review only: your verdict on each buy.",
+    input_schema=schema_of(RecordRiskReviewInput, tool_name="record_risk_review"),
+    mutates=("paper",),
+)
+async def record_risk_review(input_data: dict):
+    if refused := _refusal():
+        return refused
+
+    def _run() -> dict:
+        pid = _in_review("record_risk_review")
+        return facade.record_risk_review(pid, input_data.get("verdicts") or [])
+
+    try:
+        return _dump(await asyncio.to_thread(_run))
     except OpenNetWorthError as exc:
         return _dump({"error": _err(exc), "simulated": True})
 

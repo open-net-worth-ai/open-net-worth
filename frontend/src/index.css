@@ -21383,6 +21383,11 @@ body.hide-amounts .mf-lbl-amt {
   font-size: var(--text-sm);
   color: var(--muted);
 }
+/* A proposal's reason, on its own line under what the app did with it. */
+.paper-ap-why {
+  display: block;
+  color: var(--faint);
+}
 /* The model, then its effort: two fields the size of the Schedule field above them. */
 .paper-ap-model {
   display: grid;
@@ -21522,8 +21527,7 @@ body.hide-amounts .mf-lbl-amt {
   margin-top: var(--space-0);
 }
 .paper-fill-when {
-  display: block;
-  font-size: var(--text-xs);
+  margin-left: var(--space-1);
   color: var(--muted);
 }
 .paper-feed-item .when {

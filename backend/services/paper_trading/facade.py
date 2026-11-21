@@ -68,11 +68,37 @@ def news(pid: str) -> dict:
     }
 
 
-def record_memo(pid: str, memo: str, watching: str | None) -> dict:
-    """The running autopilot review's memo, recorded by Lucius."""
+def record_memo(
+    pid: str, memo: str, watching: str | None, lessons: list[dict] | None = None
+) -> dict:
+    """The running autopilot review's memo, recorded by Lucius, with any lessons on stocks it
+    fully sold."""
     service.apply_paper_change(
-        {"op": "autopilot_memo", "id": pid, "memo": memo, "watching": watching}
+        {"op": "autopilot_memo", "id": pid, "memo": memo, "watching": watching, "lessons": lessons}
     )
+    return {"ok": True, **SIMULATED}
+
+
+def record_proposals(pid: str, proposals: list[dict]) -> dict:
+    """The running autopilot review's proposals (flag autopilot_committee): code sizes and
+    places them once the review's turn ends."""
+    out = service.apply_paper_change(
+        {"op": "autopilot_proposals", "id": pid, "proposals": proposals}
+    )
+    from backend.services.paper_trading import autopilot
+
+    return {"proposals": autopilot.of(out["portfolio"]).get("proposals_draft") or [], **SIMULATED}
+
+
+def record_challenge(pid: str, verdicts: list[dict]) -> dict:
+    """The challenge turn's verdict on each proposed buy: keep, shrink or drop."""
+    service.apply_paper_change({"op": "autopilot_challenge", "id": pid, "verdicts": verdicts})
+    return {"ok": True, **SIMULATED}
+
+
+def record_risk_review(pid: str, verdicts: list[dict]) -> dict:
+    """The risk turn's verdict on each buy left: approve or trim."""
+    service.apply_paper_change({"op": "autopilot_risk", "id": pid, "verdicts": verdicts})
     return {"ok": True, **SIMULATED}
 
 

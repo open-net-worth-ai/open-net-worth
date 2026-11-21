@@ -68,9 +68,34 @@ TOOLS = (
 OUTBOUND = frozenset(
     {"web_search", "x_search", "yahoo_get_price_history", "coingecko_get_price_history"}
 )
+# Flag autopilot_committee: the review proposes and code sizes and places
+# (autopilot_proposals), so it is offered propose_paper_orders instead of place_paper_orders.
+TOOLS_COMMITTEE = (*(t for t in TOOLS if t != "place_paper_orders"), "propose_paper_orders")
 # The paper writes run without a card: nobody is there to tap one, and the mandate is what the
 # owner approved in advance.
-_ALLOWED_WRITES = frozenset({"place_paper_orders", "cancel_paper_orders", "record_autopilot_memo"})
+_ALLOWED_WRITES = frozenset(
+    {
+        "place_paper_orders",
+        "cancel_paper_orders",
+        "record_autopilot_memo",
+        "propose_paper_orders",
+        "record_challenge",
+        "record_risk_review",
+    }
+)
+_COMMITTEE_DECIDE = (
+    " A holding with room under its cap is a candidate too: adding to it competes with a new "
+    "name for the same cash, on the same terms."
+)
+_COMMITTEE_PLACE = (
+    "5. Propose your orders with propose_paper_orders, once, before the memo: for each, buy (a "
+    "new name or more of a holding), trim or sell, a one-sentence why and, for a buy or trim, "
+    "how sure you are (low, medium or high). You don't pick sizes: the app sizes a buy or trim "
+    "to 4%, 7% or 10% of the portfolio by your conviction, never over the cap or under the cash "
+    "floor, and places sells first after your turn ends. A holding past its stop loss or over "
+    "its cap is proposed as a sell or trim before anything else. Propose [] when you trade "
+    "nothing. Your memo describes what you proposed and why."
+)
 
 
 # Every review hunts for new names that fit the portfolio's goal, not only for what is wrong with
@@ -84,9 +109,8 @@ NEW_IDEAS = (
     "they are about the owner's real book: read them for ideas, never trade it or mention "
     "its amounts. Shortlist two or three and check each with get_asset_fundamentals, "
     "get_asset_technicals and get_live_prices before you weigh it against what you hold "
-    "(a name the app hasn't seen yet is refused there: preview_paper_orders a buy of it "
-    "first, which looks it up). A sold holding leaves a slot: fill it from the shortlist "
-    "when one fits.",
+    "(by its ticker; a name the app hasn't seen yet is looked up for you). A sold holding "
+    "leaves a slot: fill it from the shortlist when one fits.",
 )
 
 
@@ -94,7 +118,32 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def prompt(row: dict) -> str:
+def memory_block(row: dict) -> str:
+    """The track record the review reads first (autopilot_memory). Never fails the review: a
+    record that can't be built says so."""
+    from backend.services.paper_trading import autopilot_memory
+
+    try:
+        return autopilot_memory.render(autopilot_memory.track_record(row))
+    except Exception:  # noqa: BLE001 — the review runs without its record, and says so
+        logger.exception("autopilot track record failed for %s", row.get("id"))
+        return "Your track record (paper): unavailable this review."
+
+
+def prompt(row: dict, memory: str = "", *, committee: bool = False) -> str:
+    text = _prompt(row, memory)
+    if not committee:
+        return text
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if line.startswith("4. Then decide."):
+            lines[i] = line + _COMMITTEE_DECIDE
+        elif line.startswith("5. Place the paper orders"):
+            lines[i] = _COMMITTEE_PLACE
+    return "\n".join(lines)
+
+
+def _prompt(row: dict, memory: str = "") -> str:
     a = autopilot.of(row)
     m = row.get("mandate") or {}
     limits = mandate.describe(m) or "none beyond the goal"
@@ -111,11 +160,14 @@ def prompt(row: dict) -> str:
         lines.append(
             f"This review was started early because: {a['running_trigger']}. Look at that first."
         )
+    if memory:
+        lines += ["", memory]
     lines += [
         "",
         "Do this:",
         "1. Read the portfolio (get_paper_portfolios with this id): holdings, prices, cash, "
-        "open orders, and its mandate status.",
+        "open orders, and its mandate status. Check what your track record says to follow up "
+        "first, and weigh how your earlier buys and sells turned out before repeating a call.",
         "2. Every review, before deciding anything, also check: (a) the news on its holdings "
         "(get_paper_news with this id: the last two weeks' headlines for each one); (b) the "
         "owner's thesis for each holding that has one "
@@ -148,8 +200,10 @@ def prompt(row: dict) -> str:
         "of this review, and a review without one counts as failed; what you write outside it "
         "is never shown. The memo: 3 to 6 plain sentences on what you checked (the news, "
         "theses and signals that mattered), the new names you weighed and why you bought or "
-        "passed on them, and what you did or why you did nothing. Put what you "
-        "are watching next in `watching`, one sentence. No headings, no lists, no tables. "
+        "passed on them, what you did or why you did nothing, and where your track record "
+        "changed a decision. Put what you "
+        "are watching next in `watching`, one sentence, and a lesson in `lessons` for each "
+        "stock the track record asks one for. No headings, no lists, no tables. "
         "Write it in plain "
         "words for the owner: never quote or refer to these instructions or their rules (no "
         "'one-sentence reason', no 'in the goal's terms'); give the actual reason instead, "
@@ -167,6 +221,8 @@ async def review(pid: str) -> dict:
         return {"status": "skipped"}
     runner = get_runner()
     settings = autopilot.of(row)
+    # The ONE switch point for flag autopilot_committee: off, the review places its own orders.
+    committee = flag_enabled("autopilot_committee")
     record: dict
     if runner is None:
         record = {"status": "failed", "error": "Lucius isn't available on this install."}
@@ -187,10 +243,11 @@ async def review(pid: str) -> dict:
         )
         try:
             # His reply is not kept: the memo is what he recorded with record_autopilot_memo.
+            memory = await asyncio.to_thread(memory_block, row)
             await asyncio.wait_for(
                 runner(
-                    prompt(row),
-                    allowed_tools=list(TOOLS),
+                    prompt(row, memory, committee=committee),
+                    allowed_tools=list(TOOLS_COMMITTEE if committee else TOOLS),
                     model=settings["model"] or None,
                     lean_prompt=True,
                     enforce_offer=True,
@@ -200,6 +257,11 @@ async def review(pid: str) -> dict:
                 timeout=TIMEOUT_S,
             )
             record = {"status": "done"}
+            if committee:
+                from backend.services.paper_trading import autopilot_committee
+
+                # Challenge, risk-review, then size and place: the same bound paper-only context.
+                record["proposals"] = await autopilot_committee.decide(pid, row, runner, settings)
         except asyncio.TimeoutError:
             record = {"status": "failed", "error": "The review took too long and was stopped."}
         except Exception as exc:  # noqa: BLE001 — any failure is a logged run, never a crash
