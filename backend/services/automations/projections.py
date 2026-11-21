@@ -59,7 +59,17 @@ def _describe_condition(condition: dict) -> str:
         phrase = {"over": "over", "under": "under", "is": "exactly", "approx": "about"}[str(op)]
         suffix = " (within 7.5%)" if op == "approx" else ""
         return f"amount is {phrase} {_number(value)}{suffix}"
-    if field in {"payee", "account"}:
+    if field == "category":
+        values = value if isinstance(value, list) else [value]
+        names = " or ".join(
+            "Uncategorized" if v == "uncategorized" else _label("category", v) for v in values
+        )
+        return f"category {'is' if op == 'is' else 'is not'} {names}"
+    if field == "tags":
+        values = value if isinstance(value, list) else [value]
+        joined = " or ".join(map(str, values))
+        return f"tags include {joined}" if op == "is" else f"tags don't include {joined}"
+    if field in {"payee", "account"} and op in {"is", "is_not"}:
         values = value if isinstance(value, list) else [value]
         names = " or ".join(_label(str(field), v) for v in values)
         return f"{field} {'is' if op == 'is' else 'is not'} {names}"
@@ -73,7 +83,8 @@ def _describe_condition(condition: dict) -> str:
         "regex": "matches",
     }[str(op)]
     shown = ", ".join(map(str, value)) if isinstance(value, list) else str(value)
-    return f"{field} {text} {shown}"
+    noun = "payee name" if field == "payee" else field
+    return f"{noun} {text} {shown}"
 
 
 def _describe_split(lines: list[dict]) -> str:

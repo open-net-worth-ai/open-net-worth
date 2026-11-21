@@ -446,6 +446,45 @@ describe('Rule editor actions', () => {
   })
 })
 
+describe('Rule conditions: category, tags and payee text', () => {
+  async function openEditor() {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+  }
+
+  it('a Category condition offers Uncategorized and the owner’s categories', async () => {
+    await openEditor()
+    pick('automation-condition-0-field', 'Category')
+    fireEvent.focus(document.getElementById('automation-condition-0-value')!)
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Groceries' })).toBeTruthy())
+    expect(screen.getByRole('option', { name: 'Uncategorized' })).toBeTruthy()
+    expect(document.getElementById('automation-condition-0-op')!.textContent).toBe('is')
+  })
+
+  it('a Tags condition reads “has” and can take a tag that is not in use yet', async () => {
+    await openEditor()
+    pick('automation-condition-0-field', 'Tags')
+    expect(document.getElementById('automation-condition-0-op')!.textContent).toBe('has')
+    const field = document.getElementById('automation-condition-0-value')!
+    fireEvent.focus(field)
+    fireEvent.change(field, { target: { value: 'Reimburse' } })
+    fireEvent.mouseDown(screen.getByRole('option', { name: /create “reimburse”/i }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Remove reimburse' })).toBeTruthy(),
+    )
+  })
+
+  it('switching Payee to “contains” turns the value into text to type', async () => {
+    await openEditor()
+    pick('automation-condition-0-op', 'contains')
+    const field = document.getElementById('automation-condition-0-value') as HTMLInputElement
+    expect(field.tagName).toBe('INPUT')
+    fireEvent.change(field, { target: { value: 'starbucks' } })
+    expect(field.value).toBe('starbucks')
+  })
+})
+
 describe('Rule templates', () => {
   it('opens the editor pre-filled from a template, leaving the owner to pick their own values', async () => {
     render(<Harness initial={[]} />)

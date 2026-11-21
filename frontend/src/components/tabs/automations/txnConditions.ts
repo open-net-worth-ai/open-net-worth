@@ -1,6 +1,14 @@
 // A transaction trigger's conditions — the shape stored in `when.conditions` and the editor's
 // reading of it. Kept apart from the component so fast refresh sees a components-only file.
-export type ConditionField = 'account' | 'kind' | 'amount' | 'payee' | 'description' | 'memo'
+export type ConditionField =
+  | 'account'
+  | 'kind'
+  | 'amount'
+  | 'payee'
+  | 'category'
+  | 'tags'
+  | 'description'
+  | 'memo'
 export interface TxnCondition {
   field: ConditionField
   op: string
@@ -13,6 +21,8 @@ export const CONDITION_FIELDS: ReadonlyArray<readonly [ConditionField, string]> 
   ['kind', 'Kind'],
   ['amount', 'Amount'],
   ['payee', 'Payee'],
+  ['category', 'Category'],
+  ['tags', 'Tags'],
   ['description', 'Description'],
   ['memo', 'Memo'],
 ]
@@ -24,6 +34,21 @@ const IS_ANY_OPS = [
   ['is', 'is any of'],
   ['is_not', 'is none of'],
 ] as const
+// Payee by its exact entry, or by its name's text.
+const PAYEE_TEXT_OPS = [
+  ['contains', 'contains'],
+  ['not_contains', "doesn't contain"],
+] as const
+const TAG_OPS = [
+  ['is', 'has'],
+  ['is_not', "doesn't have"],
+] as const
+const TAG_ANY_OPS = [
+  ['is', 'has any of'],
+  ['is_not', 'has none of'],
+] as const
+/** "Category is Uncategorized" — no category at all. */
+export const UNCATEGORIZED = 'uncategorized'
 const AMOUNT_OPS = [
   ['over', 'over'],
   ['under', 'under'],
@@ -54,13 +79,15 @@ export function opsFor(
 ): ReadonlyArray<readonly [string, string]> {
   if (field === 'amount') return AMOUNT_OPS
   if (field === 'description' || field === 'memo') return TEXT_OPS
+  if (field === 'tags') return several ? TAG_ANY_OPS : TAG_OPS
+  if (field === 'payee') return [...(several ? IS_ANY_OPS : IS_OPS), ...PAYEE_TEXT_OPS]
   return several ? IS_ANY_OPS : IS_OPS
 }
 
 /** Account, Kind and Payee "is" / "is not" take several values: any of / none of them. */
 export function takesSeveral(condition: TxnCondition): boolean {
   return (
-    (condition.field === 'account' || condition.field === 'kind' || condition.field === 'payee') &&
+    ['account', 'kind', 'payee', 'category', 'tags'].includes(condition.field) &&
     (condition.op === 'is' || condition.op === 'is_not')
   )
 }
@@ -172,6 +199,7 @@ const KIND_SUBJECT: Record<string, string> = {
 interface LabelOptions {
   accounts: Array<{ id: string; label: string; currency?: string }>
   payees?: Array<{ id: string; label: string }>
+  categories?: Array<{ id: string; label: string }>
   base_currency?: string
 }
 
@@ -226,13 +254,28 @@ export function transactionLabel(conditions: TxnCondition[], options: LabelOptio
       label += ` ${c.op === 'is' ? 'on' : 'not on'} ${namesOf(options.accounts, c.value, 'an account')}`
       continue
     }
+    if (c.field === 'tags') {
+      const tags = joinOr(conditionValues(c.value))
+      rest.push(c.op === 'is' ? `tagged ${tags}` : `not tagged ${tags}`)
+      continue
+    }
+    const named = c.op === 'is' || c.op === 'is_not'
     const value =
-      c.field === 'payee'
+      c.field === 'payee' && named
         ? namesOf(options.payees ?? [], c.value, 'a payee')
-        : c.field === 'kind'
-          ? joinOr(conditionValues(c.value).map(kindName))
-          : `“${conditionValueText(c.value)}”`
-    rest.push(`${c.field} ${CONDITION_OP_LABEL[c.op] ?? c.op} ${value}`)
+        : c.field === 'category'
+          ? joinOr(
+              conditionValues(c.value).map((v) =>
+                v === UNCATEGORIZED
+                  ? 'Uncategorized'
+                  : ((options.categories ?? []).find((o) => o.id === v)?.label ?? v),
+              ),
+            )
+          : c.field === 'kind'
+            ? joinOr(conditionValues(c.value).map(kindName))
+            : `“${conditionValueText(c.value)}”`
+    const noun = c.field === 'payee' && !named ? 'payee name' : c.field
+    rest.push(`${noun} ${CONDITION_OP_LABEL[c.op] ?? c.op} ${value}`)
   }
   return rest.length ? `${label}, ${rest.join(', ')}` : label
 }

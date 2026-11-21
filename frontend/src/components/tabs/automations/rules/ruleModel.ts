@@ -185,6 +185,7 @@ export function describeRule(form: RuleForm, labels: RuleLabels): string {
   const when = transactionLabel(conditions, {
     accounts: labels.accounts,
     payees: labels.payees,
+    categories: labels.categories,
     base_currency: labels.baseCurrency,
   })
   const joiner = form.match === 'any' ? ' (any of these)' : ''

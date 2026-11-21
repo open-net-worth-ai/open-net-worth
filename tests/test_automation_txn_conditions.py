@@ -91,8 +91,10 @@ def test_an_empty_condition_list_is_dropped():
 @pytest.mark.parametrize(
     "condition",
     [
-        {"field": "category", "op": "is", "value": "x"},
-        {"field": "payee", "op": "contains", "value": "grab"},
+        {"field": "category", "op": "contains", "value": "x"},
+        {"field": "tags", "op": "starts_with", "value": "w"},
+        {"field": "payee", "op": "regex", "value": "grab"},
+        {"field": "colour", "op": "is", "value": "x"},
         {"field": "description", "op": "is", "value": "grab"},
         {"field": "description", "op": "contains", "value": " , "},
         {"field": "memo", "op": "starts_with", "value": ""},
@@ -354,3 +356,51 @@ def test_conditions_that_can_never_all_hold_are_refused(conditions, message):
 )
 def test_conditions_that_can_hold_together_are_kept(conditions):
     assert len(_trigger(*conditions)["when"]["conditions"]) == len(conditions)
+
+
+# ── Payee name text, Category and Tags ───────────────────────────────────────────────────
+
+NAMED = {**GRAB, "payee_name": "Grab Singapore", "category": "cat_ride", "tags": ["work", "sg"]}
+
+
+@pytest.mark.parametrize(
+    ("condition", "expected"),
+    [
+        (_c("payee", "contains", "grab"), True),
+        (_c("payee", "contains", ["uber", "singapore"]), True),
+        (_c("payee", "contains", "uber"), False),
+        (_c("payee", "not_contains", "uber"), True),
+        (_c("payee", "not_contains", "grab"), False),
+        (_c("category", "is", "cat_ride"), True),
+        (_c("category", "is", ["cat_food", "cat_ride"]), True),
+        (_c("category", "is_not", "cat_ride"), False),
+        (_c("category", "is", "uncategorized"), False),
+        (_c("tags", "is", "work"), True),
+        (_c("tags", "is", ["home", "sg"]), True),
+        (_c("tags", "is", "home"), False),
+        (_c("tags", "is_not", ["home", "travel"]), True),
+        (_c("tags", "is_not", "work"), False),
+    ],
+)
+def test_payee_name_category_and_tag_conditions(condition, expected):
+    assert _fires(NAMED, condition) is expected
+
+
+def test_an_uncategorized_row_matches_category_is_uncategorized():
+    blank = {**GRAB, "category": None, "tags": []}
+    assert _fires(blank, _c("category", "is", "uncategorized"))
+    assert not _fires(blank, _c("category", "is_not", "uncategorized"))
+    assert not _fires(blank, _c("tags", "is", "work"))
+    assert _fires(blank, _c("tags", "is_not", "work"))
+
+
+def test_payee_contains_looks_the_name_up_when_the_row_has_only_an_id(monkeypatch):
+    from backend.services import payee_registry
+
+    monkeypatch.setattr(payee_registry, "payee_name", lambda pid: "Grab Singapore")
+    assert _fires(GRAB, _c("payee", "contains", "singapore"))
+
+
+def test_payee_text_ops_need_a_phrase():
+    with pytest.raises(ValueError):
+        _trigger(_c("payee", "contains", ""))

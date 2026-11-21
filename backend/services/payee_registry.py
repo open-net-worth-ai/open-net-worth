@@ -401,6 +401,14 @@ def payee_names() -> dict[str, str]:
     return {p["id"]: p.get("name", "") for p in _store.all()}
 
 
+def payee_name(payee_id: str | None) -> str:
+    """One payee's display name ('' when unknown) — what a Rule's "payee contains" reads."""
+    if not payee_id:
+        return ""
+    row = _store.find_by_id(str(payee_id))
+    return str((row or {}).get("name") or "")
+
+
 def list_registry(*, with_usage: bool = False) -> list[dict]:
     """Registry read projection for the payee pickers + autocomplete (most-used first) and,
     with ``with_usage``, the Manage-Payees editor: ``txn_count``/``last_used`` per payee,

@@ -632,6 +632,54 @@ def test_deleting_a_category_reassigned_moves_a_split_line_to_the_replacement(bo
 
 
 @rules_on
+def test_a_category_condition_follows_a_reassign_and_blocks_a_bare_delete(book):
+    cats = book["cats"]
+    rule = _rule(
+        book,
+        [{"field": "category", "op": "is", "value": [cats["Gym"], cats["Fun"]]}],
+        {"tags": ["sport"]},
+        name="Tag sport",
+    )
+    with pytest.raises(ConflictError, match="Tag sport"):
+        categories_service.delete_category(cats["Gym"])
+
+    categories_service.delete_category(cats["Gym"], reassign=True, reassign_to=cats["Health"])
+    stored = AutomationStore().find_by_id(rule["id"])
+    (condition,) = stored["trigger"]["when"]["conditions"]
+    assert condition["value"] == [cats["Health"], cats["Fun"]]
+    assert stored["status"] == "active"
+    assert "category is Health or Fun" in stored["instructions"]
+
+
+@rules_on
+def test_rules_chain_on_category_and_tags_set_by_a_rule_above(book):
+    cats = book["cats"]
+    _rule(book, [_payee_is(book)], {"category": cats["Gym"]}, name="Gym it")
+    _rule(
+        book,
+        [{"field": "category", "op": "is", "value": cats["Gym"]}],
+        {"tags": ["fitness"]},
+        name="Tag gym",
+    )
+    _rule(
+        book,
+        [{"field": "tags", "op": "is", "value": "fitness"}],
+        {"memo_append": "claimable"},
+        name="Note fitness",
+    )
+    row = _txn(book, 20)
+    assert row["category"] == cats["Gym"]
+    assert row["tags"] == ["fitness"]
+    assert "claimable" in row["memo"]
+
+
+@rules_on
+def test_payee_name_contains_matches_on_create(book):
+    _rule(book, [{"field": "payee", "op": "contains", "value": ["gym"]}], {"tags": ["g"]})
+    assert _txn(book, 20)["tags"] == ["g"]  # Acme Gym
+
+
+@rules_on
 def test_deleting_a_category_a_rule_uses_is_refused_without_reassign(book):
     cats = book["cats"]
     _rule(book, [_payee_is(book)], {"category": cats["Health"]}, name="Gym rule")

@@ -214,9 +214,11 @@ Acme Gym and the amount is between 10 and 30"); use a Lucius Automation when it 
 
 A Rule has:
 
-- **Conditions**, all of them or any of them. Payee, account, kind (is, is not); amount (over,
-  under, is, between, approximately, which means within 7.5%); description and memo (contains,
-  starts with, matches).
+- **Conditions**, all of them or any of them. Account, kind (is, is not); payee (is, is not, or
+  its name contains / doesn't contain); category (is, is not, including Uncategorized); tags (has,
+  doesn't have); amount (over, under, is, between, approximately, which means within 7.5%);
+  description and memo (contains, starts with, matches). Category and tags see what a Rule above
+  already set, so one Rule can build on another.
 - **Actions**, added one at a time with **Add action**: set a category, add tags, add to the
   description or memo, set the payee, move to another account (imported transactions still in
   review). Or **split** the

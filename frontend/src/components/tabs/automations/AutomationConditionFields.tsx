@@ -7,6 +7,7 @@
 // trigger never passes it, so it stays "all". Conflicts are only a trap for "all".
 import type { AutomationOption } from '../../../api/automations'
 import { Cluster, Tag } from '../../ui'
+import { slugTag } from '../accounts/categories'
 import { ComboSelect } from './ComboSelect'
 import { Input, Row, Select } from './automationFormControls'
 import { conditionConflicts } from './txnConditionConflicts'
@@ -15,6 +16,7 @@ import {
   betweenBounds,
   FLAT_FILTER_KEYS,
   KIND_OPTIONS,
+  UNCATEGORIZED,
   conditionAccount,
   conditionValueText,
   conditionValues,
@@ -35,11 +37,16 @@ export function TransactionConditionFields({
   baseCurrency,
   match = 'all',
   layout = 'rows',
+  categories,
+  tags,
   onChange,
 }: {
   when: Record<string, unknown>
   accounts: AutomationOption[]
   payees: AutomationOption[]
+  /** The owner's categories and tags: with them, Category and Tags can be conditions too. */
+  categories?: AutomationOption[]
+  tags?: string[]
   baseCurrency?: string
   match?: 'all' | 'any'
   /** `inline`: each condition on one line, labels on top of nothing (the Rule editor). */
@@ -82,6 +89,8 @@ export function TransactionConditionFields({
           condition={condition}
           accounts={accounts}
           payees={payees}
+          categories={categories}
+          tags={tags}
           amountCurrency={amountCurrency}
           warnings={conflicts.filter((c) => c.index === index).map((c) => c.message)}
           onChange={(next) => update(index, next)}
@@ -106,6 +115,8 @@ function ConditionRows({
   condition,
   accounts,
   payees,
+  categories,
+  tags,
   amountCurrency,
   warnings,
   onChange,
@@ -117,6 +128,8 @@ function ConditionRows({
   condition: TxnCondition
   accounts: AutomationOption[]
   payees: AutomationOption[]
+  categories?: AutomationOption[]
+  tags?: string[]
   amountCurrency: string
   warnings: string[]
   onChange: (next: TxnCondition) => void
@@ -125,7 +138,11 @@ function ConditionRows({
   const id = `automation-condition-${index}`
   const setValue = (value: TxnCondition['value']) => onChange({ ...condition, value })
   const several = takesSeveral(condition)
-  const options = pickOptions(condition.field, accounts, payees)
+  const options = pickOptions(condition.field, accounts, payees, categories, tags)
+  // Category and Tags appear only where their lists are known (the Rule editor).
+  const fields = CONDITION_FIELDS.filter(
+    ([key]) => (key !== 'category' && key !== 'tags') || categories !== undefined,
+  )
   const picked = several ? conditionValues(condition.value) : []
   const below = (
     <>
@@ -164,7 +181,7 @@ function ConditionRows({
     <Select
       id={`${id}-field`}
       value={condition.field}
-      options={CONDITION_FIELDS}
+      options={fields}
       onChange={(field) => onChange(newCondition(field as ConditionField))}
     />
   )
@@ -173,7 +190,7 @@ function ConditionRows({
       id={`${id}-op`}
       value={condition.op}
       options={opsFor(condition.field, picked.length > 1)}
-      onChange={(op) => onChange({ ...condition, op, value: reshapeAmount(condition, op) })}
+      onChange={(op) => onChange({ ...condition, op, value: reshapeValue(condition, op) })}
     />
   )
   const valueControl =
@@ -186,6 +203,7 @@ function ConditionRows({
         options={options}
         placeholder={pickPlaceholder(condition.field, false)}
         onChangeMany={(values) => setValue(storedValues(values))}
+        onCreate={condition.field === 'tags' ? async (name) => slugTag(name) || null : undefined}
       />
     ) : several ? (
       <Select
@@ -260,6 +278,14 @@ function ConditionRows({
   )
 }
 
+/** A payee picked from the list and a payee name typed as text are different values: switching
+ *  between them starts the value over. */
+function reshapeValue(condition: TxnCondition, op: string): TxnCondition['value'] {
+  const text = (o: string) => o === 'contains' || o === 'not_contains'
+  if (condition.field === 'payee' && text(op) !== text(condition.op)) return ''
+  return reshapeAmount(condition, op)
+}
+
 /** Switching an amount to or from `between` carries the first figure across. */
 function reshapeAmount(condition: TxnCondition, op: string): TxnCondition['value'] {
   if (condition.field !== 'amount') return condition.value
@@ -273,6 +299,8 @@ const NOUN: Partial<Record<ConditionField, string>> = {
   account: 'an account',
   kind: 'a kind',
   payee: 'a payee',
+  category: 'a category',
+  tags: 'a tag',
 }
 
 function pickPlaceholder(field: ConditionField, more: boolean) {
@@ -284,8 +312,17 @@ function pickOptions(
   field: ConditionField,
   accounts: AutomationOption[],
   payees: AutomationOption[],
+  categories: AutomationOption[] = [],
+  tags: string[] = [],
 ): ReadonlyArray<readonly [string, string]> {
   if (field === 'kind') return KIND_OPTIONS
+  if (field === 'tags') return tags.map((tag) => [tag, tag] as const)
+  if (field === 'category') {
+    return [
+      [UNCATEGORIZED, 'Uncategorized'] as const,
+      ...categories.map((option) => [option.id, option.label] as const),
+    ]
+  }
   const list = field === 'account' ? accounts : field === 'payee' ? payees : []
   return list.map((option) => [option.id, option.label] as const)
 }

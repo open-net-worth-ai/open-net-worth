@@ -7,7 +7,7 @@ import { Plus } from '../../../ui/icons'
 import { Tag } from '../../ui'
 import { scrollHiIntoView, useAnchoredFixed } from '../accounts/pickers'
 
-const SEARCH_FROM = 8
+const SEARCH_FROM = 10
 
 type Option = readonly [string, string]
 
@@ -94,7 +94,9 @@ export function ComboSelect({
     try {
       const created = await onCreate?.(name)
       if (!created) return
-      setMade((current) => [...current, [created, name] as const])
+      // A value that is just the name normalized (a tag's slug) is shown as stored.
+      const shown = created.toLowerCase() === name.toLowerCase() ? created : name
+      setMade((current) => [...current, [created, shown] as const])
       choose(created)
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not create it.')

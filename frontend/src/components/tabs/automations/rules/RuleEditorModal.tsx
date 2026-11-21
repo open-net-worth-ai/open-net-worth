@@ -7,6 +7,7 @@ import { Button, Modal } from '../../../ui'
 import { TransactionConditionFields } from '../AutomationConditionFields'
 import { Select } from '../automationFormControls'
 import { ComboDropdowns } from '../comboDropdowns'
+import { useTransactionTags } from '../../accounts/tagOptions'
 import type { AutomationOptions } from '../AutomationTriggerSummary'
 import { RuleActionFields, type RuleChoices } from './RuleActionFields'
 import { RulePreviewPanel } from './RulePreviewPanel'
@@ -69,6 +70,7 @@ export function RuleEditorModal({
     })
     return () => cancelAnimationFrame(frame)
   }, [])
+  const knownTags = useTransactionTags()
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   // Problems are shown once Create is pressed, never while the rule is still being filled in.
@@ -159,6 +161,8 @@ export function RuleEditorModal({
               match={form.match}
               accounts={options.accounts}
               payees={options.payees ?? []}
+              categories={choices.categories}
+              tags={knownTags}
               baseCurrency={options.base_currency}
               onChange={(next) => patch({ when: { ...form.when, ...next } })}
             />
