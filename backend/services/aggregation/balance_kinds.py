@@ -50,3 +50,18 @@ def book_terms(account: dict) -> dict:
     out.setdefault("cleared_balance", None)
     out.setdefault("available_to_spend", None)
     return out
+
+
+_TOL = 0.005
+
+
+def holds_credit(amount: object, available: object, limit: object) -> bool:
+    """A card IN CREDIT: neither provider signs a card's balance, but more credit available than
+    the limit means the card holds the difference — when that difference is this balance
+    (Amendment 20). With no limit or no available figure there is no telling: False."""
+    try:
+        over = float(available) - float(limit)  # type: ignore[arg-type]
+        figure = abs(float(amount))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+    return bool(limit) and over > _TOL and abs(figure - over) <= _TOL

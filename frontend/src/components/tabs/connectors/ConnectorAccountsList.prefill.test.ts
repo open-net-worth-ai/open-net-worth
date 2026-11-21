@@ -81,3 +81,9 @@ it('a bank with no known name leaves the institution blank — never the connect
   expect(prefillFor({ ...row, institution: null }).institution).toBeUndefined()
   expect(prefillFor({ ...row, institution: '' }).institution).toBeUndefined()
 })
+
+it('a card in credit starts at 0 owed: the form can only say owed, the first import sets it', () => {
+  const card = { ...row, account_type: 'credit' as const, cleared_balance: 50, balance: 50 }
+  expect(prefillFor({ ...card, in_credit: true }).initial).toBe('0')
+  expect(prefillFor({ ...card, in_credit: false }).initial).toBe('50')
+})
