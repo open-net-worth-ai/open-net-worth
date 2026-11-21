@@ -130,3 +130,57 @@ async def stream_turn(
             yield event
     finally:
         await source.aclose()
+
+
+def system_prompt_for(model_ref: Optional[str]) -> str:
+    """Lucius's prompt for the model ``model_ref`` names (a ``provider_key:model`` ref or a bare
+    id), so its family guidance matches the model that will serve the turn. Resolves the ref
+    WITHOUT building a provider; no ref, or one the store cannot place, is the instance
+    default's prompt exactly as ``build_system_prompt()`` gives it.
+    """
+
+    if not model_ref:
+        return build_system_prompt()
+    from backend.db.model_config_store import ModelConfigStore
+
+    resolved = ModelConfigStore().resolve_override(model_ref)
+    if resolved is None:
+        return build_system_prompt()
+    return build_system_prompt(
+        model=resolved.get("model") or "", base_url=resolved.get("base_url") or ""
+    )
+
+
+async def resume_pending(
+    session_id: str,
+    tool_use_id: str,
+    decision: str,
+    *,
+    surface: str = "chat:web",
+    sender_id: Optional[str] = None,
+    turn_id: Optional[str] = None,
+) -> AsyncGenerator[dict, None]:
+    """Answer an approval card and run the rest of the turn on the conversation's own model.
+
+    The resume twin of ``stream_turn``, entered by every interactive approval path (web,
+    Telegram and other channels, voice). A conversation with a model of its own resumes on that
+    model, with a prompt built for it — it used to fall back to the instance default for the
+    turn's second half. One without resumes exactly as before: the default, and its prompt.
+    """
+
+    stored = session_model_ref(session_id)
+    source = assistant.resolve_pending_tool_use(
+        session_id,
+        tool_use_id,
+        decision,
+        system_prompt_for(stored),
+        model=stored,
+        surface=surface,
+        sender_id=sender_id,
+        turn_id=turn_id,
+    )
+    try:
+        async for event in source:
+            yield event
+    finally:
+        await source.aclose()

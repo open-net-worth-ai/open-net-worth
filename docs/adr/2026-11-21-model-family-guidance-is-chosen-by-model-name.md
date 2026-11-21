@@ -39,7 +39,9 @@ prompt per model.
   from the bare model id (vendor path and `:variant` dropped), never the transport, so a model
   gets the same guidance via OpenAI, OpenRouter, a compatible endpoint or the Codex CLI.
 - **`build_system_prompt` appends the block** after the catalog, in the stable (cached) half;
-  it is constant per model, so the cache holds. Automation runs pass their model and get it too.
+  it is constant per model, so the cache holds. Every turn builds it for the model that serves
+  it: chat (`conversation.stream_turn`), Automation runs, and — since the amendment below — a
+  turn resumed by approving a card, a headless run and a capture.
 - **One family today: GPT** (`gpt*`, `o<digit>*`, `*codex*`), with a short LOADING TOOLS block:
   load a missing tool with `find_tools` and make the change this turn; never say you can't
   because a tool isn't loaded. Other families get nothing.
@@ -70,3 +72,16 @@ extending the block.
 - A per-family block is a few hundred characters for that family only; no change for Claude.
 - Adding a family = an entry in `_GUIDANCE` plus a replay showing it helps.
 - The structural options above stay open if guidance stops being enough.
+
+## Amendment (2026-11-21): a turn's prompt and model follow the turn, not the default
+
+Only chat and Automation runs built the prompt for the turn's own model. The four interactive
+approval-resume paths (web, Telegram and other channels, voice) built it for the instance
+default and, passing no model, ran the rest of the turn on the default too; a headless run and
+a capture ran their own model with the default's prompt. So a conversation switched to a GPT
+model under a Claude default lost its model and this block the moment a card was approved.
+
+All four resume paths now go through `conversation.resume_pending`: a conversation with a model
+of its own resumes on it with its prompt; one without resumes exactly as before. Headless runs
+and captures build their prompt with `conversation.system_prompt_for(model)`. Pinned by
+`tests/test_turns_get_the_prompt_of_their_own_model.py`.

@@ -133,7 +133,12 @@ def test_base_currency_holding_always_converts_one_to_one(prices, monkeypatch):
     from backend.core.fx import to_base
 
     _set_base(monkeypatch, prices, "SGD")
-    # Empty cache, fully offline → fx is just the pivot.
+    # Empty cache, fully offline → fx is just the pivot. The cache is a FILE any live
+    # `save_fx_cache` caller may write, and in CI (xdist) the conftest's synthetic table
+    # intermittently appeared in this test's temp file — most likely written by a thread an
+    # earlier test left running — so the empty cache is held in memory here, not on disk.
+    monkeypatch.setattr(prices, "load_fx_cache", lambda: {})
+    monkeypatch.setattr(prices, "save_fx_cache", lambda fx: None)
     monkeypatch.setattr(prices, "_fetch_one", lambda symbol: (symbol, None, None))
     monkeypatch.setattr(prices, "_fetch_coingecko_by_id", lambda pairs: ({}, {}, {}))
     fx = prices.fetch_live([], ["SGD"])["fx"]

@@ -290,7 +290,8 @@ async def _headless_turn_runner(
 
     from backend.ai.assistant import clear_session
     from backend.ai.assistant import run as _assistant_run
-    from backend.ai.prompts import build_lean_system_prompt, build_system_prompt
+    from backend.ai.conversation import system_prompt_for
+    from backend.ai.prompts import build_lean_system_prompt
     from backend.ai.tools import _skill_scope
     from backend.core.cost_context import clear_cost_surface, set_cost_surface
     from backend.core.unattended import reset_unattended, set_unattended
@@ -322,7 +323,7 @@ async def _headless_turn_runner(
             system=(
                 build_lean_system_prompt(allowed_tools=allowed_tools)
                 if lean_prompt
-                else build_system_prompt()
+                else system_prompt_for(model)
             ),
             model=run_model,
             effort=effort,

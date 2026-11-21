@@ -304,7 +304,6 @@ async def answer_card(session_id: str, tool_use_id: str, decision: str) -> str:
     out like the one a tap resumes (``follow_next_turn``). ``"ok"``, ``"gone"`` if there's no such
     card here, or ``"busy"`` if a turn is holding the conversation. Never logs what was said."""
     from backend.ai.permissions import engine as permission_engine
-    from backend.ai.prompts import build_system_prompt
     from backend.db.pending_plan_store import PendingPlanStore
     from backend.services.automations.runs import automation_run_for_session
 
@@ -327,12 +326,9 @@ async def answer_card(session_id: str, tool_use_id: str, decision: str) -> str:
     if not is_open():  # a tap, or a typed message, got there during the wait
         return "gone"
     permission_engine().record_resolution(session_id, tool_use_id, decision, False)
-    system = build_system_prompt()
 
     def make_events(turn_id: str):
-        return assistant.resolve_pending_tool_use(
-            session_id, tool_use_id, decision, system, turn_id=turn_id
-        )
+        return conversation.resume_pending(session_id, tool_use_id, decision, turn_id=turn_id)
 
     turns.spawn(session_id, "resolve", make_events, error_event=_error_event, cost_surface="web")
     log.info("voice: a card was answered by voice (%s)", decision)
