@@ -44,7 +44,7 @@ def test_a_preview_counts_both_ways_and_writes_nothing(world):
     seen = actual_app.sync_preview()
     tx = seen["transactions"]["counts"]
     assert tx == {"change_there": 1, "change_here": 1}
-    assert seen["categories_left_out"] is True
+    assert seen["categories_left_out"] is False
     assert writes_seen(world) == [] and open_items() == []
     assert world.row("transactions", "t-pay")["notes"] is None, "nothing sent"
     assert by_ref("t-market")["memo"] == before_memo, "nothing pulled"
@@ -72,3 +72,46 @@ def test_a_one_way_preview_says_what_it_holds_back(world):
     edit_here(row("ACME Corp")["id"], memo="here")
     seen = actual_app.sync_preview()
     assert seen["transactions"]["counts"] == {"held": 1}
+
+
+def test_a_preview_names_category_changes_both_ways_and_writes_nothing(world):
+    from backend.services import planning
+    from tests.test_actual_sync_engine import category_here
+
+    enable()
+    sync()
+    world.edit("UPDATE categories SET name = 'Groceries' WHERE id = 'c-food'")
+    world.queue.clear()
+    planning.apply_budget_change(
+        {"type": "category_rename", "key": category_here("Fun")["id"], "new_label": "Leisure"}
+    )
+    planning.apply_budget_change({"type": "category_create", "label": "Pets", "kind": "expense"})
+    world.calls.clear()
+    before = world.rows("categories")
+    seen = actual_app.sync_preview()["categories"]
+    assert seen["counts"].get("name_here") == 1 and seen["samples"]["name_here"] == ["Food"]
+    assert seen["counts"].get("name_there") == 1 and seen["samples"]["name_there"] == ["Fun"]
+    assert "Pets" in seen["samples"].get("new_there", [])
+    assert world.rows("categories") == before and writes_seen(world) == []
+    assert category_here("Food")["label"] == "Food", "nothing pulled"
+    sync()
+    assert category_here("Groceries") and world.row("categories", "c-fun")["name"] == "Leisure"
+
+
+def test_a_preview_says_a_fold_hides_the_category_in_actual(world):
+    from backend.services import planning
+    from tests.test_actual_sync_engine import category_here
+
+    enable()
+    sync()
+    planning.apply_budget_change(
+        {
+            "type": "category_delete",
+            "key": category_here("Fun")["id"],
+            "reassign": True,
+            "reassign_to": category_here("Food")["id"],
+        }
+    )
+    seen = actual_app.sync_preview()["categories"]
+    assert seen["samples"].get("hide_there") == ["Fun"]
+    assert world.row("categories", "c-fun")["hidden"] == 0

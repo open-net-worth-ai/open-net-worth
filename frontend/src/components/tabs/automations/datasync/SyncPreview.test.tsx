@@ -33,7 +33,11 @@ describe('the dry run of the next sync', () => {
         samples: { change_there: ['2026-11-01 ACME Market', '2026-11-02 ACME Cafe'] },
       },
       assigned: { counts: { change_there: 3 } },
-      categories_left_out: true,
+      categories: {
+        counts: { hide_there: 1, new_there: 2 },
+        samples: { hide_there: ['ACME Fun'] },
+      },
+      categories_left_out: false,
     })
     expect(authFetch).toHaveBeenCalledWith('/api/actual-budget/sync/preview', { method: 'POST' })
     expect(screen.getByText('Nothing has been written. Sync now does this.')).toBeTruthy()
@@ -42,7 +46,14 @@ describe('the dry run of the next sync', () => {
     expect(screen.getByText('1 transaction new in Actual would be added here')).toBeTruthy()
     expect(screen.getByText(/keep both changes/)).toBeTruthy()
     expect(screen.getByText("3 month's Assigned would be sent to Actual")).toBeTruthy()
-    expect(screen.getByText(/Category changes .* aren't previewed/)).toBeTruthy()
+    expect(
+      screen.getByText(
+        '1 category deleted here would be hidden in Actual, with its Assigned set to 0',
+      ),
+    ).toBeTruthy()
+    expect(screen.getByText('ACME Fun')).toBeTruthy()
+    expect(screen.getByText('2 categories new here would be added in Actual')).toBeTruthy()
+    expect(screen.queryByText(/aren't previewed/)).toBeNull()
   })
 
   it('says when nothing would change', async () => {

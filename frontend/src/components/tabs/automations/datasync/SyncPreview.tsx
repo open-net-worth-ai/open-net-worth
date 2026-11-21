@@ -11,6 +11,7 @@ import type { BudgetAppInfo } from './budgetApps'
 export interface PreviewResult {
   transactions: { counts: Record<string, number>; samples: Record<string, string[]> }
   assigned?: { counts: Record<string, number> }
+  categories?: { counts: Record<string, number>; samples: Record<string, string[]> }
   categories_left_out?: boolean
 }
 
@@ -37,6 +38,34 @@ function txnLine(kind: string, n: number, app: string): string {
       return `${t} would wait for the other direction: the sync runs one way`
     default:
       return `${t}: ${kind}`
+  }
+}
+
+function categoryLine(kind: string, n: number, app: string): string {
+  const c = `${n} categor${n === 1 ? 'y' : 'ies'}`
+  switch (kind) {
+    case 'name_there':
+      return `${c} renamed here would be renamed in ${app}`
+    case 'name_here':
+      return `${c} renamed in ${app} would be renamed here`
+    case 'group_there':
+      return `${c} moved to another group here would move in ${app}`
+    case 'group_here':
+      return `${c} moved in ${app} would move here`
+    case 'hidden_there':
+      return `${c} hidden or shown here would be in ${app} too`
+    case 'hidden_here':
+      return `${c} hidden or shown in ${app} would be here too`
+    case 'hide_there':
+      return `${c} deleted here would be hidden in ${app}, with its Assigned set to 0`
+    case 'new_here':
+      return `${c} new in ${app} would be added here, or matched with one of yours`
+    case 'new_there':
+      return `${c} new here would be added in ${app}`
+    case 'review':
+      return `${c} changed on both sides would wait in Needs your review`
+    default:
+      return `${c}: ${kind}`
   }
 }
 
@@ -72,7 +101,9 @@ export function SyncPreviewPanel({
   if (!result && !error) return null
   const tx = Object.entries(result?.transactions.counts ?? {}).filter(([, n]) => n > 0)
   const assigned = result?.assigned?.counts ?? {}
-  const nothing = result && tx.length === 0 && Object.keys(assigned).length === 0
+  const cats = Object.entries(result?.categories?.counts ?? {}).filter(([, n]) => n > 0)
+  const nothing =
+    result && tx.length === 0 && Object.keys(assigned).length === 0 && cats.length === 0
   return (
     <section className="a3-block" aria-label="Preview of the next sync">
       <div className="a3-block-h">Preview of the next sync</div>
@@ -103,6 +134,16 @@ export function SyncPreviewPanel({
         {!!assigned.review && (
           <Text size="sm">{`${assigned.review} Assigned figure(s) would wait in Needs your review`}</Text>
         )}
+        {cats.map(([kind, n]) => (
+          <Stack key={`c-${kind}`} gap="--space-1">
+            <Text size="sm">{categoryLine(kind, n, app.name)}</Text>
+            {(result?.categories?.samples[kind] ?? []).map((s) => (
+              <Text key={s} size="xs" tone="faint">
+                {s}
+              </Text>
+            ))}
+          </Stack>
+        ))}
         {result?.categories_left_out && (
           <Text size="xs" tone="faint">
             Category changes (new, renamed, hidden) aren&apos;t previewed: the run shows them in its
