@@ -424,7 +424,25 @@ describe('Rule editor actions', () => {
         expect.objectContaining({ method: 'POST' }),
       ),
     )
-    await waitFor(() => expect((field as HTMLInputElement).value).toBe('Newco'))
+    // The new payee shows as a chip; the search box is cleared and has let go of focus.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove Newco' })).toBeTruthy())
+    expect((field as HTMLInputElement).value).toBe('')
+    expect(document.activeElement).not.toBe(field)
+  })
+
+  it('a condition takes several values as chips, the list staying open to add more', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+    const field = document.getElementById('automation-condition-0-value')!
+    fireEvent.focus(field)
+    fireEvent.mouseDown(screen.getByRole('option', { name: 'Acme' }))
+    expect(screen.getByRole('button', { name: 'Remove Acme' })).toBeTruthy()
+    // Still open after a pick: the chosen one is gone from the list, nothing else to add here.
+    expect(screen.getByRole('listbox')).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'Acme' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Acme' }))
+    expect(screen.queryByRole('button', { name: 'Remove Acme' })).toBeNull()
   })
 })
 

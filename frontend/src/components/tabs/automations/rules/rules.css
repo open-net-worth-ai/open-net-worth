@@ -10,6 +10,11 @@
 .rl-editor .ui-modal__body {
   flex: 1 1 auto;
   max-height: none;
+  /* The scrollbar gets a gutter of its own, pushed out into the card's margin, so it never
+     sits against the fields. */
+  scrollbar-gutter: stable;
+  padding-right: 14px;
+  margin-right: -14px;
 }
 .rl-editor .a3-editor-stack {
   gap: 22px;
@@ -437,4 +442,36 @@
 }
 .rl-split .rl-combo-field {
   height: 30px;
+}
+.rl-combo-field.rl-combo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  height: auto;
+  min-height: 32px;
+  padding: 3px 24px 3px 6px;
+  cursor: text;
+}
+.rl-combo-chips.open,
+.rl-combo-chips:focus-within {
+  border-color: var(--accent);
+}
+.rl-combo-input {
+  flex: 1 1 60px;
+  min-width: 60px;
+  height: 24px;
+  padding: 0 3px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+}
+.rl-combo-input::placeholder {
+  color: var(--faint);
+}
+.rl-split .rl-combo-field.rl-combo-chips {
+  min-height: 30px;
 }

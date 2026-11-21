@@ -7,6 +7,7 @@
 // trigger never passes it, so it stays "all". Conflicts are only a trap for "all".
 import type { AutomationOption } from '../../../api/automations'
 import { Cluster, Tag } from '../../ui'
+import { ComboSelect } from './ComboSelect'
 import { Input, Row, Select } from './automationFormControls'
 import { conditionConflicts } from './txnConditionConflicts'
 import {
@@ -175,18 +176,43 @@ function ConditionRows({
       onChange={(op) => onChange({ ...condition, op, value: reshapeAmount(condition, op) })}
     />
   )
-  const valueControl = several ? (
-    <Select
-      id={`${id}-value`}
-      value=""
-      options={options.filter(([key]) => !picked.includes(key))}
-      placeholder={pickPlaceholder(condition.field, picked.length > 0)}
-      onChange={(value) => value && setValue(storedValues([...picked, value]))}
-    />
-  ) : (
-    <ConditionValue id={`${id}-value`} condition={condition} onChange={setValue} />
-  )
+  const valueControl =
+    several && inline ? (
+      // Several values are chips inside the one field; the list stays open to add another.
+      <ComboSelect
+        id={`${id}-value`}
+        multiple
+        value={picked}
+        options={options}
+        placeholder={pickPlaceholder(condition.field, false)}
+        onChangeMany={(values) => setValue(storedValues(values))}
+      />
+    ) : several ? (
+      <Select
+        id={`${id}-value`}
+        value=""
+        options={options.filter(([key]) => !picked.includes(key))}
+        placeholder={pickPlaceholder(condition.field, picked.length > 0)}
+        onChange={(value) => value && setValue(storedValues([...picked, value]))}
+      />
+    ) : (
+      <ConditionValue id={`${id}-value`} condition={condition} onChange={setValue} />
+    )
   if (inline) {
+    // The chips live inside the field here, so only the hint and any warning sit below.
+    const inlineBelow =
+      condition.op === 'contains' || condition.op === 'not_contains' || warnings.length ? (
+        <>
+          {(condition.op === 'contains' || condition.op === 'not_contains') && (
+            <span className="a3-muted">Separate several with commas — any of them counts.</span>
+          )}
+          {warnings.map((warning) => (
+            <span key={warning} className="a3-inline-error" role="status">
+              {warning}
+            </span>
+          ))}
+        </>
+      ) : null
     return (
       <div className="rl-cond" role="group" aria-label={`Condition ${index + 1}`}>
         <div className="rl-cond-line">
@@ -207,7 +233,7 @@ function ConditionRows({
             <X size={14} aria-hidden="true" />
           </button>
         </div>
-        {hasBelow && <div className="rl-cond-below">{below}</div>}
+        {inlineBelow && <div className="rl-cond-below">{inlineBelow}</div>}
       </div>
     )
   }

@@ -1,11 +1,15 @@
-// The app's own dropdown for the Rule editor, in place of the browser's <select> list: a field that
-// opens a popover anchored under it (the ledger's picker chrome). A long list (categories, payees,
-// accounts) takes typing to filter; a short one (all / any, an operator) is a plain button.
+// The app's own dropdown for the Rule editor, in place of the browser's <select> list. A long
+// list (categories, payees, accounts) is chips plus a search box: a single choice shows as one
+// chip and lets go of focus once made; `multiple` keeps the list open to add more, each a chip
+// with ×. A short list (all / any, an operator) is a plain button.
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Plus } from '../../../ui/icons'
+import { Tag } from '../../ui'
 import { scrollHiIntoView, useAnchoredFixed } from '../accounts/pickers'
 
 const SEARCH_FROM = 8
+
+type Option = readonly [string, string]
 
 export function ComboSelect({
   id,
@@ -13,15 +17,21 @@ export function ComboSelect({
   options,
   placeholder,
   needed,
+  multiple,
   onChange,
+  onChangeMany,
   onCreate,
 }: {
   id: string
-  value: string
-  options: ReadonlyArray<readonly [string, string]>
+  /** One id, or every chosen id when `multiple`. */
+  value: string | string[]
+  options: ReadonlyArray<Option>
   placeholder?: string
   needed?: boolean
-  onChange: (value: string) => void
+  multiple?: boolean
+  onChange?: (value: string) => void
+  /** With `multiple`: every chosen id, in the order picked. */
+  onChangeMany?: (values: string[]) => void
   /** Offer "Create “…”" for a typed name nothing matches; resolves to the new id. */
   onCreate?: (name: string) => Promise<string | null>
 }) {
@@ -30,17 +40,22 @@ export function ComboSelect({
   const [hi, setHi] = useState(0)
   const ref = useRef<HTMLDivElement | null>(null)
   const popRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   // A name made here shows at once, before the list it came from is fetched again.
-  const [made, setMade] = useState<Array<readonly [string, string]>>([])
+  const [made, setMade] = useState<Option[]>([])
   const [error, setError] = useState<string | null>(null)
   const all = [...options, ...made.filter(([key]) => !options.some(([k]) => k === key))]
-  const searchable = Boolean(onCreate) || all.length >= SEARCH_FROM
+  const chosen = (Array.isArray(value) ? value : value ? [value] : []).filter(Boolean)
+  const searchable = Boolean(multiple || onCreate) || all.length >= SEARCH_FROM
   const ql = q.trim().toLowerCase()
-  const items = all.filter(([, label]) => label.toLowerCase().includes(ql))
+  const items = all.filter(
+    ([key, label]) => label.toLowerCase().includes(ql) && !(multiple && chosen.includes(key)),
+  )
   const canCreate =
     Boolean(onCreate) && ql !== '' && !all.some(([, label]) => label.toLowerCase() === ql)
-  const selected = all.find(([key]) => key === value)?.[1] ?? ''
+  const labelOf = (key: string) => all.find(([k]) => k === key)?.[1] ?? key
   const fx = useAnchoredFixed(open, ref as React.RefObject<HTMLElement>, 280)
+  const emit = (next: string[]) => (multiple ? onChangeMany?.(next) : onChange?.(next[0] ?? ''))
 
   useEffect(() => {
     if (!open) return
@@ -60,36 +75,39 @@ export function ComboSelect({
   }
   function openAt() {
     setOpen(true)
-    setQ('')
-    setHi(
-      Math.max(
-        0,
-        options.findIndex(([key]) => key === value),
-      ),
-    )
+    setHi(0)
   }
   function choose(key: string) {
-    onChange(key)
+    if (multiple) {
+      emit([...chosen, key])
+      setQ('')
+      setHi(0)
+      return // the list stays open, and focus stays in the box, to add another
+    }
+    emit([key])
     close()
+    inputRef.current?.blur() // a single choice is done once made
   }
   async function create() {
     const name = q.trim()
-    close()
     setError(null)
     try {
       const created = await onCreate?.(name)
       if (!created) return
       setMade((current) => [...current, [created, name] as const])
-      onChange(created)
+      choose(created)
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not create it.')
     }
   }
   function onKey(event: KeyboardEvent) {
     if (!open) {
-      if (['ArrowDown', 'Enter', ' '].includes(event.key) && !(searchable && event.key === ' ')) {
+      if (['ArrowDown', 'Enter'].includes(event.key) || (!searchable && event.key === ' ')) {
         event.preventDefault()
         openAt()
+      }
+      if (searchable && event.key === 'Backspace' && q === '' && chosen.length) {
+        emit(chosen.slice(0, -1))
       }
       return
     }
@@ -108,6 +126,8 @@ export function ComboSelect({
       event.preventDefault()
       event.stopPropagation()
       close()
+    } else if (event.key === 'Backspace' && q === '' && chosen.length && multiple) {
+      emit(chosen.slice(0, -1))
     }
   }
 
@@ -118,30 +138,59 @@ export function ComboSelect({
     'aria-controls': `${id}-list`,
     onKeyDown: onKey,
   }
+  const single = chosen[0] ? labelOf(chosen[0]) : ''
   return (
     <div className={`acct-payf rl-combo${needed ? ' needed' : ''}`} ref={ref}>
       {searchable ? (
-        <input
-          {...common}
-          className="acct-addin rl-combo-field"
-          placeholder={selected || placeholder}
-          value={open ? q : selected}
-          onFocus={openAt}
-          onClick={() => !open && openAt()}
-          onChange={(event) => {
-            setQ(event.target.value)
-            setOpen(true)
-            setHi(0)
+        <div
+          className={`rl-combo-field rl-combo-chips${open ? ' open' : ''}`}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              event.preventDefault()
+              inputRef.current?.focus()
+            }
           }}
-        />
+        >
+          {/* While searching for a single value, the old chip makes way for the box. */}
+          {!(open && !multiple) &&
+            chosen.map((key) => (
+              <Tag
+                key={key}
+                removeLabel={`Remove ${labelOf(key)}`}
+                onRemove={() => emit(chosen.filter((k) => k !== key))}
+              >
+                {labelOf(key)}
+              </Tag>
+            ))}
+          <input
+            {...common}
+            ref={inputRef}
+            className="rl-combo-input"
+            placeholder={
+              chosen.length && !(open && !multiple)
+                ? ''
+                : open && single
+                  ? `Search — now ${single}`
+                  : placeholder
+            }
+            value={q}
+            onFocus={openAt}
+            onClick={() => !open && openAt()}
+            onChange={(event) => {
+              setQ(event.target.value)
+              setOpen(true)
+              setHi(0)
+            }}
+          />
+        </div>
       ) : (
         <button
           {...common}
           type="button"
-          className={`rl-combo-field rl-combo-btn${selected ? '' : ' empty'}`}
+          className={`rl-combo-field rl-combo-btn${single ? '' : ' empty'}`}
           onClick={() => (open ? close() : openAt())}
         >
-          {selected || placeholder}
+          {single || placeholder}
         </button>
       )}
       <svg
@@ -169,8 +218,8 @@ export function ComboSelect({
                 key={key}
                 type="button"
                 role="option"
-                aria-selected={key === value}
-                className={`acct-payf-item${index === hi ? ' hi' : ''}${key === value ? ' on' : ''}`}
+                aria-selected={chosen.includes(key)}
+                className={`acct-payf-item${index === hi ? ' hi' : ''}${chosen.includes(key) ? ' on' : ''}`}
                 onMouseEnter={() => setHi(index)}
                 onMouseDown={(event) => {
                   event.preventDefault()
@@ -197,7 +246,11 @@ export function ComboSelect({
                 <Plus size={12} aria-hidden="true" /> Create “{q.trim()}”
               </button>
             )}
-            {items.length === 0 && !canCreate && <div className="acct-payf-empty">No matches</div>}
+            {items.length === 0 && !canCreate && (
+              <div className="acct-payf-empty">
+                {multiple && chosen.length && !ql ? 'All chosen' : 'No matches'}
+              </div>
+            )}
           </div>
         </div>
       )}
