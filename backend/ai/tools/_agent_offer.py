@@ -59,8 +59,9 @@ def split_agent_offer(
 
     Otherwise ``inline`` is the bounded subset to put in ``tools=`` THIS round: the CORE
     overlap (this agent's own likely-hot tools) + ``find_tools`` + enough of the
-    remainder (alphabetical — deterministic, so the same ``offer`` always produces the
-    same inline set and the prompt prefix stays cache-stable) to fill the budget.
+    remainder to fill the budget — its writes first (the discovery gate always bounces a
+    deferred write), then alphabetical, deterministic, so the same ``offer`` always
+    produces the same inline set and the prompt prefix stays cache-stable.
     ``catalog`` is everything else in ``offer`` — named (not described) in the agent
     system prompt so the model knows it can just call it (ai/prompts.py's
     ``_fmt_agent_tool_catalog``), exactly mirroring the interactive "TOOL CATALOG" block.
@@ -75,13 +76,16 @@ def split_agent_offer(
         return None, frozenset()
 
     from backend.ai.tools._groups import CORE_TOOL_NAMES
+    from backend.ai.tools.registry import is_write_tool
 
     inline: set[str] = set(offer & CORE_TOOL_NAMES)
     inline.add("find_tools")
-    remaining_budget = max(0, limit - len(inline))
-    if remaining_budget:
-        rest = sorted(offer - inline)
-        inline.update(rest[:remaining_budget])
+    # Writes before reads: the discovery gate runs a deferred READ on its guessed arguments,
+    # but always bounces a deferred WRITE, and a model that gets bounced may stop instead of
+    # retrying (a paper Autopilot review guessed propose_paper_orders, was bounced and ended
+    # without its memo, 2026-11-21).
+    rest = sorted(offer - inline, key=lambda n: (not is_write_tool(n), n))
+    inline.update(rest[: max(0, limit - len(inline))])
 
     inline_frozen = frozenset(inline)
     catalog = offer - inline_frozen
