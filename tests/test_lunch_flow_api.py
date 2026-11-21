@@ -49,6 +49,19 @@ def _client(remote: bool = False) -> TestClient:
 _TUNNEL_HEADERS = {"x-forwarded-proto": "https", "x-forwarded-host": "onw.example.test"}
 
 
+def _owner_bearer() -> dict:
+    """A request that came through a tunnel is not trusted as local, so it signs in, as the
+    owner's browser or phone does through one."""
+    from backend.db.auth_store import AuthStore
+
+    store = AuthStore()
+    return {"authorization": f"Bearer {store.api_token() or store.rotate_api_token()}"}
+
+
+def _tunnel_headers() -> dict:
+    return {**_TUNNEL_HEADERS, **_owner_bearer()}
+
+
 @pytest.fixture()
 def client(db_isolated):
     return _client()
@@ -111,7 +124,7 @@ def test_put_cannot_smuggle_an_access_token(client):
 
 
 def test_begin_requires_credentials(client):
-    r = client.post("/api/lunch-flow/oauth/begin", headers=_TUNNEL_HEADERS)
+    r = client.post("/api/lunch-flow/oauth/begin", headers=_tunnel_headers())
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is False
@@ -119,7 +132,7 @@ def test_begin_requires_credentials(client):
 
 def test_begin_returns_authorize_url(client):
     client.put("/api/lunch-flow/config", json={"client_id": "cid", "client_secret": "sec"})
-    r = client.post("/api/lunch-flow/oauth/begin", headers=_TUNNEL_HEADERS)
+    r = client.post("/api/lunch-flow/oauth/begin", headers=_tunnel_headers())
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
@@ -189,7 +202,7 @@ def test_callback_only_accepts_get(client):
 
 def test_callback_completes_a_real_staged_flow_and_never_returns_a_token(client, monkeypatch):
     client.put("/api/lunch-flow/config", json={"client_id": "cid", "client_secret": "sec"})
-    begin = client.post("/api/lunch-flow/oauth/begin", headers=_TUNNEL_HEADERS).json()
+    begin = client.post("/api/lunch-flow/oauth/begin", headers=_tunnel_headers()).json()
 
     from backend.services.aggregation import lunch_flow_oauth as oauth_svc
 

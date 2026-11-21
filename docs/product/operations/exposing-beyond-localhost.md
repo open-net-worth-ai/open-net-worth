@@ -73,10 +73,12 @@ other hosted AI apps). The proxy handles HTTPS; Open Net Worth stays on `127.0.0
 it.
 
 1. **Turn off password-free access on the server.** In **Settings → Security → Auth behaviour**,
-   turn off **Don't ask for the password on this computer**. This matters: a proxy on the same
-   computer connects from `127.0.0.1`, and with that switch on, a forwarded request that doesn't
-   carry the visitor's real address would be let in **without a password**. (Setting
-   `AUTH_TRUST_LOOPBACK=false` only works on a brand-new install; afterwards use the switch.)
+   turn off **Don't ask for the password on this computer**. A proxy on the same computer
+   connects from `127.0.0.1`. The server already treats a request carrying `X-Forwarded-For`,
+   `Forwarded`, `X-Real-IP` or `X-Forwarded-Host` as coming from elsewhere and asks for the
+   password, but a proxy that adds none of them (nginx's bare `proxy_pass` is one) would
+   otherwise let every visitor in **without a password**. (Setting `AUTH_TRUST_LOOPBACK=false`
+   only works on a brand-new install; afterwards use the switch.)
 2. **Configure the proxy.** It must pass the original `Host` header, the visitor's address
    (`X-Forwarded-For`) and the scheme (`X-Forwarded-Proto`), and must not buffer responses (Lucius
    streams his replies).
