@@ -223,9 +223,11 @@ device whose clock runs more than ten minutes behind can lose the same way.
   one: Actual keeps that category on the budget side, and it's sent.
 - A category you clear in Actual stays cleared here: no rule or payee default fills it back in,
   until you edit that row here.
-- A Starting Balance changed in Actual comes across, unless the direction is **To Actual**: your
-  opening balance moves by the same amount, so a change you made to it here stays. Its date follows
-  Actual's when it still matched it. A Starting Balance changed here isn't sent to Actual.
+- A Starting Balance changes both ways, by difference: change it in Actual and your opening
+  balance here moves by the same amount; change your opening balance here and Actual's Starting
+  Balance moves by that amount. Changed on both sides, each takes the other's difference, so
+  neither change is lost. Actual's date follows here when it still matched yours; a date you set
+  here stays here. **To Actual** holds Actual's changes back, and **To this book** holds yours.
 - A payee you clear here is cleared in Actual too.
 - Actual has no category on an off-budget row, or on a transfer between two budget accounts. A
   category you give one here stays here and isn't sent; Actual's blank doesn't clear it.

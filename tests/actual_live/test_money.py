@@ -18,6 +18,7 @@ from tests.actual_live.world import (
     THIS_MONTH,
     TODAY,
     account_here,
+    as_person,
     balances_here,
     balances_there,
     edit_here,
@@ -107,6 +108,22 @@ def test_a_starting_balance_changed_there_comes_here(world):
     budget.steps(["call", "updateTransaction", opening["id"], {"amount": 650000}])
     assert "pulled" in sync()["summary"]
     assert ledger_service.opening_amount(account_here("ACME Checking")) == 6500.0
+    assert balances_here() == balances_there(budget.view())
+    quiet()
+
+
+def test_a_starting_balance_changed_here_goes_there(world):
+    budget = world.seed()
+    world.imported(budget)
+    quiet()
+    as_person(ledger_service.set_account_opening, account_here("ACME Checking")["id"], 5250.0)
+    assert "sent" in sync()["summary"]
+    openings = [
+        r
+        for r in budget.view()["rows"]
+        if r["account"] == "ACME Checking" and r["amount"] == 525000
+    ]
+    assert len(openings) == 1
     assert balances_here() == balances_there(budget.view())
     quiet()
 
