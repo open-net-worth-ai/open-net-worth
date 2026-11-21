@@ -72,6 +72,8 @@ export interface SyncStatus {
   warnings?: SyncWarning[]
   /** Actual only: its budget as it was before each recent sync that wrote to it. */
   restore_points?: { id: string; created_at: string; budget: string; bytes: number }[]
+  /** Actual only: an encrypted budget keeps none (its copy here is decrypted). */
+  restore_points_unavailable?: boolean
   /** Its connector is paused: nothing talks to the server, whatever the sync's own switch says. */
   connector_paused?: boolean
 }

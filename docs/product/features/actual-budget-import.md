@@ -45,7 +45,8 @@ Open **Automations → Data Sync → Actual** and click **Connect Actual…**. I
   `actual`, `asyncStorage`, the key `user-token`. Then close that window without signing out:
   signing out in Actual ends the token. It lasts while your server keeps tokens (the default never
   expires them); if it ends, the connector says the token expired, and a new one goes in the same
-  field. A password saved for such a server is refused with a message saying so: each try counts
+  field. Treat the token like your password: anyone holding it can open your budget. A password
+  saved for such a server is refused with a message saying so: each try counts
   towards Actual's limit on failed sign-ins, so the sync doesn't try again sooner.
 - **Budget** appears once an address and sign-in are saved. If the sign-in is wrong, this is where it
   says so, and the connector shows **Auth error** until a read works again. The budget you pick here
@@ -67,7 +68,8 @@ Open **Automations → Data Sync → Actual** and click **Connect Actual…**. I
   private authority, that this computer doesn't trust. Paste it as text, from
   `-----BEGIN CERTIFICATE-----` to the END line (up to three; never a private key). It is trusted
   for this server only, on top of the usual checks: the address must still match it. The form shows
-  its SHA-256 fingerprint, so you can compare it with your server's; **Remove** stops trusting it,
+  its SHA-256 fingerprint, so you can compare it with your server's (for example
+  `openssl s_client -connect your.server:443 </dev/null | openssl x509 -noout -fingerprint -sha256`); **Remove** stops trusting it,
   and a new server address drops it.
 
 Passwords, tokens and header values never come back from the server. A saved one shows as dots, and
@@ -76,7 +78,9 @@ leaving the field blank keeps it.
 **Behind a sign-in proxy?** If the proxy answers instead of Actual, with a redirect or its own login
 page, the connector says so. Either add the header your proxy accepts under **Proxy headers**, or let
 these paths through to Actual without the proxy's login: `/account`, `/info`, `/sync`, `/data` and
-`/data-file-index.txt`. The sync doesn't use `/api`. If the proxy turns the app away, the connector
+`/data-file-index.txt`. The sync doesn't use `/api`. Letting paths through means anyone can reach
+Actual's own sign-in on them, guarded only by Actual's password or token: a header is the safer of
+the two. If the proxy turns the app away, the connector
 says the proxy wants its own sign-in, rather than blaming your Actual password.
 
 **Pangolin**, with its own sign-in or an identity provider such as PocketID, takes either header,
@@ -222,7 +226,7 @@ same as YNAB's page. **Actual connection…** in the menu opens the connector's 
 was, and the page lists the last five under **Before each sync that wrote**. Download one and, in
 Actual, **Import file → Actual**: it comes back as a separate budget, as it was before that sync, and
 nothing is overwritten. A run that writes nothing keeps nothing. An end-to-end encrypted budget gets
-none: its copy here is decrypted, and keeping it would undo that encryption on disk, so export it
+none, and the page says so where they would be: its copy here is decrypted, and keeping it would undo that encryption on disk, so export it
 from Actual yourself (**Settings → Export data**) before a sync that writes. The import's own backup
 covers this book, not Actual.
 

@@ -262,6 +262,8 @@ def _status() -> dict:
         **status,
         "available": True,
         "restore_points": restore_points.listing(),
+        # Its copy here is decrypted, so none is kept: the page says to export it first.
+        "restore_points_unavailable": ActualBudgetConfigStore().public()["has_encryption_password"],
         "budget_mode": meta.get("budget_mode"),
         "warnings": _warnings(meta, st),
         "connector_paused": _paused(),

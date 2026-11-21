@@ -30,14 +30,31 @@ async function download(app: BudgetAppInfo, point: RestorePoint): Promise<string
   }
 }
 
-export function RestorePoints({ app, points }: { app: BudgetAppInfo; points: RestorePoint[] }) {
+export function RestorePoints({
+  app,
+  points,
+  unavailable = false,
+}: {
+  app: BudgetAppInfo
+  points: RestorePoint[]
+  unavailable?: boolean
+}) {
   const [error, setError] = useState<string | null>(null)
+  if (unavailable)
+    return (
+      <section className="a3-block" aria-label="Restore points">
+        <div className="a3-block-h">No undo kept for this budget</div>
+        <div className="a3-block-note">
+          {`Your ${app.name} budget is encrypted, so this app keeps no copy of it from before a sync: its copy here is decrypted. Before a sync writes to ${app.name}, export the budget there (Settings, then Export data).`}
+        </div>
+      </section>
+    )
   if (points.length === 0) return null
   return (
     <section className="a3-block" aria-label="Restore points">
       <div className="a3-block-h">Before each sync that wrote</div>
       <div className="a3-block-note">
-        {`${app.name}'s budget as it was just before a sync changed it. To undo a sync, download one and, in ${app.name}, import it (Import file, then Actual). It comes back as a separate budget, so nothing is overwritten.`}
+        {`${app.name}'s budget as it was just before a sync changed it; the last five are kept. To undo a sync, download one and, in ${app.name}, import it (Import file, then Actual). It comes back as a separate budget, so nothing is overwritten.`}
       </div>
       <Stack gap="--space-1">
         {points.map((p) => (

@@ -35,6 +35,12 @@ describe('restore points on the sync page', () => {
     )
   })
 
+  it('says an encrypted budget keeps no undo, and to export it first', () => {
+    render(<RestorePoints app={ACTUAL_APP} points={[]} unavailable />)
+    expect(screen.getByText('No undo kept for this budget')).toBeTruthy()
+    expect(screen.getByText(/export the budget there/)).toBeTruthy()
+  })
+
   it('shows nothing when there are none', () => {
     const { container } = render(<RestorePoints app={ACTUAL_APP} points={[]} />)
     expect(container.textContent).toBe('')
