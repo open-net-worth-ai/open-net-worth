@@ -509,17 +509,46 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   flex-direction: column;
   gap: 10px;
 }
-/* Under the notes: "Remember for this source" left, the read's model + effort chip right —
-   the chat composer's own chip, so it reads as a quiet setting, not another form field. */
-.imp3-note-foot {
+/* "Read with": the model chip and the effort chip side by side, left-aligned under their
+   label like every other section — two quiet chips, not another full-width form field. */
+.imp3-read-ctl {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
 }
 .imp3-read-model {
-  max-width: 60%;
+  min-width: 0;
+}
+/* The effort chip: the model chip's own trigger look, with a transparent native <select>
+   stretched over it as the menu — so the two read as one pair of equal controls. */
+.imp3-effort-chip {
+  position: relative;
+  flex: none;
+  color: var(--ink);
+}
+.imp3-effort-k {
+  color: var(--faint);
+}
+.imp3-effort-chip.is-disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+.imp3-effort-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.imp3-effort-select:disabled {
+  cursor: not-allowed;
+}
+.imp3-effort-chip:focus-within {
+  border-color: var(--line-strong);
 }
 .imp3-cfg-note textarea {
   width: 100%;

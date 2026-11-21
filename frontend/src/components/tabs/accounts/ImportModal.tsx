@@ -23,7 +23,7 @@ import {
   type EffortChoice,
 } from '../../../hooks/useModels'
 import { ModelPicker } from '../../ui/ModelPicker'
-import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight, Check } from '../../../ui/icons'
+import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight } from '../../../ui/icons'
 import { fDate, fMonthDay } from '../../../utils/format'
 import { fetchVaultItem, type VaultItem } from '../../../api/vault'
 import { PreviewLoading } from '../../vault/PreviewLoading'
@@ -794,40 +794,6 @@ function OpeningReviewLine() {
   }, [])
   if (seconds < 4) return <>Usually a few seconds</>
   return <>Still opening — {seconds}s. A long statement can take up to 30 seconds.</>
-}
-
-/** The effort tiers for one read, as the chat picker's own rows (`.mp-list` / `.mp-opt`), led
- *  by "Auto" — each import step keeps its own effort (extraction off, the Lucius pass high). */
-function ReadEffortChoices({
-  value,
-  choices,
-  onChange,
-}: {
-  value: EffortChoice | ''
-  choices: EffortChoice[]
-  onChange: (next: EffortChoice | '') => void
-}) {
-  const rows: (EffortChoice | '')[] = ['', ...choices]
-  return (
-    <div className="mp-list" role="radiogroup" aria-label="Reasoning effort">
-      {rows.map((lvl) => (
-        <button
-          key={lvl || 'auto'}
-          type="button"
-          role="radio"
-          aria-checked={lvl === value}
-          className={'mp-opt' + (lvl === value ? ' is-on' : '')}
-          onClick={() => onChange(lvl)}
-        >
-          <span className="mp-opt-name">{lvl ? effortChoiceLabel(lvl) : 'Auto'}</span>
-          {!lvl && <em className="mp-opt-note">each step picks its own</em>}
-          <span className="mp-opt-tick" aria-hidden="true">
-            <Check size={14} />
-          </span>
-        </button>
-      ))}
-    </div>
-  )
 }
 
 export interface ReopenOptions {
@@ -3983,58 +3949,71 @@ export function ImportModal({
                           these.
                         </div>
                       )}
-                    <div className="imp3-note-foot">
-                      <label
-                        className="imp3-remember"
-                        title="Checked: saved on this source's format profile and auto-applied to every future import of it. Unchecked: applies to this import only."
+                    <label
+                      className="imp3-remember"
+                      title="Checked: saved on this source's format profile and auto-applied to every future import of it. Unchecked: applies to this import only."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={rememberInstr}
+                        onChange={(e) => setRememberInstr(e.target.checked)}
+                      />{' '}
+                      Remember for this source
+                    </label>
+                  </div>
+                </div>
+                <div className="imp3-cfg-row">
+                  <span className="imp3-cfg-l">
+                    Read with
+                    <em>this import only — your Statement import setting stays as it is</em>
+                  </span>
+                  <div className="imp3-read-ctl">
+                    <ModelPicker
+                      className="imp3-read-model"
+                      label="Model for this statement"
+                      size="sm"
+                      title="The model that reads this statement — this import only"
+                      models={modelInfo.models}
+                      value={readModel}
+                      defaultLabel="Default"
+                      defaultModelId={savedImportModel || modelInfo.defaultModel}
+                      annotate={(m) => (m.vision === false ? '— no vision' : undefined)}
+                      onChange={setReadModel}
+                    />
+                    {/* Its own control, not a pane inside the model menu: both choices stay
+                      visible at a glance (owner, 2026-11-21). Styled as the model chip; the
+                      invisible native select on top is the actual menu. */}
+                    <label
+                      className={
+                        'mp-trigger mp-trigger--sm imp3-effort-chip' +
+                        (readEffortChoices.length ? '' : ' is-disabled')
+                      }
+                      title={
+                        readEffortChoices.length
+                          ? 'How hard the model thinks while reading — this import only'
+                          : 'This model has no effort setting'
+                      }
+                    >
+                      <span className="imp3-effort-k">Effort</span>
+                      <span className="mp-trigger-text">
+                        {effectiveEffort ? effortChoiceLabel(effectiveEffort) : 'Auto'}
+                      </span>
+                      <ChevronDown size={12} aria-hidden="true" />
+                      <select
+                        className="imp3-effort-select"
+                        aria-label="Effort"
+                        disabled={!readEffortChoices.length}
+                        value={effectiveEffort}
+                        onChange={(e) => setReadEffort(e.target.value as EffortChoice | '')}
                       >
-                        <input
-                          type="checkbox"
-                          checked={rememberInstr}
-                          onChange={(e) => setRememberInstr(e.target.checked)}
-                        />{' '}
-                        Remember for this source
-                      </label>
-                      {/* The chat composer's own model + effort chip: which model reads THIS
-                        statement and how hard it thinks. This import only — the Statement
-                        import model in Settings is untouched. */}
-                      <ModelPicker
-                        className="imp3-read-model"
-                        label="Model for this statement"
-                        size="sm"
-                        title="The model that reads this statement — this import only"
-                        models={modelInfo.models}
-                        value={readModel}
-                        defaultLabel="Default"
-                        defaultModelId={savedImportModel || modelInfo.defaultModel}
-                        annotate={(m) => (m.vision === false ? '— no vision' : undefined)}
-                        onChange={setReadModel}
-                        trailing={effectiveEffort ? effortChoiceLabel(effectiveEffort) : null}
-                        panes={
-                          readEffortChoices.length
-                            ? [
-                                {
-                                  key: 'effort',
-                                  label: 'Effort',
-                                  value: effectiveEffort
-                                    ? effortChoiceLabel(effectiveEffort)
-                                    : 'Auto',
-                                  content: (close) => (
-                                    <ReadEffortChoices
-                                      value={effectiveEffort}
-                                      choices={readEffortChoices}
-                                      onChange={(lvl) => {
-                                        setReadEffort(lvl)
-                                        close()
-                                      }}
-                                    />
-                                  ),
-                                },
-                              ]
-                            : undefined
-                        }
-                      />
-                    </div>
+                        <option value="">Auto — each step picks its own</option>
+                        {readEffortChoices.map((lvl) => (
+                          <option key={lvl} value={lvl}>
+                            {effortChoiceLabel(lvl)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 </div>
               </div>

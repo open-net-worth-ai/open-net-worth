@@ -6,7 +6,6 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, cleanup, screen, fireEvent, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
 import { ImportModal } from './ImportModal'
 import type { Account } from './types'
 
@@ -25,13 +24,7 @@ vi.mock('../../../hooks/useModels', async (orig) => ({
 }))
 // The real picker is a searchable popover; the modal's contract is only value + onChange.
 vi.mock('../../ui/ModelPicker', () => ({
-  ModelPicker: (p: {
-    value: string
-    defaultModelId?: string
-    onChange: (v: string) => void
-    panes?: { content: ReactNode | ((close: () => void) => ReactNode) }[]
-  }) => {
-    const pane = p.panes?.[0]?.content
+  ModelPicker: (p: { value: string; defaultModelId?: string; onChange: (v: string) => void }) => {
     return (
       <div>
         <button
@@ -42,7 +35,6 @@ vi.mock('../../ui/ModelPicker', () => ({
         >
           {p.value || 'saved'}
         </button>
-        {typeof pane === 'function' ? pane(() => {}) : pane}
       </div>
     )
   },
@@ -78,7 +70,7 @@ async function readWith(pick: boolean, effort?: string) {
   // Names the saved pin as the default, not the instance default.
   expect(picker.getAttribute('data-default')).toBe('anthropic:pinned')
   if (pick) fireEvent.click(picker)
-  if (effort) fireEvent.click(screen.getByRole('radio', { name: effort }))
+  if (effort) fireEvent.change(screen.getByLabelText('Effort'), { target: { value: effort } })
   fireEvent.click(await screen.findByText(/Read the statement/i))
   await waitFor(() => expect(onPreview).toHaveBeenCalled())
   return onPreview.mock.calls[0]
@@ -97,7 +89,7 @@ describe('ImportModal — the model that reads this statement', () => {
   })
 
   it('sends the picked effort with the read', async () => {
-    const args = await readWith(true, 'High')
+    const args = await readWith(true, 'high')
     expect(args[10]).toBe('anthropic:picked')
     expect(args[11]).toBe('high')
   })
