@@ -424,7 +424,7 @@ def _push_all(
     return [u.onw_id for u in out.deferred if u.onw_id]
 
 
-def _recorded(ctx: Context, unit: Unit, out: push.Outcome, base: Baselines, total: int) -> None:
+def _recorded(ctx: Context, unit: Unit, out: push.Outcome, base: Baselines, total: int = 0) -> None:
     """Link and baseline one confirmed unit now. If the ledger refuses the link, YNAB still holds
     the row: file it, and the unowned row is claimed by the ledger row on the next read."""
     recorder.txn_change("sent", ctx, unit.onw_id, unit.base, unit.onw)
