@@ -37,6 +37,16 @@ Open **Automations → Data Sync → Actual** and click **Connect Actual…**. I
 - **Sign in with** is a password or a token, whichever your server takes. Typing a new one replaces
   the other. A new server address asks for it again, so a mistyped address is never sent your saved
   password. That covers the host, the port, and a change between http and https.
+  **A server that signs in with OpenID** (an identity provider such as PocketID, Authentik or
+  Keycloak, with no Actual password) takes a token. Actual doesn't show one, so take it from a
+  browser: sign in to Actual in a private window, and copy the long code after `token=` in the
+  address it lands on (`…/openid-cb?token=…`) as it passes, or later from the browser's history.
+  In a browser already signed in, the developer tools have it too: under storage, IndexedDB,
+  `actual`, `asyncStorage`, the key `user-token`. Then close that window without signing out:
+  signing out in Actual ends the token. It lasts while your server keeps tokens (the default never
+  expires them); if it ends, the connector says the token expired, and a new one goes in the same
+  field. A password saved for such a server is refused with a message saying so: each try counts
+  towards Actual's limit on failed sign-ins, so the sync doesn't try again sooner.
 - **Budget** appears once an address and sign-in are saved. If the sign-in is wrong, this is where it
   says so, and the connector shows **Auth error** until a read works again. The budget you pick here
   is the one the import starts from.
@@ -400,7 +410,8 @@ disk. The one copy kept is a restore point, for a run that wrote to a budget tha
 this instance's backups folder (see Undoing a sync in Actual). It's tested against a real Actual
 server for the sync cases on this page, including end-to-end encrypted and tracking budgets, and a
 budget of 10,000 transactions: its import and check took about half a minute, and a sync about 5
-seconds. It hasn't been tested on Windows, or with OpenID-only servers.
+seconds. It's tested with a server that signs in only with OpenID, through PocketID and a token. It
+hasn't been tested on Windows.
 
 ## Guides and comparisons
 

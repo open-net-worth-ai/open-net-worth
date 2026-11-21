@@ -1121,3 +1121,23 @@ def test_a_certificate_for_another_name_says_so(store, work, fake):
         client.list_budgets(store)
     never_leaks(err.value)
     assert "for another name than the address" in err.value.message
+
+
+def test_a_password_on_an_openid_only_server_says_to_use_a_token(store, work, fake):
+    fake.build_error = actual_exc.AuthorizationError(
+        "Something went wrong on login: Invalid redirect URL"
+    )
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    assert "signs in with OpenID" in err.value.message and "Choose Token" in err.value.message
+    assert store.public()["last_status"] == "auth_error"
+
+
+def test_an_expired_token_says_so(store, work, fake):
+    body = '{"status":"error","reason":"unauthorized","details":"token-expired"}'
+    fake.build_error = actual_exc.AuthorizationError(
+        f"Server returned an HTTP error '401': '{body}'"
+    )
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    assert "token has expired" in err.value.message

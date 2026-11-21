@@ -342,6 +342,23 @@ _PROXY_REFUSED = (
 )
 
 
+# An OpenID-only server answers a password sign-in this way; each try also counts towards its
+# limit of failed sign-ins, so the sync says what to do instead of trying again sooner.
+_OPENID_ONLY = (
+    "This Actual server signs in with OpenID, not a password. Choose Token and paste the token "
+    "from a browser signed in to it: the docs say where to find it."
+)
+_TOKEN_EXPIRED = (
+    "The Actual token has expired. Sign in to Actual in your browser, then paste the new token."
+)
+
+
+def _says(status, auth, word: str) -> bool:
+    """Whether Actual's reply names ``word`` (its reason codes, such as ``token-expired``)."""
+    body = status.response.text if status is not None else str(auth or "")
+    return word in body
+
+
 def _from_actual(status, auth) -> bool:
     """Whether a 401/403 came from Actual (a JSON body) rather than a proxy in front of it. The
     login's error carries the body in its text, after the status."""
@@ -389,6 +406,10 @@ def _plain_error(exc: Exception) -> Stopped:
         code = int(found[1]) if found else code
         if "Could not validate password on login" in said:
             code = 401
+    if auth and "Invalid redirect URL" in str(auth):
+        return SignInRefused(_OPENID_ONLY)
+    if code in (401, 403) and _says(status, auth, "token-expired"):
+        return SignInRefused(_TOKEN_EXPIRED)
     if code in (401, 403) and not _from_actual(status, auth):
         return SignInRefused(_PROXY_REFUSED)
     if code in (401, 403):
