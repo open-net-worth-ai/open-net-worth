@@ -1,7 +1,9 @@
-"""One autopilot review: Lucius reads the paper portfolio, its mandate and the market, places the
-trades that keep the mandate, and writes a memo. Run by the scheduler, never by a request.
+"""One autopilot review: Lucius reads the paper portfolio, its mandate and the market, proposes
+trades with a conviction, and writes a memo; a challenge turn and a risk turn judge the buys, and
+the app sizes and places what survives (``autopilot_committee``). Run by the scheduler, never by
+a request.
 
-The review is ONE headless Lucius turn (the ``core.headless_turn`` seam, so ``services`` never
+Each turn is a headless Lucius turn (the ``core.headless_turn`` seam, so ``services`` never
 imports ``ai``) with an enforced tool offer — reads and this portfolio's paper tools, nothing
 else — and the paper-only guard Automations use (``AutomationApprovalContext`` with
 ``simulation_only`` and the portfolio bound), so dispatch refuses any real write, connector or
@@ -45,7 +47,7 @@ TOOLS = (
     "get_paper_activity",
     "get_paper_news",
     "preview_paper_orders",
-    "place_paper_orders",
+    "propose_paper_orders",
     "cancel_paper_orders",
     "record_autopilot_memo",
     "get_live_prices",
@@ -68,33 +70,16 @@ TOOLS = (
 OUTBOUND = frozenset(
     {"web_search", "x_search", "yahoo_get_price_history", "coingecko_get_price_history"}
 )
-# Flag autopilot_committee: the review proposes and code sizes and places
-# (autopilot_proposals), so it is offered propose_paper_orders instead of place_paper_orders.
-TOOLS_COMMITTEE = (*(t for t in TOOLS if t != "place_paper_orders"), "propose_paper_orders")
 # The paper writes run without a card: nobody is there to tap one, and the mandate is what the
 # owner approved in advance.
 _ALLOWED_WRITES = frozenset(
     {
-        "place_paper_orders",
         "cancel_paper_orders",
         "record_autopilot_memo",
         "propose_paper_orders",
         "record_challenge",
         "record_risk_review",
     }
-)
-_COMMITTEE_DECIDE = (
-    " A holding with room under its cap is a candidate too: adding to it competes with a new "
-    "name for the same cash, on the same terms."
-)
-_COMMITTEE_PLACE = (
-    "5. Propose your orders with propose_paper_orders, once, before the memo: for each, buy (a "
-    "new name or more of a holding), trim or sell, a one-sentence why and, for a buy or trim, "
-    "how sure you are (low, medium or high). You don't pick sizes: the app sizes a buy or trim "
-    "to 4%, 7% or 10% of the portfolio by your conviction, never over the cap or under the cash "
-    "floor, and places sells first after your turn ends. A holding past its stop loss or over "
-    "its cap is proposed as a sell or trim before anything else. Propose [] when you trade "
-    "nothing. Your memo describes what you proposed and why."
 )
 
 
@@ -130,20 +115,7 @@ def memory_block(row: dict) -> str:
         return "Your track record (paper): unavailable this review."
 
 
-def prompt(row: dict, memory: str = "", *, committee: bool = False) -> str:
-    text = _prompt(row, memory)
-    if not committee:
-        return text
-    lines = text.split("\n")
-    for i, line in enumerate(lines):
-        if line.startswith("4. Then decide."):
-            lines[i] = line + _COMMITTEE_DECIDE
-        elif line.startswith("5. Place the paper orders"):
-            lines[i] = _COMMITTEE_PLACE
-    return "\n".join(lines)
-
-
-def _prompt(row: dict, memory: str = "") -> str:
+def prompt(row: dict, memory: str = "") -> str:
     a = autopilot.of(row)
     m = row.get("mandate") or {}
     limits = mandate.describe(m) or "none beyond the goal"
@@ -187,11 +159,16 @@ def _prompt(row: dict, memory: str = "") -> str:
         "in one sentence, in the goal's terms. Cash well above its floor is a choice too: "
         "either buy the strongest candidate that fits the goal, or say in the memo why "
         "waiting serves the goal better (a dated event, a price you are waiting for), never "
-        "just that the market is falling.",
-        "5. Place the paper orders you decide on, sells first, each with a short Why. Preview "
-        "a buy if you are unsure it keeps the mandate. A buy that breaks a limit is refused: "
-        "never try to break one. Fix any limit that is broken now (a holding over its cap, "
-        "cash below its floor, a holding past its stop loss) before anything else.",
+        "just that the market is falling. A holding with room under its cap is a candidate too: "
+        "adding to it competes with a new name for the same cash, on the same terms.",
+        "5. Propose your orders with propose_paper_orders, once, before the memo: for each, "
+        "buy (a new name or more of a holding), trim or sell, a one-sentence why and, for a "
+        "buy or trim, how sure you are (low, medium or high). You don't pick sizes: the app "
+        "sizes a buy or trim to 4%, 7% or 10% of the portfolio by your conviction, never over "
+        "the cap or under the cash floor, and places sells first after your turn ends. A "
+        "holding past its stop loss or over its cap is proposed as a sell or trim before "
+        "anything else. Propose [] when you trade nothing. Your memo describes what you "
+        "proposed and why.",
         "6. Trade only this portfolio.",
         f"You have {MAX_TOOL_CALLS} tool calls in all: batch what you can (one get_live_prices "
         "for every ticker) and always keep one for the memo.",
@@ -221,8 +198,6 @@ async def review(pid: str) -> dict:
         return {"status": "skipped"}
     runner = get_runner()
     settings = autopilot.of(row)
-    # The ONE switch point for flag autopilot_committee: off, the review places its own orders.
-    committee = flag_enabled("autopilot_committee")
     record: dict
     if runner is None:
         record = {"status": "failed", "error": "Lucius isn't available on this install."}
@@ -246,8 +221,8 @@ async def review(pid: str) -> dict:
             memory = await asyncio.to_thread(memory_block, row)
             await asyncio.wait_for(
                 runner(
-                    prompt(row, memory, committee=committee),
-                    allowed_tools=list(TOOLS_COMMITTEE if committee else TOOLS),
+                    prompt(row, memory),
+                    allowed_tools=list(TOOLS),
                     model=settings["model"] or None,
                     lean_prompt=True,
                     enforce_offer=True,
@@ -256,12 +231,13 @@ async def review(pid: str) -> dict:
                 ),
                 timeout=TIMEOUT_S,
             )
-            record = {"status": "done"}
-            if committee:
-                from backend.services.paper_trading import autopilot_committee
+            from backend.services.paper_trading import autopilot_committee
 
-                # Challenge, risk-review, then size and place: the same bound paper-only context.
-                record["proposals"] = await autopilot_committee.decide(pid, row, runner, settings)
+            # Challenge, risk-review, then size and place: the same bound paper-only context.
+            record = {
+                "status": "done",
+                "proposals": await autopilot_committee.decide(pid, row, runner, settings),
+            }
         except asyncio.TimeoutError:
             record = {"status": "failed", "error": "The review took too long and was stopped."}
         except Exception as exc:  # noqa: BLE001 — any failure is a logged run, never a crash

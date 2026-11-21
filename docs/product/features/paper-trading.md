@@ -144,8 +144,7 @@ Autopilot needs a mandate: it is what you approve in advance. Every review:
 - can never break the mandate (no **Place anyway** for it), and fixes a broken limit first,
   such as a holding past its stop loss or over its cap.
 
-**Autopilot committee** (Settings → Developer → Experimental, off by default). With
-it on, a review no longer places orders itself. It proposes them: **buy** (a new stock, or more of
+**How a review trades.** A review never places orders itself. It proposes them: **buy** (a new stock, or more of
 one it holds), **trim** or **sell**, each with a one-sentence reason and, for a buy or trim, how sure
 it is. The app then decides the size:
 

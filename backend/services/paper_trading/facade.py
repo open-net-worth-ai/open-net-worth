@@ -80,7 +80,7 @@ def record_memo(
 
 
 def record_proposals(pid: str, proposals: list[dict]) -> dict:
-    """The running autopilot review's proposals (flag autopilot_committee): code sizes and
+    """The running autopilot review's proposals: code sizes and
     places them once the review's turn ends."""
     out = service.apply_paper_change(
         {"op": "autopilot_proposals", "id": pid, "proposals": proposals}

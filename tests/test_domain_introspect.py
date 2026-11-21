@@ -76,7 +76,7 @@ def test_discovers_every_write_choke_from_source():
     # 76 once `paper` (services.paper_trading.service.apply_paper_change, the simulated book)
     # joined with create/update/archive/start_over/delete/place/cancel/mark/lifecycle (2026-11-15);
     # 80 once its autopilot added autopilot/autopilot_memo/autopilot_trigger/autopilot_run_now;
-    # 83 once its committee (flag autopilot_committee) added autopilot_proposals,
+    # 83 once its committee added autopilot_proposals,
     # autopilot_challenge and autopilot_risk (2026-11-21).
     assert sum(len(c.ops) for c in chokes) == 83
 
