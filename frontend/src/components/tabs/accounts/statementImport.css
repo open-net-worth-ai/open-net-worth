@@ -521,19 +521,19 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 .imp3-read-model {
   min-width: 0;
 }
-/* Sized as this screen's form controls (the notes box, the file card), not the chat toolbar's
-   compact chip: ~36px tall, 13px text (owner, 2026-11-21 — "too small compared to others"). */
+/* Sized as the account chips right above ("Select account", .imp3-achip): between the chat
+   toolbar's compact chip (too small) and a full form field (too big) — owner, 2026-11-21. */
 .imp3-read-ctl .mp-trigger {
-  min-height: 36px;
-  padding: 7px 12px;
-  gap: 8px;
-  font-size: 13px;
+  min-height: 30px;
+  padding: 5px 10px;
+  gap: 7px;
+  font-size: 12.5px;
   background: var(--bg-2);
   border-color: var(--line-strong);
-  border-radius: var(--radius-lg);
+  border-radius: 8px;
 }
 .imp3-read-ctl .mp-trigger-prov {
-  font-size: 12px;
+  font-size: 11.5px;
 }
 /* The effort chip: the model chip's own trigger look; ActionMenu (the design-system menu)
    opens beneath it. A tick marks the current tier; the others keep its space so labels align. */
@@ -541,7 +541,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   display: inline-flex;
 }
 .imp3-effort-chip {
-  min-width: 120px;
+  min-width: 104px;
 }
 .imp3-effort-k {
   color: var(--faint);

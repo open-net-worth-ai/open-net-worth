@@ -4001,7 +4001,7 @@ export function ImportModal({
                           <span className="mp-trigger-text">
                             {effectiveEffort ? effortChoiceLabel(effectiveEffort) : 'Auto'}
                           </span>
-                          <ChevronDown size={14} aria-hidden="true" />
+                          <ChevronDown size={13} aria-hidden="true" />
                         </>
                       }
                       items={(['', ...readEffortChoices] as (EffortChoice | '')[]).map((lvl) => ({
