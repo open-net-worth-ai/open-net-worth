@@ -230,6 +230,9 @@ running. A category you picked yourself is never replaced, and neither is one al
 the Rule says **Replace a category already set**. The order for a new transaction is: what you
 entered, then Rules, then the payee's default category.
 
+When Lucius applies a Rule to past transactions, its approval card names the Rule and lists each
+transaction with what will change (from → to) and any it will skip, before anything is written.
+
 Every change a Rule makes is kept in the transaction's audit trail: which Rule changed it and
 which fields, a Rule that matched but could not act (and why), and when the payee's default
 category filled a blank one. Running Rules on past transactions records the same on each edit,

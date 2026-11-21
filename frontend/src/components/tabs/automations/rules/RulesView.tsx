@@ -192,10 +192,6 @@ export function RulesView({
         />
       ) : (
         <>
-          <p className="a3-muted rl-note">
-            Rules run from top to bottom. When two change the same thing, the lower one wins. Drag a
-            rule by its handle to change the order.
-          </p>
           {visible.length === 0 ? (
             <div className="a3-empty">
               <span>Nothing matches “{query}”</span>.{' '}
@@ -214,6 +210,10 @@ export function RulesView({
               onDelete={setDeleteTarget}
             />
           )}
+          <p className="a3-muted rl-note">
+            Rules run from top to bottom. When two change the same thing, the lower one wins. Drag a
+            rule by its handle to change the order.
+          </p>
         </>
       )}
       {!needle && (

@@ -163,8 +163,8 @@ def _check_ids(transaction_ids: object) -> list[str]:
     return list(dict.fromkeys(str(i) for i in transaction_ids))
 
 
-def apply_rule(body: object, transaction_ids: object) -> dict:
-    """Apply ONE Rule's actions to the given transactions."""
+def rule_plan(body: object) -> Callable[[dict], tuple[dict, str | None, list[dict]]]:
+    """What ONE Rule's actions would change on a row: ``(changes, skipped_reason, rules)``."""
     rule = rule_from_body(body)
     finalize = _finalize()
     exists = _exists()
@@ -175,11 +175,11 @@ def apply_rule(body: object, transaction_ids: object) -> dict:
         used = [_attribution(rule.get("id"), rule.get("name"), changed_fields(row, outcome.row))]
         return changes, outcome.skipped, used
 
-    return _write(_check_ids(transaction_ids), plan)
+    return plan
 
 
-def run_rules(transaction_ids: object) -> dict:
-    """Re-run every active Rule, in order, on the given transactions."""
+def rules_plan() -> Callable[[dict], tuple[dict, str | None, list[dict]]]:
+    """What every active Rule, in order, would change on a row."""
     rules = ordered_transforms(r for r in AutomationStore().active() if _is_active_rule(r))
     finalize = _finalize()
     exists = _exists()
@@ -190,7 +190,17 @@ def run_rules(transaction_ids: object) -> dict:
         used = [_attribution(m.automation_id, m.automation_name, m.fields) for m in matches]
         return _diff(row, after), reason, used
 
-    return _write(_check_ids(transaction_ids), plan)
+    return plan
+
+
+def apply_rule(body: object, transaction_ids: object) -> dict:
+    """Apply ONE Rule's actions to the given transactions."""
+    return _write(_check_ids(transaction_ids), rule_plan(body))
+
+
+def run_rules(transaction_ids: object) -> dict:
+    """Re-run every active Rule, in order, on the given transactions."""
+    return _write(_check_ids(transaction_ids), rules_plan())
 
 
 def _attribution(rule_id: object, name: object, fields: object) -> dict:

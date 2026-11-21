@@ -10035,7 +10035,7 @@
       },
       "execution": {
         "type": "object",
-        "description": "Only for a RULE (fixed labelling, no model call, runs inside each new transaction's write); omit for a Lucius Automation. {kind:'transaction_transform', set:{category?, tags?, note_append?, memo_append?, payee?}, splits?:[{amount:{type:'fixed'|'percent'|'remainder', value?}, category, tags?, memo?}] (≤10; percent = share of what fixed lines leave), override_existing?:bool (replace a set category), stop?:bool}. Needs a txn event trigger. Every matching Rule applies, top to bottom; the later wins."
+        "description": "Only for a RULE (fixed labelling, no model call, runs inside each new transaction's write); omit for a Lucius Automation. {kind:'transaction_transform', set:{category?, tags?, note_append?, memo_append?, payee?}, splits?:[{amount:{type:'fixed'|'percent'|'remainder', value?}, category, tags?, memo?}] (≤10; percent = share of what fixed lines leave), override_existing?:bool (replace a category already set; only if the user asks), stop?:bool}. Needs a txn event trigger. Rules run top to bottom among Rules only, the lower winning a conflict; a Lucius Automation is never in that order (it runs after the write)."
       },
       "permission_mode": {
         "enum": [
