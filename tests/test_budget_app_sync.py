@@ -213,8 +213,12 @@ def _state(app: BudgetApp) -> dict:
         return sync_state.load()
 
 
-def _wait_free(app: BudgetApp) -> None:
+def _wait_free(app: BudgetApp, run_id: str | None = None) -> None:
+    """The worker is done. With ``run_id``, wait for that run to end first: a run handed to the
+    pool may not have taken the lock yet, and a free lock alone would read as finished."""
     deadline = time.time() + DONE
+    while run_id and import_runs.get(run_id)["status"] == "running" and time.time() < deadline:
+        time.sleep(0.01)
     while app.lock.locked() and time.time() < deadline:
         time.sleep(0.01)
     assert not app.lock.locked()
@@ -455,7 +459,7 @@ def test_sync_now_runs_on_the_pool_for_the_app_that_started_it():
     with using(app):
         started = runner.start_now()
     assert started["run_id"] and started["running"]
-    _wait_free(app)
+    _wait_free(app, started["run_id"])
 
     assert _state(app)["last_run"]["summary"] == "1 pulled"
     assert import_runs.get(started["run_id"])["status"] == "done"
