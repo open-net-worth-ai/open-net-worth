@@ -104,7 +104,7 @@ Intel then flags *"Entered your buy zone"*, *"12% below your fair value"* or *"E
 
 ### 5. Get alerts outside the app
 
-Alerts always show in Intel. To get them on your phone or by email:
+Alerts always show in Intelligence. To get them on your phone or by email:
 
 1. Set up a channel in **Connectors** — [Telegram](../connectors/telegram.md),
    [Email](../connectors/email-ingestion.md) or a webhook.

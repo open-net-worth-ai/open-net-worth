@@ -126,8 +126,8 @@ settings. No notification channel needs to be set up; the app shows these itself
 
 If more than three arrive at once (say, after your computer wakes), you get one banner,
 "N new alerts", naming the newest few. When the app starts, only Intel alerts from the last
-15 minutes are announced; older ones wait in Intel. Clicking a banner opens the transactions to
-review, or Intel for an Intel alert.
+15 minutes are announced; older ones wait in Intelligence. Clicking a banner opens the transactions to
+review, or Intelligence for an Intel alert.
 
 ## Watch a folder for new statements
 
