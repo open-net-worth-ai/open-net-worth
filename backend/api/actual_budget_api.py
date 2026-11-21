@@ -234,6 +234,12 @@ def actual_budget_restore_point(restore_id: str):
     return FileResponse(path, media_type="application/zip", filename=f"actual-{restore_id}.zip")
 
 
+@router.post("/api/actual-budget/sync/undo-last")
+def actual_budget_sync_undo_last():
+    """Put back what the last sync changed in this book; the sync is switched off after."""
+    return _sync(actual_app.undo_last_sync)
+
+
 @router.post("/api/actual-budget/sync/preview")
 async def actual_budget_sync_preview():
     """A dry run: what the next sync would send and pull. Nothing is written on either side."""

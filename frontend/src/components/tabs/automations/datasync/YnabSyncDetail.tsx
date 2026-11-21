@@ -7,6 +7,7 @@ import { Button, ErrorState, Switch, TabSkeleton } from '../../../ui'
 import { BulkReview } from '../../imports/BulkReview'
 import { RestorePoints } from './RestorePoints'
 import { ToBudgetCompare } from './ToBudgetCompare'
+import { UndoLastSync } from './UndoLastSync'
 import { SyncPreviewPanel, usePreview } from './SyncPreview'
 import { ReviewCard } from '../../imports/ReviewItem'
 import { RunReportModal } from '../../imports/RunReport'
@@ -271,6 +272,9 @@ export function YnabSyncDetail({
               />
             )}
             <ToBudgetCompare app={app} figures={status.to_budget} />
+            {app.key === 'actual_budget' && (
+              <UndoLastSync app={app} at={status.undo_at} onDone={sync.refresh} />
+            )}
             <RestorePoints
               app={app}
               points={status.restore_points ?? []}
