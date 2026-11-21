@@ -298,12 +298,12 @@ def start_sync() -> dict:
 
 def sync_preview() -> dict:
     """What the next sync would send and pull, decided by the run's own rules, writing nothing."""
-    from backend.services.ynab_sync import preview
+    from backend.services.ynab_sync.preview import preview
 
     _open()
     client.refuse_while_paused()
     with using(ACTUAL):
-        return preview.preview()
+        return preview()
 
 
 def resolve_sync_item(conflict_id: str, keep: str, choice: str | None = None) -> dict:

@@ -11,8 +11,8 @@ never runs it, the connector fetches the plan as before, and every other entry p
 import logging
 
 from backend.services import budget_app, ynab_flag
-from backend.services.ynab_sync import preview as _preview
 from backend.services.ynab_sync import resolve, runner
+from backend.services.ynab_sync.preview import preview as _dry_run
 from backend.services.ynab_sync.state import INTERVALS, SURFACE
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ start_now = ynab_flag.gated(runner.start_now)
 status = ynab_flag.gated(runner.status)
 update_settings = ynab_flag.gated(runner.update_settings)
 resolve_item = ynab_flag.gated(resolve.resolve)
-preview = ynab_flag.gated(_preview.preview)
+preview_next = ynab_flag.gated(_dry_run)
 
 
 def run_if_due() -> bool:
@@ -59,7 +59,7 @@ __all__ = [
     "INTERVALS",
     "SURFACE",
     "plan_in_sync",
-    "preview",
+    "preview_next",
     "resolve",
     "resolve_item",
     "run_if_due",

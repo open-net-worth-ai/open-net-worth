@@ -118,3 +118,16 @@ def test_the_sync_routes_are_locked_in_the_public_demo():
         ("POST", "/api/ynab/sync/conflicts/c_abc/resolve"),
     ):
         assert is_demo_locked(method, path)
+
+
+def test_preview_is_a_dry_run_over_the_api(client):
+    assert client.post("/api/ynab/sync/preview").status_code == 422  # no plan chosen yet
+    client.put(
+        "/api/ynab/sync/settings",
+        json={"enabled": True, "interval": "30m", "plan_id": ynab_stub.PLAN},
+    )
+    client.post("/api/ynab/sync/run")
+    wait(client)
+    seen = client.post("/api/ynab/sync/preview")
+    assert seen.status_code == 200
+    assert seen.json()["transactions"]["counts"] == {} and seen.json()["categories_left_out"]

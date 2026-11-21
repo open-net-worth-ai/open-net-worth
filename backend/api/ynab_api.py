@@ -237,7 +237,7 @@ def ynab_sync_run():
 async def ynab_sync_preview():
     """A dry run: what the next sync would send and pull. Nothing is written on either side."""
     try:
-        return await asyncio.to_thread(ynab_sync.preview)
+        return await asyncio.to_thread(ynab_sync.preview_next)
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 
