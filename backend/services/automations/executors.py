@@ -8,6 +8,8 @@ from datetime import date, datetime, timedelta
 from backend.core.errors import ValidationError
 from backend.core.user_time import user_today
 
+from .rule_actions import validate_transform
+
 DETERMINISTIC_KINDS = frozenset(
     {
         "notify",
@@ -35,7 +37,15 @@ def validate_execution(value: object) -> dict:
         "notify": {"kind", "message", "channels"},
         "agent": {"kind", "agent_id"},
         "transaction": {"kind", "transaction"},
-        "transaction_transform": {"kind", "set", "priority", "stop", "override_existing"},
+        "transaction_transform": {
+            "kind",
+            "set",
+            "priority",
+            "position",
+            "stop",
+            "override_existing",
+            "splits",
+        },
         "card_payment_guard": {"kind", "card_account_id", "card_name", "channels"},
         "vest_reminder": {"kind", "channels"},
         "coupon_reminder": {"kind", "channels"},
@@ -54,16 +64,9 @@ def validate_execution(value: object) -> dict:
     if kind == "transaction":
         clean["transaction"] = _validate_transaction_template(value.get("transaction"))
     if kind == "transaction_transform":
-        if not isinstance(value.get("set"), dict):
-            raise ValidationError("transaction transform requires set")
-        if isinstance(value.get("priority", 0), bool) or not isinstance(
-            value.get("priority", 0), int
-        ):
-            raise ValidationError("transaction transform priority must be an integer")
-        if not isinstance(value.get("stop", False), bool) or not isinstance(
-            value.get("override_existing", False), bool
-        ):
-            raise ValidationError("transaction transform flags must be booleans")
+        validate_transform(value)
+        clean.setdefault("stop", False)
+        clean.setdefault("override_existing", False)
     if kind not in _SIMPLE_KINDS and value.get("channels") is not None:
         _validate_channels(value.get("channels"))
     elif (

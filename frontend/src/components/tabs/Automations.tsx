@@ -5,6 +5,7 @@ import {
   deleteAutomation,
   getAutomationRun,
   getAutomationOptions,
+  isRuleAutomation,
   listAutomationRuns,
   listAutomations,
   runAutomation,
@@ -28,6 +29,7 @@ import { useDataSyncs } from './automations/datasync/useDataSyncs'
 import { BankSyncDetail } from './automations/datasync/BankSyncDetail'
 import { useBankSyncs } from './automations/datasync/bankSync'
 import { useFlag } from '../../hooks/useFlag'
+import { RulesView } from './automations/rules/RulesView'
 import {
   EMPTY_AUTOMATION_OPTIONS,
   missingTriggerFields,
@@ -35,7 +37,7 @@ import {
 } from './automations/AutomationTriggerSummary'
 import './automations.css'
 
-type AutomationsView = 'lucius' | 'sync'
+type AutomationsView = 'lucius' | 'sync' | 'rules'
 
 // The masthead while no data sync is on offer: one list, no Data Sync tab.
 const LUCIUS_ONLY_SUBTITLE =
@@ -45,6 +47,8 @@ const VIEW_SUBTITLES: Record<AutomationsView, string> = {
   lucius:
     'Lucius runs these on a schedule or when something happens. Every run is a conversation you can pick back up.',
   sync: 'Keep this book and your other apps in step, by fixed rules. No AI involved and nothing to pay.',
+  rules:
+    'Label and split transactions by fixed rules, the moment they arrive. No AI involved and nothing to pay.',
 }
 
 interface AutomationsProps {
@@ -78,13 +82,19 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
   const banksOn = useFlag('bank_data_sync') === true
   const bankSyncs = useBankSyncs(banksOn).data ?? []
   const syncOn = dataSyncs.length > 0 || bankSyncs.length > 0
+  const rulesOn = useFlag('transaction_rules') === true
+  const tabsOn = syncOn || rulesOn
   const syncEntry = dataSyncs.find((e) => e.app.key === search.sync) ?? null
   const bankMatch =
     banksOn && typeof search.sync === 'string' ? /^bank[-:](.+)$/.exec(search.sync) : null
   const bankKey = bankMatch ? bankMatch[1]! : null
   const syncKey = syncEntry?.app.key ?? null
   const view: AutomationsView =
-    syncOn && (syncKey || bankKey || search.view === 'sync') ? 'sync' : 'lucius'
+    syncOn && (syncKey || bankKey || search.view === 'sync')
+      ? 'sync'
+      : rulesOn && search.view === 'rules'
+        ? 'rules'
+        : 'lucius'
   const reportId = syncKey && typeof search.report === 'string' ? search.report : null
   const toReview =
     dataSyncs.reduce((total, e) => total + e.sync.toReview, 0) +
@@ -400,7 +410,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
         run: undefined,
         sync: undefined,
         report: undefined,
-        view: next === 'sync' ? 'sync' : undefined,
+        view: next === 'lucius' ? undefined : next,
       })) as never,
       replace: true,
     } as never)
@@ -494,7 +504,9 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
     }
   }
 
-  const finishedAutomations = automations.filter((row) => row.status === 'completed')
+  const finishedAutomations = automations.filter(
+    (row) => row.status === 'completed' && !isRuleAutomation(row),
+  )
 
   const clearFinished = async () => {
     setClearBusy(true)
@@ -533,15 +545,15 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
       {/* Up while the list loads too — only the data is a skeleton; the title never pops in. */}
       {!selectedAutomationId && !syncKey && !bankKey && (
         <div
-          className={syncOn ? 'rd-masthead a3-masthead--tabs' : 'rd-masthead'}
+          className={tabsOn ? 'rd-masthead a3-masthead--tabs' : 'rd-masthead'}
           data-od-id="automations-masthead"
         >
           <PageHeader
             className="a3-masthead-head"
             title="Automations"
-            subtitle={syncOn ? VIEW_SUBTITLES[view] : LUCIUS_ONLY_SUBTITLE}
+            subtitle={tabsOn ? VIEW_SUBTITLES[view] : LUCIUS_ONLY_SUBTITLE}
           />
-          {syncOn && (
+          {tabsOn && (
             <PageTabs
               className="a3-views"
               ariaLabel="Kind of automation"
@@ -549,7 +561,10 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
               onChange={setView}
               tabs={[
                 { key: 'lucius', label: 'Lucius' },
-                { key: 'sync', label: 'Data Sync', badge: toReview || undefined },
+                ...(syncOn
+                  ? [{ key: 'sync' as const, label: 'Data Sync', badge: toReview || undefined }]
+                  : []),
+                ...(rulesOn ? [{ key: 'rules' as const, label: 'Rules' }] : []),
               ]}
             />
           )}
@@ -577,6 +592,13 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
             rememberScroll()
             openSync(key)
           }}
+        />
+      ) : view === 'rules' && !loading && !loadError ? (
+        <RulesView
+          automations={automations}
+          setAutomations={setAutomations}
+          options={options}
+          onError={setActionError}
         />
       ) : loading || !keepAwakeSettled ? (
         <div className="a3-wrap">
@@ -672,7 +694,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
         />
       ) : (
         <AutomationList
-          automations={automations}
+          automations={automations.filter((row) => !isRuleAutomation(row))}
           options={options}
           query={query}
           onQueryChange={setQuery}

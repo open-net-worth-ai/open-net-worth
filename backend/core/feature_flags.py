@@ -229,6 +229,22 @@ FLAGS: tuple[Flag, ...] = (
         remove_by=date(2027, 3, 1),
     ),
     Flag(
+        name="transaction_rules",
+        title="Rules in Automations",
+        description=(
+            "Automations gets a Rules tab: fixed rules that label every new transaction without "
+            "AI. A rule matches on payee, amount, account, description and more, then sets a "
+            "category, tags, a note or a payee, or splits the amount across categories. Rules run "
+            "top to bottom and every match applies; run them on past transactions from the tab or "
+            "the Ledger. Lucius can make and apply rules too. Off: rules cannot be created, and "
+            "existing ones run as before."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 21),
+        remove_by=date(2027, 3, 1),
+    ),
+    Flag(
         name="inline_visuals",
         title="Inline visuals in chat",
         description=(

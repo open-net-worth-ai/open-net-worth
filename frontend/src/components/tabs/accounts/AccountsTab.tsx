@@ -43,6 +43,8 @@ import {
 import { previewDeleteEffects } from './transactionApi'
 import { transferPair } from './makeTransfer'
 import { mergeTransactions } from '../../../api/matches'
+import { runRules } from '../../../api/automations'
+import { useFlag } from '../../../hooks/useFlag'
 import { buildTxnView } from './txnView'
 import { resolveChipMeta } from '../../../lucius/chipMeta'
 import type { Account, Txn, Category, TransactionUpdate, ApiAccount, ApiTxn } from './types'
@@ -254,6 +256,7 @@ export function AccountsTab({
   // Pass the outbound refresh so every write also refreshes app-wide net worth / other tabs / Lucius.
   const L = useAccountsLedger(refresh)
   const { accounts, transactions, categories, payees, fx, baseCurrency } = L
+  const rulesOn = useFlag('transaction_rules') === true
 
   // Reload when the AI mutates the ledger (RouterShell bumps refreshSignal on every portfolio/ledger
   // change). Only a bump AFTER mount: the shell's counter is already nonzero when this tab
@@ -1552,6 +1555,27 @@ export function AccountsTab({
     // The originals are untouched and still on screen, so they stay selected.
     showToast('Duplicated ' + n)
   }
+  // Re-runs every active Rule on the selection, 500 rows a call (the route's cap).
+  const bulkRunRules = async () => {
+    try {
+      const total = { applied: 0, unchanged: 0, skipped: 0 }
+      for (let at = 0; at < selList.length; at += 500) {
+        const r = await runRules(selList.slice(at, at + 500).map((t) => t.id))
+        total.applied += r.applied
+        total.unchanged += r.unchanged
+        total.skipped += r.skipped.length
+      }
+      const txns = (n: number) => `${n} ${n === 1 ? 'transaction' : 'transactions'}`
+      showToast(
+        `Rules updated ${txns(total.applied)}` +
+          (total.unchanged ? ` · ${total.unchanged} already matched` : '') +
+          (total.skipped ? ` · ${total.skipped} skipped` : ''),
+      )
+      void L.refresh()
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not run rules')
+    }
+  }
   const bulkExport = () => {
     exportCsv(selList)
   }
@@ -2344,6 +2368,7 @@ export function AccountsTab({
             makeTransferWhy={'why' in pair ? pair.why : undefined}
             onExport={bulkExport}
             onDelete={bulkDelete}
+            onRunRules={rulesOn ? () => void bulkRunRules() : undefined}
           />
         )}
 

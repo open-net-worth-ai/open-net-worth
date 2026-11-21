@@ -55,6 +55,26 @@ function txn(when: Record<string, unknown>): AutomationTrigger {
   return { kind: 'event', event: 'txn', when, limit: 'each' }
 }
 
+describe('amount ranges', () => {
+  it('switches an amount to between and writes [low, high]', () => {
+    const onChange = renderList({ conditions: [{ field: 'amount', op: 'over', value: 50 }] })
+    fireEvent.change(el('automation-condition-0-op'), { target: { value: 'between' } })
+    expect(onChange.mock.calls[0]![0].conditions).toEqual([
+      { field: 'amount', op: 'between', value: [50, ''] },
+    ])
+  })
+
+  it('edits each bound of a between amount', () => {
+    const onChange = renderList({
+      conditions: [{ field: 'amount', op: 'between', value: [10, ''] }],
+    })
+    fireEvent.change(el('automation-condition-0-value'), { target: { value: '30' } })
+    expect(onChange.mock.calls[0]![0].conditions).toEqual([
+      { field: 'amount', op: 'between', value: [10, 30] },
+    ])
+  })
+})
+
 describe('transaction conditions', () => {
   it('starts empty, with only an Add condition link', () => {
     const onChange = renderList({})
@@ -98,7 +118,13 @@ describe('transaction conditions', () => {
         'Adjustment',
       ]),
     )
-    expect(optionTexts('automation-condition-2-op')).toEqual(['over', 'under'])
+    expect(optionTexts('automation-condition-2-op')).toEqual([
+      'over',
+      'under',
+      'is',
+      'between',
+      'is about (±7.5%)',
+    ])
     expect(optionTexts('automation-condition-3-op')).toEqual([
       'contains',
       "doesn't contain",

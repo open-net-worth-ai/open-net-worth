@@ -132,6 +132,8 @@ def _active_event_automations(event: str | None = None) -> list[dict]:
         trigger = automation.get("trigger") or {}
         if automation.get("status") != "active" or trigger.get("kind") != "event":
             continue
+        if (automation.get("execution") or {}).get("kind") == "transaction_transform":
+            continue  # a Rule runs inside the write, never as a queued Lucius run
         if event is None or trigger.get("event") == event:
             rows.append(automation)
     return rows
@@ -295,6 +297,7 @@ def _matches(event: str, when: dict, payload: dict) -> bool:
             amount_on=lambda on: _amount(
                 payload, None, side=_transaction_side(payload, on) if on else None
             ),
+            match=when.get("match") or "all",
         ):
             return False
         if (

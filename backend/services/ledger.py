@@ -1569,6 +1569,22 @@ def _validate_splits(
     return cleaned
 
 
+def _rule_ref_exists(category_rows: list[dict] | None):
+    """Whether a category or payee a Rule names is still in the book — a Rule naming one deleted
+    since is skipped, so a Rule can never make the ledger refuse a transaction."""
+
+    def exists(kind: str, ref: str) -> bool:
+        if kind == "category":
+            from backend.services import categories as categories_service
+
+            return categories_service.resolve_category_ref(ref, rows=category_rows) is not None
+        from backend.services import payee_registry
+
+        return payee_registry._store.find_by_id(ref) is not None
+
+    return exists
+
+
 def _apply_splits(row: dict, *, category_rows: list[dict] | None = None) -> dict:
     """Validate the row's ``splits`` against its allocated leg (post-normalisation), normalise a
     1-line split to a plain category (no sentinel hiding one category), and stamp the SPLIT
@@ -2001,18 +2017,20 @@ def resolve_transaction_row(
     # as the LAST transform before persist, so what's stored is what the rules
     # produced — and it's inside the same checkpoint'd write. Applies on EVERY
     # import path because they all converge here (manual/AI/email/statement).
+    # With the ``transaction_rules`` flag on the whole pass moves to AFTER payee resolution
+    # (below), where a Rule can also split and "payee is" can match.
+    from backend.services.automations import rule_engine
     from backend.services.automations.transaction_events import (
         active_transaction_transforms,
         apply_transaction_automations,
     )
 
     automation_rows = active_transaction_transforms(automations)
-    row, automation_matches = apply_transaction_automations(row, automation_rows)
-    automation_hint = next(
-        (match for match in reversed(automation_matches) if match.category_applied),
-        None,
-    )
-    row.pop("category_explicit", None)  # in-flight edit-path flag — never persisted
+    rules_on = bool(automation_rows) and rule_engine.rules_enabled()
+    automation_matches: list = []
+    if not rules_on:
+        row, automation_matches = apply_transaction_automations(row, automation_rows)
+        row.pop("category_explicit", None)  # in-flight edit-path flag — never persisted
     # Payee resolution (P4-PAYEE phase 1): expense/income resolve the merchant entity from
     # the note (or honor a caller-supplied payee_id). Local import breaks the
     # ledger→payee_registry→payees→ledger cycle.
@@ -2068,6 +2086,19 @@ def resolve_transaction_row(
                         payee_is_new = True
         row["payee_id"] = pid
     row.pop("payee", None)  # transient input — resolved into payee_id, never a stored column
+    if rules_on:
+        if not skip_payee_resolve:  # an edit never re-runs Rules
+            row, automation_matches, _skipped = rule_engine.apply_rules(
+                row,
+                automation_rows,
+                finalize=lambda r: _apply_splits(r, category_rows=category_rows),
+                exists=_rule_ref_exists(category_rows),
+            )
+        row.pop("category_explicit", None)  # in-flight edit-path flag — never persisted
+    automation_hint = next(
+        (match for match in reversed(automation_matches) if match.category_applied),
+        None,
+    )
     # Per-kind payee default (per-kind since 2026-07-10): fill a STILL-blank category from
     # the payee's default FOR THIS KIND — never cross-kind (an expense default no longer
     # bleeds onto income/transfer/investment). Covers every categorizable kind that carries

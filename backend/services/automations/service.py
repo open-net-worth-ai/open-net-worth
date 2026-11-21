@@ -11,8 +11,12 @@ from backend.db.automation_run_store import AutomationRunStore
 from backend.db.automation_runtime_store import AutomationRuntimeStore
 from backend.db.automation_store import DELETING_STATUS, AutomationStore
 
+from .executors import validate_execution
 from .price_symbols import pin_price_instrument
+from .projections import describe_transaction_transform
 from .references import resolve_trigger_references
+from .rule_engine import rules_enabled
+from .rule_references import resolve_execution_references
 from .schedules import compute_next_run, validate_trigger
 
 CleanupHandler = Callable[..., dict]
@@ -31,6 +35,7 @@ _EDITABLE_FIELDS = frozenset(
         "effort",
         "max_runs",
         "provenance",
+        "execution",
     }
 )
 
@@ -66,6 +71,7 @@ def validate_automation(
     *,
     now: datetime | None = None,
     previous_trigger: object = None,
+    previous_execution: object = None,
     check_blocked: bool = False,
 ) -> dict:
     """``check_blocked`` is True only when the caller is SETTING the Blocked list (``permissions_v2``
@@ -78,10 +84,14 @@ def validate_automation(
     instructions = str(clean.get("instructions") or "").strip()
     if not name:
         raise ValidationError("automation name is required")
+    execution = _validate_execution(clean.get("execution"), previous_execution)
+    is_rule = execution["kind"] == "transaction_transform"
+    raw_trigger = rule_trigger(clean.get("trigger")) if is_rule else clean.get("trigger")
+    trigger = validated_trigger(raw_trigger, now=now, previous=previous_trigger)
+    if is_rule:
+        instructions = describe_transaction_transform({"trigger": trigger, "execution": execution})
     if not instructions:
         raise ValidationError("automation instructions are required")
-    trigger = validated_trigger(clean.get("trigger"), now=now, previous=previous_trigger)
-    execution = _validate_execution(clean.get("execution"))
     permission_mode = str(clean.get("permission_mode") or DEFAULT_PERMISSION_MODE).strip()
     if permission_mode not in {"manual", "auto", "skip"}:
         raise ValidationError("automation permission_mode must be manual, auto, or skip")
@@ -196,11 +206,38 @@ def _validate_blocked(value: object, always_allowed: list[dict]) -> list[str]:
     return blocked
 
 
-def _validate_execution(value: object) -> dict:
+def _validate_execution(value: object, previous: object = None) -> dict:
     execution = {"kind": "lucius"} if value is None else value
+    already_a_rule = isinstance(previous, dict) and previous.get("kind") == "transaction_transform"
+    if (
+        isinstance(execution, dict)
+        and execution.get("kind") == "transaction_transform"
+        and (rules_enabled() or already_a_rule)
+    ):
+        return resolve_execution_references(validate_execution(execution), previous)
     if execution != {"kind": "lucius"}:
         raise ValidationError("Automation execution kind must be Lucius")
     return {"kind": "lucius"}
+
+
+def rule_trigger(raw: object) -> object:
+    """A Rule fires inside the write, so it has no run limit to ask for."""
+    if not isinstance(raw, dict) or raw.get("kind") != "event" or raw.get("event") != "txn":
+        raise ValidationError("a Rule's trigger must be a transaction event")
+    return {"limit": "each", **raw}
+
+
+def _next_rule_position(store: AutomationStore) -> int:
+    positions = [
+        int(
+            (row.get("execution") or {}).get(
+                "position", (row.get("execution") or {}).get("priority", 0)
+            )
+        )
+        for row in store.all()
+        if (row.get("execution") or {}).get("kind") == "transaction_transform"
+    ]
+    return max(positions, default=-1) + 1
 
 
 def apply_automation_change(change: dict) -> dict:
@@ -209,6 +246,8 @@ def apply_automation_change(change: dict) -> dict:
     now = now_utc()
     if op == "create":
         clean = validate_new_automation(change.get("automation") or change, now=now)
+        if clean["execution"]["kind"] == "transaction_transform":
+            clean["execution"].setdefault("position", _next_rule_position(store))
         clean["trigger"] = pin_price_instrument(clean["trigger"])
         clean["trigger_revision"] = new_id("triggerrev")
         clean["next_run_at"] = (
@@ -245,6 +284,13 @@ def apply_automation_change(change: dict) -> dict:
         if unknown:
             raise ValidationError(f"unknown automation fields: {', '.join(sorted(unknown))}")
         _refuse_caller_completed(changes.get("status"), existing.get("status"))
+        if isinstance(changes.get("execution"), dict) and "position" in (
+            existing.get("execution") or {}
+        ):
+            changes["execution"] = {
+                "position": existing["execution"]["position"],
+                **changes["execution"],
+            }
         if changes.get("status") == "completed":
             changes.pop("status")  # an unchanged echo of the row, not a request
         if _trigger_really_changes(existing, changes, now):
@@ -253,8 +299,13 @@ def apply_automation_change(change: dict) -> dict:
             {**existing, **changes},
             now=now,
             previous_trigger=existing.get("trigger"),
+            previous_execution=existing.get("execution"),
             check_blocked="blocked" in changes,
         )
+        if (merged["execution"].get("kind")) != (existing.get("execution") or {}).get("kind"):
+            raise ValidationError("an Automation cannot change between a Rule and Lucius")
+        if merged["execution"].get("kind") == "transaction_transform":
+            changes["instructions"] = merged["instructions"]
         if "trigger" in changes:
             merged["trigger"] = pin_price_instrument(merged["trigger"])
         patch = {key: merged[key] for key in _EDITABLE_FIELDS if key in changes}

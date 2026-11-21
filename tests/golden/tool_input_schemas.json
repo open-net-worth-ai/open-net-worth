@@ -10030,8 +10030,12 @@
         "description": "Optional one-sentence summary."
       },
       "trigger": {
-        "description": "Trigger object. Always has 'kind'. manual: {kind:'manual'}. schedule: {kind:'schedule', type:…} where type is once {at: ISO-8601 datetime}, daily|weekdays {time:'HH:MM', tzid?}, weekly {time, day:'mon'..'sun', tzid?}, monthly {time, day:1-31, tzid?}, interval {seconds:>=60}, or rrule {rrule: iCalendar RRULE body with FREQ and no 'RRULE:' prefix, dtstart?, tzid?} for anything the fixed types cannot express. event: {kind:'event', event:'txn'|'balance'|'price', when:{…}, limit:'each'|'hour'|'day'}. txn when: {conditions:[{field, op, value}]} — ALL must hold; omit for every transaction. account is|is_not <account id or name> (either side of a transfer); kind is|is_not expense|income|transfer|investment|investment_buy|investment_sale|adjustment (a buy pays out of the account, a sale pays in; investment = both); payee is|is_not <payee id or name> — these three take a list too (is = any of, is_not = none of); amount over|under <number> — absolute, in the account's currency when 'account is' names one account, else the base currency; description|memo contains|not_contains <comma-separated phrases, any counts>, starts_with|regex <text>. balance when: {account:<account id>, direction:'below'|'above', amount:<number in that account's currency>}. price when: {symbol:<any market ticker, e.g. 'AAPL', 'D05.SI'>, direction:'below'|'above' (a price in the ticker's own quote currency) or 'rise'|'fall'|'move' (% vs. the previous close), value:<number>}.",
+        "description": "Trigger object. Always has 'kind'. manual: {kind:'manual'}. schedule: {kind:'schedule', type:…} where type is once {at: ISO-8601 datetime}, daily|weekdays {time:'HH:MM', tzid?}, weekly {time, day:'mon'..'sun', tzid?}, monthly {time, day:1-31, tzid?}, interval {seconds:>=60}, or rrule {rrule: iCalendar RRULE body with FREQ and no 'RRULE:' prefix, dtstart?, tzid?} for anything the fixed types cannot express. event: {kind:'event', event:'txn'|'balance'|'price', when:{…}, limit:'each'|'hour'|'day'}. txn when: {conditions:[{field, op, value}], match?:'all'|'any'} — ALL must hold unless match is 'any'; omit for every transaction. account is|is_not <account id or name> (either side of a transfer); kind is|is_not expense|income|transfer|investment|investment_buy|investment_sale|adjustment (a buy pays out of the account, a sale pays in; investment = both); payee is|is_not <payee id or name> — these three take a list too (is = any of, is_not = none of); amount over|under|is|approx <number> or between [low, high] (inclusive; approx = within 7.5%) — absolute, in the account's currency when 'account is' names one account, else the base currency; description|memo contains|not_contains <comma-separated phrases, any counts>, starts_with|regex <text>. balance when: {account:<account id>, direction:'below'|'above', amount:<number in that account's currency>}. price when: {symbol:<any market ticker, e.g. 'AAPL', 'D05.SI'>, direction:'below'|'above' (a price in the ticker's own quote currency) or 'rise'|'fall'|'move' (% vs. the previous close), value:<number>}.",
         "type": "object"
+      },
+      "execution": {
+        "type": "object",
+        "description": "Only for a RULE (fixed labelling, no model call, runs inside each new transaction's write); omit for a Lucius Automation. {kind:'transaction_transform', set:{category?, tags?, note_append?, memo_append?, payee?}, splits?:[{amount:{type:'fixed'|'percent'|'remainder', value?}, category, tags?, memo?}] (≤10; percent = share of what fixed lines leave), override_existing?:bool (replace a set category), stop?:bool}. Needs a txn event trigger. Every matching Rule applies, top to bottom; the later wins."
       },
       "permission_mode": {
         "enum": [
@@ -10106,7 +10110,11 @@
             },
             "trigger": {
               "type": "object",
-              "description": "Replacement trigger, same shape as create_automation. Trigger object. Always has 'kind'. manual: {kind:'manual'}. schedule: {kind:'schedule', type:…} where type is once {at: ISO-8601 datetime}, daily|weekdays {time:'HH:MM', tzid?}, weekly {time, day:'mon'..'sun', tzid?}, monthly {time, day:1-31, tzid?}, interval {seconds:>=60}, or rrule {rrule: iCalendar RRULE body with FREQ and no 'RRULE:' prefix, dtstart?, tzid?} for anything the fixed types cannot express. event: {kind:'event', event:'txn'|'balance'|'price', when:{…}, limit:'each'|'hour'|'day'}. txn when: {conditions:[{field, op, value}]} — ALL must hold; omit for every transaction. account is|is_not <account id or name> (either side of a transfer); kind is|is_not expense|income|transfer|investment|investment_buy|investment_sale|adjustment (a buy pays out of the account, a sale pays in; investment = both); payee is|is_not <payee id or name> — these three take a list too (is = any of, is_not = none of); amount over|under <number> — absolute, in the account's currency when 'account is' names one account, else the base currency; description|memo contains|not_contains <comma-separated phrases, any counts>, starts_with|regex <text>. balance when: {account:<account id>, direction:'below'|'above', amount:<number in that account's currency>}. price when: {symbol:<any market ticker, e.g. 'AAPL', 'D05.SI'>, direction:'below'|'above' (a price in the ticker's own quote currency) or 'rise'|'fall'|'move' (% vs. the previous close), value:<number>}."
+              "description": "Replacement trigger, same shape as create_automation. Trigger object. Always has 'kind'. manual: {kind:'manual'}. schedule: {kind:'schedule', type:…} where type is once {at: ISO-8601 datetime}, daily|weekdays {time:'HH:MM', tzid?}, weekly {time, day:'mon'..'sun', tzid?}, monthly {time, day:1-31, tzid?}, interval {seconds:>=60}, or rrule {rrule: iCalendar RRULE body with FREQ and no 'RRULE:' prefix, dtstart?, tzid?} for anything the fixed types cannot express. event: {kind:'event', event:'txn'|'balance'|'price', when:{…}, limit:'each'|'hour'|'day'}. txn when: {conditions:[{field, op, value}], match?:'all'|'any'} — ALL must hold unless match is 'any'; omit for every transaction. account is|is_not <account id or name> (either side of a transfer); kind is|is_not expense|income|transfer|investment|investment_buy|investment_sale|adjustment (a buy pays out of the account, a sale pays in; investment = both); payee is|is_not <payee id or name> — these three take a list too (is = any of, is_not = none of); amount over|under|is|approx <number> or between [low, high] (inclusive; approx = within 7.5%) — absolute, in the account's currency when 'account is' names one account, else the base currency; description|memo contains|not_contains <comma-separated phrases, any counts>, starts_with|regex <text>. balance when: {account:<account id>, direction:'below'|'above', amount:<number in that account's currency>}. price when: {symbol:<any market ticker, e.g. 'AAPL', 'D05.SI'>, direction:'below'|'above' (a price in the ticker's own quote currency) or 'rise'|'fall'|'move' (% vs. the previous close), value:<number>}."
+            },
+            "execution": {
+              "type": "object",
+              "description": "A Rule's replacement actions — the shape create_automation's execution takes."
             },
             "permission_mode": {
               "enum": [
@@ -10204,7 +10212,7 @@
             "description": "Optional one-sentence explanation shown in the Automation list."
           },
           "trigger": {
-            "description": "Trigger object. Always has 'kind'. manual: {kind:'manual'}. schedule: {kind:'schedule', type:…} where type is once {at: ISO-8601 datetime}, daily|weekdays {time:'HH:MM', tzid?}, weekly {time, day:'mon'..'sun', tzid?}, monthly {time, day:1-31, tzid?}, interval {seconds:>=60}, or rrule {rrule: iCalendar RRULE body with FREQ and no 'RRULE:' prefix, dtstart?, tzid?} for anything the fixed types cannot express. event: {kind:'event', event:'txn'|'balance'|'price', when:{…}, limit:'each'|'hour'|'day'}. txn when: {conditions:[{field, op, value}]} — ALL must hold; omit for every transaction. account is|is_not <account id or name> (either side of a transfer); kind is|is_not expense|income|transfer|investment|investment_buy|investment_sale|adjustment (a buy pays out of the account, a sale pays in; investment = both); payee is|is_not <payee id or name> — these three take a list too (is = any of, is_not = none of); amount over|under <number> — absolute, in the account's currency when 'account is' names one account, else the base currency; description|memo contains|not_contains <comma-separated phrases, any counts>, starts_with|regex <text>. balance when: {account:<account id>, direction:'below'|'above', amount:<number in that account's currency>}. price when: {symbol:<any market ticker, e.g. 'AAPL', 'D05.SI'>, direction:'below'|'above' (a price in the ticker's own quote currency) or 'rise'|'fall'|'move' (% vs. the previous close), value:<number>}.",
+            "description": "Trigger object. Always has 'kind'. manual: {kind:'manual'}. schedule: {kind:'schedule', type:…} where type is once {at: ISO-8601 datetime}, daily|weekdays {time:'HH:MM', tzid?}, weekly {time, day:'mon'..'sun', tzid?}, monthly {time, day:1-31, tzid?}, interval {seconds:>=60}, or rrule {rrule: iCalendar RRULE body with FREQ and no 'RRULE:' prefix, dtstart?, tzid?} for anything the fixed types cannot express. event: {kind:'event', event:'txn'|'balance'|'price', when:{…}, limit:'each'|'hour'|'day'}. txn when: {conditions:[{field, op, value}], match?:'all'|'any'} — ALL must hold unless match is 'any'; omit for every transaction. account is|is_not <account id or name> (either side of a transfer); kind is|is_not expense|income|transfer|investment|investment_buy|investment_sale|adjustment (a buy pays out of the account, a sale pays in; investment = both); payee is|is_not <payee id or name> — these three take a list too (is = any of, is_not = none of); amount over|under|is|approx <number> or between [low, high] (inclusive; approx = within 7.5%) — absolute, in the account's currency when 'account is' names one account, else the base currency; description|memo contains|not_contains <comma-separated phrases, any counts>, starts_with|regex <text>. balance when: {account:<account id>, direction:'below'|'above', amount:<number in that account's currency>}. price when: {symbol:<any market ticker, e.g. 'AAPL', 'D05.SI'>, direction:'below'|'above' (a price in the ticker's own quote currency) or 'rise'|'fall'|'move' (% vs. the previous close), value:<number>}.",
             "type": "object"
           },
           "permission_mode": {
@@ -11672,6 +11680,28 @@
     },
     "required": [
       "verdicts"
+    ],
+    "type": "object"
+  },
+  "apply_rule_to_transactions": {
+    "additionalProperties": false,
+    "properties": {
+      "rule_id": {
+        "type": "string",
+        "description": "A Rule's id from list_automations (execution.kind transaction_transform). Applies ONLY that Rule's actions to the transactions, without checking its conditions. Omit to re-run every active Rule, in order, on them."
+      },
+      "transaction_ids": {
+        "description": "Transaction ids from get_transactions — at most 500.",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 500,
+        "minItems": 1,
+        "type": "array"
+      }
+    },
+    "required": [
+      "transaction_ids"
     ],
     "type": "object"
   }

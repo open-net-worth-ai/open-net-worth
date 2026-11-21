@@ -4,7 +4,8 @@ export type ConditionField = 'account' | 'kind' | 'amount' | 'payee' | 'descript
 export interface TxnCondition {
   field: ConditionField
   op: string
-  value: string | number | string[]
+  /** `between` stores `[low, high]` (either may be '' while it is being typed). */
+  value: string | number | string[] | Array<number | ''>
 }
 
 export const CONDITION_FIELDS: ReadonlyArray<readonly [ConditionField, string]> = [
@@ -26,6 +27,9 @@ const IS_ANY_OPS = [
 const AMOUNT_OPS = [
   ['over', 'over'],
   ['under', 'under'],
+  ['is', 'is'],
+  ['between', 'between'],
+  ['approx', 'is about (±7.5%)'],
 ] as const
 const TEXT_OPS = [
   ['contains', 'contains'],
@@ -124,7 +128,17 @@ export function conditionValueText(value: TxnCondition['value']): string {
   return Array.isArray(value) ? value.join(', ') : String(value ?? '')
 }
 
+/** A `between` amount's `[low, high]`, '' for a bound not typed yet. */
+export function betweenBounds(value: TxnCondition['value']): [number | '', number | ''] {
+  const [low, high] = Array.isArray(value) ? value : []
+  return [
+    low === undefined ? '' : (low as number | ''),
+    high === undefined ? '' : (high as number | ''),
+  ]
+}
+
 export function conditionIsComplete(condition: TxnCondition): boolean {
+  if (condition.op === 'between') return betweenBounds(condition.value).every((n) => n !== '')
   return conditionValueText(condition.value).trim() !== ''
 }
 
@@ -178,6 +192,19 @@ function kindName(kind: string) {
   return (KIND_OPTIONS.find(([k]) => k === kind)?.[1] ?? kind).toLowerCase()
 }
 
+const money = (currency: string, value: unknown) =>
+  currency ? `${currency} ${Number(value).toLocaleString()}` : Number(value).toLocaleString()
+
+function amountPhrase(c: TxnCondition, currency: string): string {
+  if (c.op === 'between') {
+    const [low, high] = betweenBounds(c.value)
+    return `between ${money(currency, low)} and ${money(currency, high)}`
+  }
+  if (c.op === 'is') return `of ${money(currency, c.value)}`
+  if (c.op === 'approx') return `of about ${money(currency, c.value)}`
+  return `${c.op} ${money(currency, c.value)}`
+}
+
 /** "When an expense over USD 500 posts on USD card, payee is Grab or Uber". Amounts carry the
  *  currency they are compared in: the one "Account is" account's, else the base currency. */
 export function transactionLabel(conditions: TxnCondition[], options: LabelOptions): string {
@@ -189,8 +216,7 @@ export function transactionLabel(conditions: TxnCondition[], options: LabelOptio
   const subjects = conditionValues(kind?.value ?? '').map((k) => KIND_SUBJECT[k] ?? kindName(k))
   let label = `When ${subjects.length ? joinOr(subjects) : 'a transaction'}`
   for (const c of conditions.filter((c) => c.field === 'amount')) {
-    const figure = Number(c.value).toLocaleString()
-    label += ` ${c.op} ${currency ? `${currency} ${figure}` : figure}`
+    label += ` ${amountPhrase(c, currency)}`
   }
   label += ' posts'
   const rest: string[] = []

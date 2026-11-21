@@ -32,16 +32,34 @@ def _resolve_hint(hint: str | None, category_rows: list[dict]) -> str | None:
         return None
 
 
+def _preview_automations(draft: dict, payee_id: str | None, automation_set: list[dict]):
+    """The write's own pass: with ``transaction_rules`` on it runs after payee resolution, so the
+    resolved payee is on the row; a split that does not validate is dropped, as the write would."""
+    from backend.services.automations import rule_engine
+    from backend.services.automations.transaction_events import apply_transaction_automations
+
+    if not automation_set or not rule_engine.rules_enabled():
+        return apply_transaction_automations(draft, automation_set)
+    if payee_id:
+        draft["payee_id"] = payee_id
+    from backend.services import ledger
+
+    previewed, matches, _skipped = rule_engine.apply_rules(
+        draft,
+        automation_set,
+        finalize=ledger._apply_splits,
+        exists=ledger._rule_ref_exists(None),
+    )
+    return previewed, matches
+
+
 def enrich_drafts(drafts: list[dict]) -> list[dict]:
     """Annotate each draft with the dry-run verdict:
     ``{payee_id, payee_name, category, category_source}`` where category_source ∈
     ``automation | payee | hint`` (None when the row would land Uncategorized). Reads stores ONCE for
     the batch; never writes, never mints, never bumps."""
     from backend.services import payee_registry
-    from backend.services.automations.transaction_events import (
-        active_transaction_transforms,
-        apply_transaction_automations,
-    )
+    from backend.services.automations.transaction_events import active_transaction_transforms
     from backend.services.categories import all_category_rows
 
     try:
@@ -71,9 +89,12 @@ def enrich_drafts(drafts: list[dict]) -> list[dict]:
                 payee = payee_registry._store.find_by_id(pid)
                 verdict["payee_id"] = pid
                 verdict["payee_name"] = (payee or {}).get("name")
-            previewed, matches = apply_transaction_automations(dict(draft), automation_set)
+            previewed, matches = _preview_automations(dict(draft), pid, automation_set)
             kind = draft.get("kind", "expense")
-            if previewed.get("category"):
+            if previewed.get("splits"):
+                verdict["category"] = "split"
+                verdict["category_source"] = "automation"
+            elif previewed.get("category"):
                 verdict["category"] = previewed["category"]
                 verdict["category_source"] = "automation" if matches else "explicit"
             elif pid:

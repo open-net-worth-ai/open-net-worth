@@ -3,13 +3,15 @@
 // Stored as `when.conditions`; an older trigger's flat keys are shown as conditions too and
 // rewritten as conditions on the first edit. Account, Kind and Payee pick several values (any
 // of / none of them); conditions that can never all hold are flagged under the one that closes
-// the trap.
+// the trap. A Rule also says whether ALL or ANY of them must hold (`match`); the flag-off Lucius
+// trigger never passes it, so it stays "all". Conflicts are only a trap for "all".
 import type { AutomationOption } from '../../../api/automations'
 import { Cluster, Tag } from '../../ui'
 import { Input, Row, Select } from './automationFormControls'
 import { conditionConflicts } from './txnConditionConflicts'
 import {
   CONDITION_FIELDS,
+  betweenBounds,
   FLAT_FILTER_KEYS,
   KIND_OPTIONS,
   conditionAccount,
@@ -30,12 +32,14 @@ export function TransactionConditionFields({
   accounts,
   payees,
   baseCurrency,
+  match = 'all',
   onChange,
 }: {
   when: Record<string, unknown>
   accounts: AutomationOption[]
   payees: AutomationOption[]
   baseCurrency?: string
+  match?: 'all' | 'any'
   onChange: (patch: Record<string, unknown>, path: string) => void
 }) {
   const conditions = readConditions(when)
@@ -52,13 +56,14 @@ export function TransactionConditionFields({
   const account = conditionAccount(conditions)
   const amountCurrency =
     (account ? accounts.find((a) => a.id === account)?.currency : baseCurrency) ?? ''
-  const conflicts = conditionConflicts(conditions)
+  const conflicts = match === 'any' ? [] : conditionConflicts(conditions)
   return (
     <>
       {conditions.map((condition, index) => (
         <ConditionRows
           key={index}
           index={index}
+          match={match}
           condition={condition}
           accounts={accounts}
           payees={payees}
@@ -84,6 +89,7 @@ export function TransactionConditionFields({
 
 function ConditionRows({
   index,
+  match,
   condition,
   accounts,
   payees,
@@ -93,6 +99,7 @@ function ConditionRows({
   onRemove,
 }: {
   index: number
+  match: 'all' | 'any'
   condition: TxnCondition
   accounts: AutomationOption[]
   payees: AutomationOption[]
@@ -141,7 +148,7 @@ function ConditionRows({
     warnings.length > 0
   return (
     <>
-      <Row label={index === 0 ? 'Where' : 'and'} htmlFor={`${id}-field`}>
+      <Row label={index === 0 ? 'Where' : match === 'any' ? 'or' : 'and'} htmlFor={`${id}-field`}>
         <div className="a3-cond-pair">
           <Select
             id={`${id}-field`}
@@ -153,7 +160,7 @@ function ConditionRows({
             id={`${id}-op`}
             value={condition.op}
             options={opsFor(condition.field, picked.length > 1)}
-            onChange={(op) => onChange({ ...condition, op })}
+            onChange={(op) => onChange({ ...condition, op, value: reshapeAmount(condition, op) })}
           />
         </div>
         <button type="button" className="a3-linkbtn" onClick={onRemove}>
@@ -180,6 +187,15 @@ function ConditionRows({
       </Row>
     </>
   )
+}
+
+/** Switching an amount to or from `between` carries the first figure across. */
+function reshapeAmount(condition: TxnCondition, op: string): TxnCondition['value'] {
+  if (condition.field !== 'amount') return condition.value
+  const stored = condition.value
+  if (op === 'between')
+    return Array.isArray(stored) ? stored : [stored === '' ? '' : Number(stored), '']
+  return Array.isArray(stored) ? betweenBounds(stored)[0] : stored
 }
 
 const NOUN: Partial<Record<ConditionField, string>> = {
@@ -212,6 +228,32 @@ function ConditionValue({
   condition: TxnCondition
   onChange: (value: TxnCondition['value']) => void
 }) {
+  if (condition.field === 'amount' && condition.op === 'between') {
+    const [low, high] = betweenBounds(condition.value)
+    const set = (next: [number | '', number | '']) => onChange(next)
+    const num = (value: string) => (value === '' ? '' : Number(value))
+    return (
+      <span className="a3-cond-between">
+        <Input
+          id={`${id}-low`}
+          type="number"
+          min={0}
+          value={low}
+          placeholder="From"
+          onChange={(value) => set([num(value), high])}
+        />
+        <span className="a3-muted">to</span>
+        <Input
+          id={id}
+          type="number"
+          min={0}
+          value={high}
+          placeholder="To"
+          onChange={(value) => set([low, num(value)])}
+        />
+      </span>
+    )
+  }
   if (condition.field === 'amount') {
     return (
       <Input

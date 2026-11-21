@@ -13,9 +13,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal, Sequence
 
+from backend.core.errors import MissingFxRateError
+from backend.core.fx import txn_base_amount
 from backend.db.automation_store import AutomationStore
 
 from .projections import describe_lucius_transaction_event, describe_transaction_transform
+from .txn_conditions import conditions_match
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +56,15 @@ def active_transaction_transforms(rows: Sequence[dict] | None = None) -> list[di
 
 
 def ordered_transforms(rows: Sequence[dict] | object) -> list[dict]:
+    """Rules by ``position`` — the order they are listed in — and legacy rows by ``priority``."""
     return sorted(
         list(rows),
         key=lambda row: (
-            int((row.get("execution") or {}).get("priority", 100)),
+            int(
+                (row.get("execution") or {}).get(
+                    "position", (row.get("execution") or {}).get("priority", 100)
+                )
+            ),
             row.get("created_at") or "",
             row.get("id") or "",
         ),
@@ -107,6 +115,25 @@ def _amount_for_match(draft: dict, when: dict) -> float | None:
         if draft.get(key) is not None:
             return abs(float(draft[key]))
     return None
+
+
+def draft_amount_on(draft: dict):
+    """``amount_on`` for ``conditions_match``: the transaction's amount on one account's own leg,
+    or in the base currency when no single account is named."""
+
+    def amount_on(account: str | None) -> float | None:
+        if account:
+            for side in ("from", "to"):
+                amount = draft.get(f"{side}_amount")
+                if draft.get(f"{side}_account_id") == account and amount is not None:
+                    return abs(float(amount))
+            return None
+        try:
+            return txn_base_amount(draft)
+        except (TypeError, ValueError, MissingFxRateError):
+            return None
+
+    return amount_on
 
 
 def match_transaction_automation(automation: dict, draft: dict) -> bool:
@@ -176,7 +203,12 @@ def match_transaction_automation(automation: dict, draft: dict) -> bool:
             return False
         if maximum is not None and amount > float(maximum):
             return False
-    return True
+    return conditions_match(
+        when.get("conditions"),
+        draft,
+        amount_on=draft_amount_on(draft),
+        match=when.get("match") or "all",
+    )
 
 
 def _is_routing_transform(automation: dict) -> bool:
@@ -375,38 +407,49 @@ def record_committed_matches(
         logger.exception("automation match usage update failed after commit")
 
 
-def rewrite_category_refs(old_id: str, new_id: str | None) -> int:
-    """Rewrite category actions and regenerate their instructions in the same row write."""
+def rewrite_rule_category_refs(old_id: str, new_id: str | None) -> list[str]:
+    """Point every Rule's category (its ``set.category`` and each split line) from ``old_id`` to
+    ``new_id``. With no replacement the Rule is PAUSED, never deleted (its conditions are the
+    owner's work): ``set.category`` is cleared, a split line keeps the dead id until edited.
+    Returns the ids of the Rules changed."""
     store = AutomationStore()
-    changed = 0
+    changed: list[str] = []
     for automation in ordered_transforms(
         row for row in store.all() if _is_transaction_transform(row)
     ):
         execution = dict(automation.get("execution") or {})
         action = dict(execution.get("set") or {})
-        if action.get("category") != old_id:
+        splits = [dict(line) for line in execution.get("splits") or []]
+        in_set = action.get("category") == old_id
+        in_splits = any(line.get("category") == old_id for line in splits)
+        if not (in_set or in_splits):
             continue
-        action["category"] = new_id
-        execution["set"] = action
-        updated = {**automation, "execution": execution}
-        remaining = bool(
-            new_id
-            or action.get("tags")
-            or action.get("note_append")
-            or action.get("memo_append")
-            or action.get("route_to_account")
-        )
-        if not remaining:
-            store.delete(automation["id"])
-        else:
-            patch = {
-                "execution": execution,
-                "instructions": describe_transaction_transform(updated),
-            }
-            if new_id is None:
-                patch["status"] = "paused"
-            store.update_by_id(automation["id"], patch)
-        changed += 1
+        if in_set:
+            action["category"] = new_id
+            execution["set"] = action
+        if in_splits and new_id is not None:
+            # With no replacement the dead id STAYS on its line (the Rule is paused below and the
+            # engine skips a split naming a missing category): a line with no category fails
+            # validation, which would refuse every later save of the Rule — a reorder included.
+            for line in splits:
+                if line.get("category") == old_id:
+                    line["category"] = new_id
+            execution["splits"] = splits
+        patch = {
+            "execution": execution,
+            "instructions": describe_transaction_transform({**automation, "execution": execution}),
+        }
+        if new_id is None:
+            patch["status"] = "paused"
+        store.update_by_id(automation["id"], patch)
+        changed.append(str(automation["id"]))
+    return changed
+
+
+def rewrite_category_refs(old_id: str, new_id: str | None) -> int:
+    """Rewrite category actions and regenerate their instructions in the same row write."""
+    store = AutomationStore()
+    changed = len(rewrite_rule_category_refs(old_id, new_id))
     for automation in store.all():
         provenance = dict(automation.get("provenance") or {})
         migration = dict(provenance.get("lucius_execution_migration") or {})

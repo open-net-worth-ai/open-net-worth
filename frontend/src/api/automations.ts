@@ -180,10 +180,10 @@ export interface AutomationDraft {
   description?: string
   instructions: string
   trigger: AutomationTrigger
-  /** Only `{kind: "lucius"}` validates server-side (see `services/automations/service.py`);
-   *  omitting it defaults to the same value, so most templates never set this explicitly.
-   *  Typed as loosely as `Automation.execution` so a full `Automation` can still seed a
-   *  draft (duplicate/edit) without narrowing. */
+  /** `{kind: "lucius"}` (the default when omitted, so most templates never set it) or, with the
+   *  `transaction_rules` flag on, a Rule's `{kind: "transaction_transform", ...}` (see
+   *  `RuleExecution`). Typed as loosely as `Automation.execution` so a full `Automation` can
+   *  still seed a draft (duplicate/edit) without narrowing. */
   execution?: Record<string, unknown>
   permission_mode?: 'manual' | 'auto' | 'skip'
   always_allowed?: AutomationPermission[]
@@ -297,4 +297,166 @@ export async function getAutomationRun(
     ),
   )
   return 'run' in result ? result.run : result
+}
+
+// ── Rules (flag `transaction_rules`) ────────────────────────────────────────────────────────
+// A Rule is one Automation row — `execution.kind === 'transaction_transform'` — created, edited
+// and deleted through the routes above. docs/design/transaction-rules.md is the contract.
+
+export type RuleSplitAmount =
+  | { type: 'fixed'; value: number }
+  | { type: 'percent'; value: number }
+  | { type: 'remainder' }
+
+export interface RuleSplitLine {
+  amount: RuleSplitAmount
+  category: string
+  tags?: string[]
+  memo?: string
+}
+
+export interface RuleSet {
+  category?: string
+  tags?: string[]
+  note_append?: string
+  memo_append?: string
+  payee?: string
+  route_to_account?: string
+}
+
+export interface RuleExecution {
+  kind: 'transaction_transform'
+  position: number
+  stop: boolean
+  override_existing: boolean
+  set: RuleSet
+  splits?: RuleSplitLine[]
+}
+
+export interface RuleTrigger {
+  kind: 'event'
+  event: 'txn'
+  when: Record<string, unknown>
+}
+
+/** What preview and apply take: a Rule as it would be saved, saved or not. */
+export interface RuleBody {
+  trigger: RuleTrigger
+  execution: RuleExecution
+}
+
+export interface RuleAfter {
+  category: string | null
+  tags: string[] | null
+  description: string
+  memo: string
+  payee_id: string | null
+  /** null when the row is not split. */
+  splits: unknown[] | null
+}
+
+export interface RuleMatch {
+  transaction_id: string
+  date: string
+  description: string
+  memo: string
+  payee_id: string | null
+  payee_name: string | null
+  account_id: string | null
+  account_name: string | null
+  amount: number
+  currency: string
+  kind: string
+  category: string | null
+  tags: string[]
+  /** null when the row is not split. */
+  splits: unknown[] | null
+  /** null = the Rule would change nothing on this row. */
+  after: RuleAfter | null
+  skipped_reason: string | null
+}
+
+export interface RulePreviewResponse {
+  total: number
+  matches: RuleMatch[]
+}
+
+export interface RuleApplyResult {
+  applied: number
+  unchanged: number
+  skipped: Array<{ transaction_id: string; reason: string }>
+  checkpoint_id: string | null
+}
+
+export function isRuleAutomation(automation: Pick<Automation, 'execution'>): boolean {
+  return automation.execution?.kind === 'transaction_transform'
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  return asJson<T>(
+    await authFetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  )
+}
+
+/** `ids` is EVERY Rule id in its new order; resolves to the Rules in that order. */
+export async function reorderRules(ids: string[]): Promise<Automation[]> {
+  const result = await postJson<{ automations: Automation[] }>('/api/automations/rules/reorder', {
+    ids,
+  })
+  return result.automations
+}
+
+export function previewRule(rule: RuleBody, limit = 50): Promise<RulePreviewResponse> {
+  return postJson<RulePreviewResponse>('/api/automations/rules/preview', { rule, limit })
+}
+
+export function applyRule(rule: RuleBody, transactionIds: string[]): Promise<RuleApplyResult> {
+  return postJson<RuleApplyResult>('/api/automations/rules/apply', {
+    rule,
+    transaction_ids: transactionIds,
+  })
+}
+
+/** Undoes one apply or run: restores the book's data to the checkpoint it returned. */
+export async function undoRuleApply(checkpointId: string): Promise<void> {
+  await postJson<unknown>(`/api/checkpoints/${encodeURIComponent(checkpointId)}/restore`, {
+    mode: 'data',
+  })
+}
+
+/** Re-runs every active Rule, in order, on the given ledger rows. */
+export function runRules(transactionIds: string[]): Promise<RuleApplyResult> {
+  return postJson<RuleApplyResult>('/api/automations/rules/run', {
+    transaction_ids: transactionIds,
+  })
+}
+
+/** A Rule as created or edited: `instructions` is the sentence the server shows and Lucius reads. */
+export interface RuleDraft extends RuleBody {
+  name: string
+  instructions: string
+  status?: 'active' | 'paused'
+}
+
+export async function createRule(draft: RuleDraft): Promise<Automation> {
+  const result = await postJson<Automation | { automation: Automation }>('/api/automations', draft)
+  return 'automation' in result ? result.automation : result
+}
+
+export async function updateRule(
+  automationId: string,
+  patch: Partial<RuleDraft>,
+): Promise<Automation> {
+  const result = await asJson<Automation | { automation: Automation }>(
+    await authFetch(`/api/automations/${encodeURIComponent(automationId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+  )
+  return 'automation' in result ? result.automation : result
 }

@@ -134,6 +134,8 @@ export interface TxnDetailProps {
   /** Hide ⇄ unhide from the register (display-only). Omitted (the import review's drafts),
    *  the drawer offers no Hide button. */
   onToggleHidden?: (txn: Txn, hidden: boolean) => void
+  /** Open the Rule editor prefilled from this row. Omitted with the `transaction_rules` flag off. */
+  onCreateRule?: (txn: Txn) => void
   onManagePayees: () => void
   onCreateCategory: (
     prefill: string,
@@ -908,6 +910,7 @@ interface ViewBodyProps {
   onMarkReviewed: (txn: Txn) => void
   onToggleCleared?: (txn: Txn, cleared: boolean) => void
   onToggleHidden?: (txn: Txn, hidden: boolean) => void
+  onCreateRule?: (txn: Txn) => void
   /** The row itself has not arrived yet — see TxnDetail's `loading`. */
   pending?: boolean
   actionError?: string | null
@@ -933,6 +936,7 @@ function ViewBody({
   onMarkReviewed,
   onToggleCleared,
   onToggleHidden,
+  onCreateRule,
   pending = false,
   actionError,
 }: ViewBodyProps) {
@@ -1666,6 +1670,16 @@ function ViewBody({
         <button className="acct-detail-edit" onClick={onEdit}>
           Edit transaction
         </button>
+        {onCreateRule && (
+          <button
+            className="acct-detail-hide"
+            disabled={pending}
+            onClick={() => onCreateRule(txn)}
+            title="Make a rule that labels transactions like this one"
+          >
+            Create rule…
+          </button>
+        )}
         {onToggleHidden && (
           <button
             className="acct-detail-hide"
@@ -1786,6 +1800,7 @@ export default function TxnDetail({
   onMarkReviewed,
   onToggleCleared,
   onToggleHidden,
+  onCreateRule,
   onManagePayees,
   onCreateCategory,
   onLoadActivity,
@@ -2164,6 +2179,7 @@ export default function TxnDetail({
                     onMarkReviewed={onMarkReviewed}
                     onToggleCleared={onToggleCleared}
                     onToggleHidden={onToggleHidden}
+                    onCreateRule={onCreateRule}
                     actionError={actionError}
                   />
                 )}

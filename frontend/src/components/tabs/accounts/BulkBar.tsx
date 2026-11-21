@@ -66,6 +66,8 @@ export interface BulkBarProps {
   makeTransferWhy?: string
   onExport: () => void
   onDelete: () => void
+  /** Re-run every active Rule on the selection (flag `transaction_rules`); omitted, no item. */
+  onRunRules?: () => void
 }
 
 export function BulkBar({
@@ -91,6 +93,7 @@ export function BulkBar({
   makeTransferWhy,
   onExport,
   onDelete,
+  onRunRules,
 }: BulkBarProps) {
   const [menu, setMenu] = useState<string | null>(null)
   const [moveOpen, setMoveOpen] = useState(false)
@@ -244,6 +247,12 @@ export function BulkBar({
         >
           <ArrowLeftRight className="acct-bm-ic" size={14} aria-hidden="true" />
           Make Transfer
+        </button>
+      )}
+      {onRunRules && (
+        <button className="acct-bm-item" onClick={() => act(onRunRules)}>
+          <Tags className="acct-bm-ic" size={14} aria-hidden="true" />
+          Run rules
         </button>
       )}
       <button className="acct-bm-item" onClick={() => act(onExport)}>

@@ -10,6 +10,7 @@ the JsonStore-era versions did over ``self._load_items()``.
 
 from __future__ import annotations
 
+import copy
 from datetime import datetime, timezone, tzinfo
 
 from backend.core.ids import new_id
@@ -49,9 +50,9 @@ def _copy_dicts(value: object) -> list[dict]:
 
 
 def _normalize_execution(value: object) -> dict:
-    execution = {"kind": "lucius"} if value is None else _copy_dict(value)
-    if execution != {"kind": "lucius"}:
-        raise ValueError("Automation execution must run Lucius")
+    execution = {"kind": "lucius"} if value is None else copy.deepcopy(_copy_dict(value))
+    if execution != {"kind": "lucius"} and execution.get("kind") != "transaction_transform":
+        raise ValueError("Automation execution must run Lucius or be a transaction Rule")
     return execution
 
 

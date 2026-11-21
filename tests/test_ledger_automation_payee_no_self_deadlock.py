@@ -124,6 +124,9 @@ def test_bulk_create_transactions_matches_automation_and_resolves_payee_without_
         assert PayeeStore().find_by_id(pid) is not None
 
 
+# The flag-off (legacy) path re-runs transforms on an edit; with ``transaction_rules`` on an edit
+# never re-runs Rules (docs/design/transaction-rules.md) — covered in test_transaction_rules.py.
+@pytest.mark.flags(transaction_rules=False)
 def test_update_transaction_rebuild_matches_automation_without_deadlock(env):
     """update_transaction's category-changing path re-runs create_transaction internally
     (the rebuild) and then records automation usage in its OWN follow-up step — the third,
