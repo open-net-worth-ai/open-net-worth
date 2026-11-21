@@ -208,6 +208,10 @@ then **Needs your review**, **Worth checking** (only when there's something to s
 that went fine, since each re-check of the review would add one; a failed preview stays. It reads the
 same as YNAB's page. **Actual connection…** in the menu opens the connector's form.
 
+**Before the first sync that writes to Actual,** keep a copy of your budget there: in Actual,
+**Settings → Export data**. The import's backup covers this book, not your Actual budget, and a
+write to Actual can't be taken back from here.
+
 **Preview** beside **Sync now** is a dry run: it reads Actual as a sync does and decides every
 transaction and month's Assigned by the same rules, then shows what would change and where (new,
 changed or deleted, here or in Actual, what would keep both sides' changes and what would wait for

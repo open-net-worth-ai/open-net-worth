@@ -397,6 +397,13 @@ def _plain_error(exc: Exception) -> Stopped:
         text = _GONE
     elif has(ax.ActualDecryptionError, ax.ActualEncryptionError):
         text = "This budget is encrypted, and its encryption password is missing or wrong."
+    elif any(
+        isinstance(e, ssl.SSLCertVerificationError) and "hostname" in str(e).lower() for e in chain
+    ):
+        text = (
+            "The Actual server's certificate is for another name than the address you saved. Use "
+            "the address the certificate names, or a certificate made for this address."
+        )
     elif has(ssl.SSLError):
         text = (
             "The Actual server's certificate could not be verified. If it is your own (self-signed, "

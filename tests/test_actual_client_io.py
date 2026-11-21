@@ -1107,3 +1107,17 @@ def test_a_good_read_with_the_old_password_clears_nothing_of_the_new_one(store, 
 
 def test_a_budget_gone_doesnt_ask_to_pick_it_again():
     assert "Pick it again" not in client._GONE and "Choose another" in client._GONE
+
+
+def test_a_certificate_for_another_name_says_so(store, work, fake):
+    import ssl as _ssl
+
+    error = _ssl.SSLCertVerificationError(
+        1, "certificate verify failed: Hostname mismatch, certificate is not valid for 'x'"
+    )
+    fake.build_error = httpx.ConnectError("tls", request=httpx.Request("GET", URL))
+    fake.build_error.__cause__ = error
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    never_leaks(err.value)
+    assert "for another name than the address" in err.value.message
