@@ -6,13 +6,18 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, cleanup, screen, fireEvent, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { ImportModal } from './ImportModal'
 import type { Account } from './types'
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn().mockResolvedValue({ ok: false }) }))
-vi.mock('../../../hooks/useModels', () => ({
+vi.mock('../../../hooks/useModels', async (orig) => ({
+  ...(await orig<typeof import('../../../hooks/useModels')>()),
   useModels: () => ({
-    models: [{ id: 'picked', provider_key: 'anthropic' }],
+    models: [
+      { id: 'pinned', provider_key: 'anthropic', effort_levels: ['low', 'medium', 'high'] },
+      { id: 'picked', provider_key: 'anthropic', effort_levels: ['low', 'medium', 'high'] },
+    ],
     defaultModel: 'base',
     taskModels: { statement_import: 'anthropic:pinned' },
     loaded: true,
@@ -20,16 +25,27 @@ vi.mock('../../../hooks/useModels', () => ({
 }))
 // The real picker is a searchable popover; the modal's contract is only value + onChange.
 vi.mock('../../ui/ModelPicker', () => ({
-  ModelPicker: (p: { value: string; defaultModelId?: string; onChange: (v: string) => void }) => (
-    <button
-      type="button"
-      data-testid="read-model"
-      data-default={p.defaultModelId}
-      onClick={() => p.onChange('anthropic:picked')}
-    >
-      {p.value || 'saved'}
-    </button>
-  ),
+  ModelPicker: (p: {
+    value: string
+    defaultModelId?: string
+    onChange: (v: string) => void
+    panes?: { content: ReactNode | ((close: () => void) => ReactNode) }[]
+  }) => {
+    const pane = p.panes?.[0]?.content
+    return (
+      <div>
+        <button
+          type="button"
+          data-testid="read-model"
+          data-default={p.defaultModelId}
+          onClick={() => p.onChange('anthropic:picked')}
+        >
+          {p.value || 'saved'}
+        </button>
+        {typeof pane === 'function' ? pane(() => {}) : pane}
+      </div>
+    )
+  },
 }))
 
 afterEach(() => cleanup())
@@ -42,7 +58,7 @@ const acct = {
   currency: 'SGD',
 } as unknown as Account
 
-async function readWith(pick: boolean) {
+async function readWith(pick: boolean, effort?: string) {
   const onPreview = vi.fn().mockReturnValue(new Promise(() => {}))
   render(
     <ImportModal
@@ -62,6 +78,7 @@ async function readWith(pick: boolean) {
   // Names the saved pin as the default, not the instance default.
   expect(picker.getAttribute('data-default')).toBe('anthropic:pinned')
   if (pick) fireEvent.click(picker)
+  if (effort) fireEvent.click(screen.getByRole('radio', { name: effort }))
   fireEvent.click(await screen.findByText(/Read the statement/i))
   await waitFor(() => expect(onPreview).toHaveBeenCalled())
   return onPreview.mock.calls[0]
@@ -71,10 +88,17 @@ describe('ImportModal — the model that reads this statement', () => {
   it('sends no model when untouched (the saved pin reads it)', async () => {
     const args = await readWith(false)
     expect(args[10]).toBeUndefined()
+    expect(args[11]).toBeUndefined() // Auto: each step keeps its own effort
   })
 
   it('sends the picked model with the read', async () => {
     const args = await readWith(true)
     expect(args[10]).toBe('anthropic:picked')
+  })
+
+  it('sends the picked effort with the read', async () => {
+    const args = await readWith(true, 'High')
+    expect(args[10]).toBe('anthropic:picked')
+    expect(args[11]).toBe('high')
   })
 })

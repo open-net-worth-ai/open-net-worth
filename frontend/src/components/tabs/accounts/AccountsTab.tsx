@@ -1755,6 +1755,7 @@ export function AccountsTab({
     accountIds?: string[],
     progressToken?: string,
     model?: string,
+    effort?: string,
   ) => {
     const fd = new FormData()
     if (file) {
@@ -1779,6 +1780,7 @@ export function AccountsTab({
     if (progressToken) fd.append('progress_token', progressToken)
     // A model picked in the popup for this read only — the saved pin is untouched.
     if (model) fd.append('model', model)
+    if (effort) fd.append('effort', effort)
     const res = await authFetch('/api/statements/preview', { method: 'POST', body: fd })
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
@@ -1830,6 +1832,7 @@ export function AccountsTab({
     if (opts.forceReparse) fd.append('force_reparse', 'true')
     if (opts.background) fd.append('mode', 'async')
     if (opts.model) fd.append('model', opts.model)
+    if (opts.effort) fd.append('effort', opts.effort)
     const res = await authFetch(`/api/statements/${statementId}/preview`, {
       method: 'POST',
       body: fd,

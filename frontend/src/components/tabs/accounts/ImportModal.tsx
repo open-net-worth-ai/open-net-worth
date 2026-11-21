@@ -16,9 +16,14 @@ import { AddCategoryField, AddPayeeField, type PayeeOption } from './pickers'
 import { catOptionsFor } from './categories'
 import TxnDetail from './TxnDetail'
 import { useIsMobile } from '../../../hooks/useIsMobile'
-import { useModels } from '../../../hooks/useModels'
+import {
+  useModels,
+  effortChoicesFor,
+  effortChoiceLabel,
+  type EffortChoice,
+} from '../../../hooks/useModels'
 import { ModelPicker } from '../../ui/ModelPicker'
-import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight } from '../../../ui/icons'
+import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight, Check } from '../../../ui/icons'
 import { fDate, fMonthDay } from '../../../utils/format'
 import { fetchVaultItem, type VaultItem } from '../../../api/vault'
 import { PreviewLoading } from '../../vault/PreviewLoading'
@@ -791,6 +796,40 @@ function OpeningReviewLine() {
   return <>Still opening — {seconds}s. A long statement can take up to 30 seconds.</>
 }
 
+/** The effort tiers for one read, as the chat picker's own rows (`.mp-list` / `.mp-opt`), led
+ *  by "Auto" — each import step keeps its own effort (extraction off, the Lucius pass high). */
+function ReadEffortChoices({
+  value,
+  choices,
+  onChange,
+}: {
+  value: EffortChoice | ''
+  choices: EffortChoice[]
+  onChange: (next: EffortChoice | '') => void
+}) {
+  const rows: (EffortChoice | '')[] = ['', ...choices]
+  return (
+    <div className="mp-list" role="radiogroup" aria-label="Reasoning effort">
+      {rows.map((lvl) => (
+        <button
+          key={lvl || 'auto'}
+          type="button"
+          role="radio"
+          aria-checked={lvl === value}
+          className={'mp-opt' + (lvl === value ? ' is-on' : '')}
+          onClick={() => onChange(lvl)}
+        >
+          <span className="mp-opt-name">{lvl ? effortChoiceLabel(lvl) : 'Auto'}</span>
+          {!lvl && <em className="mp-opt-note">each step picks its own</em>}
+          <span className="mp-opt-tick" aria-hidden="true">
+            <Check size={14} />
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export interface ReopenOptions {
   instructions?: string
   rememberInstructions?: boolean
@@ -798,6 +837,8 @@ export interface ReopenOptions {
   background?: boolean
   /** A model picked in the popup for this read ("provider:model"); omitted = the saved pin. */
   model?: string
+  /** An effort picked in the popup for this read; omitted = each stage's own default. */
+  effort?: string
 }
 
 export interface ImportModalProps {
@@ -865,6 +906,9 @@ export interface ImportModalProps {
     /** A model picked in the popup for this read ("provider:model"); omitted = the saved
      *  Statement import pin. A cached parse made by another model is re-read. */
     model?: string,
+    /** An effort picked in the popup for this read ('off' = reasoning off); omitted = each
+     *  stage's own default. */
+    effort?: string,
   ) => Promise<ImportPreviewResult>
   /** Prefill probe (`/api/statements/source-peek`): fingerprint the picked file server-side
    *  (zero AI, no writes) and return what this source taught us — its saved instructions
@@ -1283,8 +1327,21 @@ export function ImportModal({
   // The model that reads THIS statement. '' = the Statement import pin from Settings → Models
   // (or the instance default); a pick here applies to this import only and never changes it.
   const [readModel, setReadModel] = useState('')
+  // '' = each stage's own effort (extraction off, the Lucius pass high) — "Auto" in the chip.
+  const [readEffort, setReadEffort] = useState<EffortChoice | ''>('')
   const modelInfo = useModels(true)
   const savedImportModel = modelInfo.taskModels.statement_import || ''
+  const readEffortChoices = useMemo(
+    () =>
+      effortChoicesFor(
+        readModel || savedImportModel || modelInfo.defaultModel,
+        modelInfo.models,
+        modelInfo.defaultModel,
+      ),
+    [readModel, savedImportModel, modelInfo.models, modelInfo.defaultModel],
+  )
+  // A tier the newly picked model doesn't take falls back to Auto rather than being sent.
+  const effectiveEffort = readEffort && readEffortChoices.includes(readEffort) ? readEffort : ''
   const [instrSaving, setInstrSaving] = useState(false)
   const [instrErr, setInstrErr] = useState('')
   // The handoff's "teach" affordance: the FIRST time the user overrides one of Lucius's calls,
@@ -1386,6 +1443,7 @@ export function ImportModal({
     setRereading(false)
     reopenArgs.current = {}
     setReadModel('')
+    setReadEffort('')
     setStep('source')
     setRoute('lucius')
     setFile(null)
@@ -1759,6 +1817,7 @@ export function ImportModal({
               rememberInstructions: rememberInstr,
               forceReparse,
               model: keepRowDecisions ? undefined : readModel || undefined,
+              effort: keepRowDecisions ? undefined : effectiveEffort || undefined,
             })
           : await onPreview(
               file,
@@ -1774,6 +1833,7 @@ export function ImportModal({
               // Never on the quiet single-row re-preview: a model change there would mean a
               // fresh (billed) read the user didn't ask for.
               keepRowDecisions ? undefined : readModel || undefined,
+              keepRowDecisions ? undefined : effectiveEffort || undefined,
             )
       if (res.attached && res.statementId) {
         // Code review round B, M4: this exact file is already `parsing` on the server's own
@@ -1954,6 +2014,7 @@ export function ImportModal({
         forceReparse: true,
         background: true,
         model: readModel || undefined,
+        effort: effectiveEffort || undefined,
       })
     } catch {
       setRereading(false)
@@ -3632,7 +3693,7 @@ export function ImportModal({
             The centred dropzone with a one-line format list, and the URL / Google-Sheet
             source as its own quiet control BELOW it — not a peer tab. */}
           {step === 'source' && (
-            <div className="imp3-body">
+            <div className="imp3-body imp3-body-choose">
               <button
                 type="button"
                 className={'imp3-drop' + (dragOver ? ' over' : '')}
@@ -3741,7 +3802,7 @@ export function ImportModal({
 
           {/* ── Choose, picked (handoff DropStep, `picked`) ─────────────────────────── */}
           {step === 'choose' && (
-            <div className="imp3-body">
+            <div className="imp3-body imp3-body-choose">
               {reopenChoose ? (
                 <div className="imp3-file">
                   <span className="imp3-file-badge">
@@ -3922,35 +3983,58 @@ export function ImportModal({
                           these.
                         </div>
                       )}
-                    <label
-                      className="imp3-remember"
-                      title="Checked: saved on this source's format profile and auto-applied to every future import of it. Unchecked: applies to this import only."
-                    >
-                      <input
-                        type="checkbox"
-                        checked={rememberInstr}
-                        onChange={(e) => setRememberInstr(e.target.checked)}
-                      />{' '}
-                      Remember for this source
-                    </label>
-                  </div>
-                </div>
-                <div className="imp3-cfg-row">
-                  <span className="imp3-cfg-l">
-                    Model
-                    <em>reads this statement — this import only</em>
-                  </span>
-                  <div className="imp3-cfg-model">
-                    <ModelPicker
-                      label="Model"
-                      size="field"
-                      models={modelInfo.models}
-                      value={readModel}
-                      defaultLabel={savedImportModel ? 'Statement import model' : 'Default'}
-                      defaultModelId={savedImportModel || modelInfo.defaultModel}
-                      annotate={(m) => (m.vision === false ? '— no vision' : undefined)}
-                      onChange={setReadModel}
-                    />
+                    <div className="imp3-note-foot">
+                      <label
+                        className="imp3-remember"
+                        title="Checked: saved on this source's format profile and auto-applied to every future import of it. Unchecked: applies to this import only."
+                      >
+                        <input
+                          type="checkbox"
+                          checked={rememberInstr}
+                          onChange={(e) => setRememberInstr(e.target.checked)}
+                        />{' '}
+                        Remember for this source
+                      </label>
+                      {/* The chat composer's own model + effort chip: which model reads THIS
+                        statement and how hard it thinks. This import only — the Statement
+                        import model in Settings is untouched. */}
+                      <ModelPicker
+                        className="imp3-read-model"
+                        label="Model for this statement"
+                        size="sm"
+                        title="The model that reads this statement — this import only"
+                        models={modelInfo.models}
+                        value={readModel}
+                        defaultLabel="Default"
+                        defaultModelId={savedImportModel || modelInfo.defaultModel}
+                        annotate={(m) => (m.vision === false ? '— no vision' : undefined)}
+                        onChange={setReadModel}
+                        trailing={effectiveEffort ? effortChoiceLabel(effectiveEffort) : null}
+                        panes={
+                          readEffortChoices.length
+                            ? [
+                                {
+                                  key: 'effort',
+                                  label: 'Effort',
+                                  value: effectiveEffort
+                                    ? effortChoiceLabel(effectiveEffort)
+                                    : 'Auto',
+                                  content: (close) => (
+                                    <ReadEffortChoices
+                                      value={effectiveEffort}
+                                      choices={readEffortChoices}
+                                      onChange={(lvl) => {
+                                        setReadEffort(lvl)
+                                        close()
+                                      }}
+                                    />
+                                  ),
+                                },
+                              ]
+                            : undefined
+                        }
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

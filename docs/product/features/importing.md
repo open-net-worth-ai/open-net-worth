@@ -36,11 +36,13 @@ PDF also needs a model that can read images. OFX, QIF, MT940 and CAMT files are 
 5. Optional: under **Tell Lucius**, write anything that helps him read this bank's statements —
    *"Dates are DD/MM"*, *"Rows mentioning MOMO.0352 are transfers to my wallet, not expenses."*
    Tick **Remember for this source** to apply the same notes every time you import from it.
-   Optional: under **Model**, pick which model reads this statement. Left alone it uses your
-   **Statement import** model from **Settings → AI → Task models** (or your default model). A
-   pick applies to this import only and doesn't change that setting. A statement already read
-   by another model is read again with the one you picked. For a scanned PDF, a text-only pick
-   falls back to a model that can read images.
+   Optional: the model chip on the right of that line picks which model reads this statement,
+   and its **Effort** list how hard it thinks. Left alone it uses your **Statement import**
+   model from **Settings → AI → Task models** (or your default model) at **Auto** effort — each
+   step keeps its own (reading rows with reasoning off, Lucius's review pass at high). A pick
+   applies to this import only and doesn't change that setting. A statement already read with
+   a different model or effort is read again with your pick. For a scanned PDF, a text-only
+   pick falls back to a model that can read images.
 6. Click **Read the statement**. Lucius reads the file, finds the transaction table, checks it
    against the statement's own balances, applies your notes and compares every row with your
    ledger. A long PDF can take a minute — see [Don't wait for a long read](#dont-wait-for-a-long-read).

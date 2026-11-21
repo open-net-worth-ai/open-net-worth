@@ -33,6 +33,7 @@ from fastapi.responses import JSONResponse
 from backend.api.import_api import (
     _async_accepted,
     _attached_to_running_job,
+    _clean_effort,
     _clean_instructions,
     _clean_mode,
     _clean_model,
@@ -113,6 +114,7 @@ async def reopen_statement_preview(
     password: Optional[str] = Form(None),
     mode: str = Form("sync"),
     model: Optional[str] = Form(None),
+    effort: Optional[str] = Form(None),
 ) -> dict | JSONResponse:
     """Reopen a statement BY ID — no re-upload. Reads the ORIGINAL bytes back off this
     record's own file (a server-owned path, never client-supplied) and runs the identical
@@ -123,6 +125,7 @@ async def reopen_statement_preview(
     ``failed`` row's "Re-run" restarts the parse in the background."""
     _require_csrf(request)
     chosen_model = _clean_model(model)
+    chosen_effort = _clean_effort(effort)
     from backend.db.statement_store import StatementStore
 
     store = StatementStore()
@@ -162,6 +165,7 @@ async def reopen_statement_preview(
             password=password,
             source_attachment_id=source_attachment_id,
             model=chosen_model,
+            effort=chosen_effort,
         )
     # M4: this exact record already has an async job outstanding — attach instead of running
     # a second, sync, concurrent decision_preview against the same statement.
@@ -183,6 +187,7 @@ async def reopen_statement_preview(
             password=password,
             source_attachment_id=source_attachment_id,
             model=chosen_model,
+            effort=chosen_effort,
         )
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), str(exc))

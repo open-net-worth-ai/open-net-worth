@@ -1469,11 +1469,14 @@ def decision_preview(
             "imported_at": record.get("parsed_at") or record.get("created_at"),
             "batch_ids": live_batches,
         }
-    # A model picked in the import popup for this read: a cached parse made by another model
-    # is not reused — the choice would otherwise be silently ignored. No choice = any cache.
-    from backend.services.statements.import_model import chosen_model, import_model
+    # A model or effort picked in the import popup for this read: a cached parse made with
+    # another one is not reused — the choice would otherwise be silently ignored. No choice =
+    # any cache.
+    from backend.services.statements.import_model import chosen_effort, chosen_model, import_model
 
-    model_changed = bool(chosen_model()) and record.get("parse_model") != chosen_model()
+    model_changed = (bool(chosen_model()) and record.get("parse_model") != chosen_model()) or (
+        bool(chosen_effort()) and record.get("parse_effort") != chosen_effort()
+    )
     # The review this file already finished is returned as it was left; only an explicit ask
     # (a re-read, a mapping, another account, changed instructions, another model) builds a
     # new one.
@@ -1845,6 +1848,8 @@ def decision_preview(
         # different model picked in the popup re-parses instead of reusing them. A reuse keeps
         # the stamp of the read that actually made the rows.
         "parse_model": import_model() if llm_cost["fresh"] else record.get("parse_model", ""),
+        # The popup's effort for that read ("" = each stage's own default).
+        "parse_effort": chosen_effort() if llm_cost["fresh"] else record.get("parse_effort", ""),
         # RFC §D5 preview→commit contract. THREE fields, each doing a distinct job:
         #   match_policy        — the RESOLVED policy, for display and for the audit trail.
         #   match_policy_source — the SOURCE layer's extracted fields, so decision_commit can

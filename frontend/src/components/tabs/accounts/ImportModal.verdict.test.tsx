@@ -8,7 +8,8 @@
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
 
-vi.mock('../../../hooks/useModels', () => ({
+vi.mock('../../../hooks/useModels', async (orig) => ({
+  ...(await orig<typeof import('../../../hooks/useModels')>()),
   useModels: () => ({ models: [], defaultModel: '', taskModels: {}, loaded: true }),
 }))
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'

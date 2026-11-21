@@ -170,6 +170,11 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   flex-direction: column;
   gap: 14px;
 }
+/* The Choose step breathes more than the review steps: file, accounts, notes and the read
+   button are separate decisions, and at 14px they ran together (owner, 2026-11-21). */
+.imp3-body-choose {
+  gap: 22px;
+}
 
 /* ── drop (the Choose step) ───────────────────────────────────────────────────
    Ported verbatim from import3.css `── drop ──`. */
@@ -472,13 +477,13 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 .imp3-cfg {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 22px;
 }
 .imp3-cfg-row {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 7px;
+  gap: 10px;
 }
 .imp3-cfg-l {
   font-size: 11px;
@@ -491,10 +496,6 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   align-items: baseline;
   gap: 7px;
 }
-/* The one-read model picker under "Tell Lucius" — a field-width trigger, not full bleed. */
-.imp3-cfg-model {
-  max-width: 360px;
-}
 .imp3-cfg-l em {
   font-style: normal;
   font-weight: 500;
@@ -506,7 +507,19 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 10px;
+}
+/* Under the notes: "Remember for this source" left, the read's model + effort chip right —
+   the chat composer's own chip, so it reads as a quiet setting, not another form field. */
+.imp3-note-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.imp3-read-model {
+  max-width: 60%;
 }
 .imp3-cfg-note textarea {
   width: 100%;
@@ -546,7 +559,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 .imp3-drop-cost {
   font-size: 11.5px;

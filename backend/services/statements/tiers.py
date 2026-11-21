@@ -46,6 +46,13 @@ def _sanitize_full(s: str) -> str:
     return sanitize_untrusted(s, max_len=max(len(unicodedata.normalize("NFKC", s)), 1))
 
 
+def _import_effort(stage_default: str) -> str:
+    """The popup's one-read effort, else this stage's own default."""
+    from backend.services.statements.import_model import import_effort
+
+    return import_effort(stage_default)
+
+
 def _task_model(task: str) -> str:
     """The model for the import pipeline: the popup's one-read choice, else the saved pin
     (compound "provider:model"), else "" for the instance default."""
@@ -489,7 +496,7 @@ async def suggest_category_hints(
             max_tokens=2048,
             source="statement_parse",
             model=_import_model("statement_parse"),
-            effort="none",  # category-hint mapping — mechanical, no reasoning
+            effort=_import_effort("none"),  # category-hint mapping — mechanical, no reasoning
         )
         parsed = parse_json(reply) or find_json_array(reply) or []
         out: list[str | None] = [None] * len(descriptions)
@@ -660,7 +667,7 @@ async def detect_schema(grid: list[list[str]]) -> dict | None:
             max_tokens=4096,
             source="csv_schema",
             model=_import_model("csv_schema"),
-            effort="none",  # column-schema detection — mechanical, no reasoning
+            effort=_import_effort("none"),  # column-schema detection — mechanical, no reasoning
         )
     except Exception as exc:
         raise StatementParseError(
@@ -876,7 +883,7 @@ async def extract_meta_from_text(text: str) -> StatementMeta:
                 max_tokens=1024,
                 source="statement_metadata",
                 model=_import_model("statement_metadata"),
-                effort="none",  # metadata extraction — mechanical, no reasoning
+                effort=_import_effort("none"),  # metadata extraction — mechanical, no reasoning
             )
             return _coerce_meta(_parse_reply_obj(reply))
         except Exception as exc:  # meta is enrichment — its failure never kills the parse
@@ -945,7 +952,9 @@ async def _row_complete(
             source=source,
             model=model,
             images=images,
-            effort="none",  # row/vision extraction — mechanical transcription, no reasoning
+            effort=_import_effort(
+                "none"
+            ),  # row/vision extraction — mechanical transcription, no reasoning
         )
     except Exception:  # noqa: BLE001 — one bounded retry; a repeat failure raises to the caller
         return await complete(
@@ -955,7 +964,7 @@ async def _row_complete(
             source=source,
             model=model,
             images=images,
-            effort="none",
+            effort=_import_effort("none"),
         )
 
 

@@ -90,3 +90,36 @@ def test_cached_parse_by_another_model_is_reread_same_model_is_free(monkeypatch)
 def test_unusable_model_ref_is_refused(ref):
     with pytest.raises(ValidationError):
         import_model.validate_model_ref(ref)
+
+
+def test_chosen_effort_replaces_every_stage_default_and_busts_the_cache(monkeypatch):
+    calls: list = []
+
+    async def _complete(prompt, **kwargs):
+        calls.append((kwargs.get("source"), kwargs.get("effort"), prompt))
+        if kwargs.get("source") == "statement_metadata":
+            return json.dumps({"currency": "SGD"})
+        return json.dumps(_ROWS)
+
+    monkeypatch.setattr(llm_seam, "_complete", _complete)
+    content = _make_pdf(_TEMPLATE + "COFFEE PLACE 001  12.50")
+    res = svc.decision_preview(content, "pdf", "acc", filename="july.pdf")
+    rows = [e for src, e, p in calls if src == "statement_parse" and "Extract every" in p]
+    assert rows == ["none"]  # extraction's own default: reasoning off
+
+    calls.clear()
+    drop_stored_review(res["statement_id"])
+    with import_model.use_model(None, "high"):
+        svc.decision_preview(content, "pdf", "acc", filename="july.pdf")
+    rows = [e for src, e, p in calls if src == "statement_parse" and "Extract every" in p]
+    assert rows == ["high"]  # a new effort re-reads, and every call of that read uses it
+    assert {e for _, e, _ in calls} == {"high"}
+    record = svc._statement_store().find_by_id(res["statement_id"])
+    assert record["parse_effort"] == "high"
+
+
+def test_effort_vocabulary():
+    assert import_model.validate_effort("Off") == "none"
+    assert import_model.validate_effort("xhigh") == "xhigh"
+    with pytest.raises(ValidationError):
+        import_model.validate_effort("turbo")

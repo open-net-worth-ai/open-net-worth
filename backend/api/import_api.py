@@ -198,6 +198,7 @@ def _preview(
     password: str | None = None,
     source_attachment_id: str | None = None,
     model: str | None = None,
+    effort: str | None = None,
 ) -> dict:
     """EVERY format previews through the ONE decision pipeline (statements/decisions.py):
     bands + weak twins + ledger check + fingerprints + a cached Statement record. A manual
@@ -211,12 +212,13 @@ def _preview(
     overwriting the profile in place — the escape hatch for a profile stuck with a wrong or
     incomplete schema. ``password`` unlocks an encrypted xlsx. ``model`` (a "provider:model"
     ref picked in the import popup) reads THIS file with that model instead of the saved
-    Statement import pin; a cached parse made by another model is re-read, not reused."""
+    Statement import pin; ``effort`` likewise replaces each stage's own reasoning effort. A
+    cached parse made with another model or effort is re-read, not reused."""
     try:
         from backend.services.statements import decisions
         from backend.services.statements.import_model import use_model
 
-        with use_model(model):
+        with use_model(model, effort):
             return decisions.decision_preview(
                 content,
                 fmt,
@@ -395,6 +397,7 @@ async def preview_import(
     progress_token: Optional[str] = Form(None),
     mode: str = Form("sync"),
     model: Optional[str] = Form(None),
+    effort: Optional[str] = Form(None),
 ) -> dict | JSONResponse:
     """Dry-run: detect the format, parse + (for CSV) apply the mapping, and report what
     WOULD import. No write. Source is an uploaded ``file`` OR a ``source_url`` (a hosted
@@ -430,6 +433,7 @@ async def preview_import(
     ``password_required:``/``Wrong password`` 422 instead of a raw zipfile error."""
     _require_csrf(request)
     chosen_model = _clean_model(model)
+    chosen_effort = _clean_effort(effort)
     async_mode = _clean_mode(mode) == "async"
     token = None if async_mode else _clean_progress_token(progress_token)
     if source_attachment_id and (source_url or "").strip():
@@ -498,6 +502,7 @@ async def preview_import(
                 password=password,
                 source_attachment_id=source_attachment_id,
                 model=chosen_model,
+                effort=chosen_effort,
             )
         except HTTPException:
             # QueueFull (429): nothing was scheduled. A record `create()` minted FRESH for
@@ -531,6 +536,7 @@ async def preview_import(
                 password=password,
                 source_attachment_id=source_attachment_id,
                 model=chosen_model,
+                effort=chosen_effort,
             )
     except OpenNetWorthError as exc:
         # There is no app-wide handler for our domain errors, so an uncaught one leaves here
@@ -580,6 +586,18 @@ def _clean_model(ref: str | None) -> str | None:
         return None
     try:
         return validate_model_ref(ref or "")
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), str(exc))
+
+
+def _clean_effort(effort: str | None) -> str | None:
+    """An effort picked in the import popup for this read. Blank → None (stage defaults)."""
+    from backend.services.statements.import_model import validate_effort
+
+    if not (effort or "").strip():
+        return None
+    try:
+        return validate_effort(effort or "")
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), str(exc))
 

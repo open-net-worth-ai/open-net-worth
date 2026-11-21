@@ -36,6 +36,7 @@ from backend.core.untrusted import fence_untrusted_block, make_fence_nonce, sani
 from backend.services import ledger as ledger_service
 from backend.services.import_common import RowResult
 from backend.services.statements.canonical import CanonicalRow
+from backend.services.statements.import_model import import_effort
 from backend.services.statements.importer import lacks_route_rate, route_transfer_draft
 from backend.services.statements.profiles import MAX_INSTRUCTIONS_CHARS
 
@@ -509,11 +510,11 @@ def _run_batch(
                         # Reasoning ON (owner, 2026-07-29: "the accuracy should be [the
                         # priority]" — imports are infrequent, cost is a non-issue). Real A/B
                         # testing against the live API confirmed this FLAT schema (see
-                        # _DECISIONS_SCHEMA above) is clean at both effort="none" (6/6 route_
-                        # transfer across 2 batches) and effort="high" (5/5), so "high" is
+                        # _DECISIONS_SCHEMA above) is clean at both effort=import_effort("none") (6/6 route_
+                        # transfer across 2 batches) and effort=import_effort("high") (5/5), so "high" is
                         # taken for the accuracy margin on harder real statements, not because
                         # "none" was shown to need it.
-                        effort="high",
+                        effort=import_effort("high"),
                         schema=_DECISIONS_SCHEMA,
                         validate=_validate_decisions,
                     )
@@ -591,7 +592,7 @@ def _run_batch(
                         max_tokens=_VERIFY_MAX_TOKENS,
                         source=PASS_SOURCE,
                         model=_task_model(),
-                        effort="none",
+                        effort=import_effort("none"),
                         schema=_VERDICT_SCHEMA,
                         validate=_validate_verdict,
                     )
