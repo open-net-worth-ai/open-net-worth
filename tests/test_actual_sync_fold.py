@@ -74,3 +74,20 @@ def test_a_category_on_a_transfer_to_an_off_budget_account_reaches_actual(world)
     assert (
         ledger_service.transactions.find_by_id(out["id"])["category"] == category_here("Food")["id"]
     )
+
+
+def test_a_category_gone_on_both_sides_leaves_nothing_to_settle(world):
+    """Deleted in Actual too: there is nothing to send its 0 to, and no review item can be
+    answered, so the run leaves it alone and stays quiet."""
+    enable()
+    sync()
+    # Actual deletes a category only after moving its rows to another.
+    world.edit("UPDATE transactions SET category = 'c-food' WHERE category = 'c-fun'")
+    world.edit("UPDATE categories SET tombstone = 1 WHERE id = 'c-fun'")
+    world.queue.clear()
+    sync()
+    _fold_fun_into_food()
+    sync()
+    assert open_items() == []
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []

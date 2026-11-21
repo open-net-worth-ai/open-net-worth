@@ -68,6 +68,13 @@ def _openings(mirror: dict[str, dict]) -> dict[str, str]:
     return found
 
 
+def _removed_here(pairs: dict[str, dict], live: set[str], meta: dict) -> frozenset[str]:
+    """The app's categories, still there, whose category here is gone. One gone on both sides has
+    nothing left to send to."""
+    theirs = {c["id"] for c in meta["categories"] if not c.get("deleted")}
+    return frozenset(y for y, p in pairs.items() if p["category"] not in live and y in theirs)
+
+
 def category_plan(meta: dict, mirror: dict[str, dict], assigned: dict) -> dict:
     """The YNAB categories worth mirroring (the migration's own rule), and why the rest are not."""
     used_months = [{"categories": [{"id": cid, "budgeted": 1} for (_, cid) in assigned]}]
@@ -136,7 +143,7 @@ def build(
         sub_parent=sub_parent,
         link_of=link_of,
         openings=_openings(mirror),
-        removed_here=frozenset(y for y, p in pairs.items() if p["category"] not in live),
+        removed_here=_removed_here(pairs, live, meta),
         other_budget_accounts=others,
     )
 

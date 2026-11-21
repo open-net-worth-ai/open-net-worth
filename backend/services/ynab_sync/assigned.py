@@ -89,7 +89,7 @@ def evaluate(
         env = plain.get(cid) or card.get(cid)
         if not env:
             if cid in ctx.removed_here:
-                items += _removed(ctx, month, cid, baseline, seen, first)
+                items += _removed(ctx, month, cid, baseline, seen, cid in fresh)
             continue
         b = baseline.get((month, cid), 0)
         o = round(onw_all.get(month, {}).get(env, 0.0) * 1000)
@@ -105,13 +105,13 @@ def evaluate(
     return items
 
 
-def _removed(ctx: Context, month: str, cid: str, baseline: dict, seen: dict, first: bool) -> list:
+def _removed(ctx: Context, month: str, cid: str, baseline: dict, seen: dict, fresh: bool) -> list:
     """A category removed here holds nothing here: its money was released to Ready to Assign or
     carried with its activity, so a figure the app still holds for it would be counted twice
-    there. It is sent as 0, whichever side changed last (nothing here could take the app's), and
-    never on a first run, which only asks."""
+    there. It is sent as 0, whichever side changed last: nothing here could take the app's.
+    Skipped while its envelope link is being re-compared (``fresh``)."""
     y = seen.get((month, cid), baseline.get((month, cid), 0))
-    if first or _cents(y) == 0 or not _in_window(month, ctx.meta["months"]):
+    if fresh or _cents(y) == 0 or not _in_window(month, ctx.meta["months"]):
         return []
     return [Item(month, cid, "", baseline.get((month, cid), 0), 0, y, "push", False)]
 

@@ -126,6 +126,8 @@ export interface PreviewCategory {
   among?: boolean
   /** The name a new category (and its new envelope) would get. */
   new_name?: string
+  /** An income category: it gets no envelope here, and what comes in raises Ready to Assign. */
+  income?: boolean
   /** One line on what its budget does. */
   note: string
 }

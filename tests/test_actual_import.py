@@ -579,12 +579,15 @@ def test_card_like_default(server):
         acct("flush", "ACME Visa Card 2"),
         acct("over", "ACME Checking"),
         acct("off", "ACME House", off=1),
+        acct("owed", "ACME Family", off=1),
+        acct("named", "ACME Car Loan", off=1),
     ]
     server.rows.transactions = [
         txn("t1", "card", -5_000, day()),
         txn("t2", "flush", 5_000, day()),
         txn("t3", "over", -5_000, day()),
         txn("t4", "off", 5_000, day()),
+        txn("t5", "owed", -5_000, day()),
     ]
     shown = {a["id"]: a for a in run("preview")["preview"]["accounts"]}
     assert {k: v["type"] for k, v in shown.items()} == {
@@ -592,6 +595,8 @@ def test_card_like_default(server):
         "flush": "cash",
         "over": "cash",
         "off": "investment",
+        "owed": "loan",
+        "named": "loan",
     }
     assert shown["card"]["type_options"] == ["cash", "credit"]
     assert shown["off"]["type_options"] == [

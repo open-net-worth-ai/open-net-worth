@@ -399,6 +399,28 @@ describe('the notes', () => {
     expect(w.queryByRole('button', { name: /more note/ })).toBeNull()
   })
 
+  it('shows an income category with no envelope, as the import books it', async () => {
+    const salary = {
+      id: 'ci',
+      label: 'Salary',
+      name: 'Salary',
+      hidden: false,
+      link: null,
+      chosen: false,
+      ask: false,
+      options: [],
+      income: true,
+      note: 'Income: it has no envelope here, and what comes in raises Ready to Assign',
+    }
+    preview = actualPreview({
+      category_groups: [{ id: 'gi', name: 'Income', group: null, categories: [salary] }],
+    })
+    const w = await open()
+    fireEvent.click(w.getByRole('tab', { name: /Categories/ }))
+    expect(await w.findByText('None: raises Ready to Assign')).toBeTruthy()
+    expect(w.queryByRole('combobox', { name: 'Envelope for Salary' })).toBeNull()
+  })
+
   it('collapses many asks to one line', async () => {
     const asks = ['Rent', 'Food', 'Fuel', 'Gym'].map((name, i) => ({
       id: `c${i}`,

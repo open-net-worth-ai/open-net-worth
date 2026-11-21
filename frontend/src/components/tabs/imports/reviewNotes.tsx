@@ -140,8 +140,6 @@ function TypesLine(props: {
   unsettled: number
   suggested: number
   onAccept: () => void
-  /** The starter-categories line: the first note, never folded away. */
-  starter?: ReactNode
 }) {
   const { app, unsettled, suggested } = props
   const one = unsettled === 1
@@ -182,6 +180,8 @@ export function SettleNotes({
   unsettled: number
   suggested: number
   onAccept: () => void
+  /** The starter-categories line: the first note, never folded away. */
+  starter?: ReactNode
 }) {
   const [allShown, setAllShown] = useState(false)
   const l = lines(app, p, asking)

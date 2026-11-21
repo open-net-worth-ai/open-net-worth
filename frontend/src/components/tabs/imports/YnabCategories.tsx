@@ -134,7 +134,9 @@ function CategoryRow({ app, category: c, choices, preview: p, ...pick }: RowProp
         </span>
       </td>
       <td data-label="Envelope">
-        {ref === ASK && !askEnv ? null : ours ? (
+        {ref === ASK && !askEnv ? null : c.income && !ours ? (
+          <Chip kind="envelope" name="None: raises Ready to Assign" faint />
+        ) : ours ? (
           <EnvelopeOfYours app={app} category={c} choices={choices} ref_={ref} />
         ) : (
           <span className="ynr-cell">

@@ -104,7 +104,7 @@ dropdown for each:
 | In Actual | Types you can choose | Starts as |
 |---|---|---|
 | On budget | Cash, Credit | Credit if the balance is negative and the name looks like a card; otherwise Cash |
-| Off budget | Fixed deposit, Investment, Retirement, Receivable, Loan | Investment |
+| Off budget | Fixed deposit, Investment, Retirement, Receivable, Loan | Loan if the balance is negative or the name says loan, mortgage or debt; otherwise Investment |
 
 Each one starts on a suggestion, marked `(suggested)`, and **Import** stays off until every account
 has been looked at. Pick one in its dropdown, even the one it suggests, or press **Accept
@@ -123,7 +123,8 @@ you always see them. **Show more notes** opens the rest.
 
 ## What comes across, and how
 
-- **Income categories** come in as income categories, with no envelope. Salary raises Ready to
+- **Income categories** come in as income categories, with no envelope; the review's **Envelope**
+  column says so. Salary raises Ready to
   Assign when it arrives. They pair only with your income categories, and your spending categories
   only with spending ones. An income category of yours that sits in an envelope can't be matched,
   because what comes in would stay in the envelope; the import makes a new one beside it.
