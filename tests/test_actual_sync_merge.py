@@ -86,3 +86,22 @@ def test_a_one_way_run_still_asks(world):
     world.queue.clear()
     sync()
     assert [i["kind"] for i in open_items()] == ["conflict"]
+
+
+def test_a_conflict_left_open_settles_once_the_sides_touch_different_fields(world):
+    """A memo changed two ways goes to review; when one side's memo goes back and it changes a
+    different field instead, the open item settles itself and both changes stand."""
+    enable()
+    sync()
+    edit_here(by_ref("t-market")["id"], memo="here")
+    world.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-market'")
+    world.queue.clear()
+    sync()
+    assert [i["kind"] for i in open_items()] == ["conflict"]
+    world.edit("UPDATE transactions SET notes = NULL, category = 'c-fun' WHERE id = 't-market'")
+    world.queue.clear()
+    sync()
+    assert open_items() == []
+    assert world.row("transactions", "t-market")["notes"] == "here"
+    assert by_ref("t-market")["category"] == category_here("Fun")["id"]
+    _quiet(world)

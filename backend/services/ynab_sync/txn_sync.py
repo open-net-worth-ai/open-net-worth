@@ -258,7 +258,20 @@ def settle(
             # Where every read is whole, something held can come back as it was: nothing's left
             # to ask about.
             back_as_it_was = action == "noop" and not current().caps.delta_read
-            if action != "adopt" and not waiting_on_a_category and not back_as_it_was:
+            # Filed before the sync merged by field, or before the other side's change: the two
+            # sides no longer touch the same field, so there is nothing left to ask.
+            merges_now = (
+                action == "conflict"
+                and direction == "both"
+                and open_items[u.key]["kind"] == conflicts.CONFLICT
+                and merge.plan(u) is not None
+            )
+            if (
+                action != "adopt"
+                and not waiting_on_a_category
+                and not back_as_it_was
+                and not merges_now
+            ):
                 continue
             conflicts.close(u.key)
         if action == "conflict" and direction == "both" and (both := merge.plan(u)):
