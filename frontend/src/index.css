@@ -9788,7 +9788,6 @@ body.hide-amounts .mask * {
     gap: var(--space-2);
     padding: var(--space-3) var(--space-4);
     border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-    border-left-width: 3px;
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
@@ -9808,7 +9807,6 @@ body.hide-amounts .mask * {
     gap: var(--space-1);
     padding: var(--space-3) var(--space-4);
     border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent);
-    border-left-width: 3px;
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--bad) 9%, transparent);
   }

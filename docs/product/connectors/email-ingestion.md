@@ -26,7 +26,7 @@ is on, and you can revoke an app password at any time without changing your real
 
 | Provider | Where to create one |
 |---|---|
-| **Gmail** | Turn on [2-Step Verification](https://myaccount.google.com/signinoptions/twosv), then open [App passwords](https://myaccount.google.com/apppasswords) (the page only exists once 2-Step Verification is on). Name it "Open Net Worth" and copy the 16-letter code. Work or school Google accounts may have app passwords turned off by the administrator. |
+| **Gmail** | Open [App passwords](https://myaccount.google.com/apppasswords), name it "Open Net Worth" and copy the 16-letter code. If Google says the setting isn't available, turn on [2-Step Verification](https://myaccount.google.com/signinoptions/twosv) first and try again. You don't need to turn on IMAP — Gmail has it on for every personal account. |
 | **iCloud** | Sign in to your [Apple Account](https://account.apple.com/account/manage) → **Sign-In and Security → App-Specific Passwords** → generate one. |
 | **Fastmail** | [Settings → Privacy & Security](https://app.fastmail.com/settings/security) → **Manage app passwords** → create one with access to *Mail (IMAP/POP/SMTP)*. |
 | **Outlook / Hotmail** | Turn on two-step verification in [Microsoft account security](https://account.microsoft.com/security), then create one under [App passwords](https://account.live.com/proofs/AppPassword). See the note under [Troubleshooting](#troubleshooting). |
@@ -131,8 +131,9 @@ provider's own message, and Lucius tells you the same if it hits the error.
 
 - You used your normal password — create an app password (step 1) and paste that instead.
 - The app password was pasted with a space or line break at the end; paste it again.
-- **Gmail:** if your Gmail settings still show **Forwarding and POP/IMAP → IMAP access**, make sure
-  it's enabled.
+- **Gmail:** Google doesn't offer app passwords to work or school accounts whose administrator
+  turned them off, to accounts that sign in with security keys only, or to accounts in Advanced
+  Protection. Those accounts can't connect with an app password.
 - **Outlook / Hotmail:** Microsoft is phasing out password sign-in for third-party mail apps. If
   an app password is refused, your account may only allow Microsoft's own sign-in, which this
   connector doesn't support yet. Work and school Microsoft 365 accounts often have IMAP turned

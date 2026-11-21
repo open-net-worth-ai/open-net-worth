@@ -38,15 +38,15 @@ export const EMAIL_PRESETS: EmailPreset[] = [
     smtp_port: 587,
     steps: [
       {
-        text: 'Turn on 2-Step Verification (app passwords only appear once it is on).',
+        text: 'Create an app password named "Open Net Worth" and paste the 16-letter code below.',
+        link: { label: 'Open App passwords', href: 'https://myaccount.google.com/apppasswords' },
+      },
+      {
+        text: "Google says the setting isn't available? Turn on 2-Step Verification first, then try again.",
         link: {
           label: 'Open 2-Step Verification',
           href: 'https://myaccount.google.com/signinoptions/twosv',
         },
-      },
-      {
-        text: 'Create an app password named "Open Net Worth" and paste the 16-letter code below.',
-        link: { label: 'Open App passwords', href: 'https://myaccount.google.com/apppasswords' },
       },
     ],
   },
