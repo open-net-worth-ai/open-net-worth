@@ -19,10 +19,12 @@ import time
 from contextlib import contextmanager
 from typing import Callable, Iterator
 
+from backend.core.user_time import user_today
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
 from backend.services import budget_app_snapshots
 from backend.services.actual_sync import (
     apply_rows,
+    available,
     client,
     raw_rows,
     restore_points,
@@ -88,10 +90,16 @@ class ActualClient:
         budget_app_snapshots.stash(raw_rows.from_rows(rows, self.copy.currency))
         if self._seen is None:
             self._note_read(plan)
+        month = user_today().isoformat()[:7]
+        figure = {"month": month, "amount": available.to_budget(plan, month)}
         if knowledge is None:
-            return {"plan": plan, "server_knowledge": KNOWLEDGE}
+            return {"plan": plan, "server_knowledge": KNOWLEDGE, "to_budget": figure}
         mirror, meta = current().stores.mirror().by_id(), sync_state.load_meta()
-        return {"plan": shape.delta_against(plan, mirror, meta), "server_knowledge": KNOWLEDGE}
+        return {
+            "plan": shape.delta_against(plan, mirror, meta),
+            "server_knowledge": KNOWLEDGE,
+            "to_budget": figure,
+        }
 
     # ── one batch ──
     def _ready(self) -> None:

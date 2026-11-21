@@ -31,6 +31,7 @@ from backend.services.budget_app import (
 )
 from backend.services.ynab_sync import (
     assigned,
+    budget_compare,
     budget_mode,
     category_sync,
     conflicts,
@@ -277,6 +278,8 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> str | None:
             _assigned_phase(ctx, client, base, change, tally, first, st, fresh)
             _compared(base, fresh)
         openings.sync(ctx, st, tally, client)
+        if data.get("to_budget"):
+            meta["to_budget"] = budget_compare.compare(data["to_budget"])
         starts.review(ctx, st)
         if current().caps.memo_tags and not st.get("note_tags_read"):
             recorder.phase("reading tags in notes")
