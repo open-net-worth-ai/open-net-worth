@@ -100,6 +100,8 @@ describe('transaction conditions', () => {
       'Kind',
       'Amount',
       'Payee',
+      'Category',
+      'Tags',
       'Description',
       'Memo',
     ])

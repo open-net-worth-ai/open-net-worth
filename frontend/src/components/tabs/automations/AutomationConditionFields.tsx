@@ -9,6 +9,7 @@ import type { AutomationOption } from '../../../api/automations'
 import { Cluster, Tag } from '../../ui'
 import { slugTag } from '../accounts/categories'
 import { ComboSelect } from './ComboSelect'
+import { useConditionChoices } from './conditionChoices'
 import { Input, Row, Select } from './automationFormControls'
 import { conditionConflicts } from './txnConditionConflicts'
 import {
@@ -53,6 +54,10 @@ export function TransactionConditionFields({
   layout?: 'rows' | 'inline'
   onChange: (patch: Record<string, unknown>, path: string) => void
 }) {
+  // Given by the Rule editor; otherwise read here, so a Lucius trigger offers them too.
+  const loaded = useConditionChoices()
+  const categoryChoices = categories ?? loaded.categories
+  const tagChoices = tags ?? loaded.tags
   const conditions = readConditions(when)
   const write = (next: TxnCondition[]) =>
     onChange(
@@ -89,8 +94,8 @@ export function TransactionConditionFields({
           condition={condition}
           accounts={accounts}
           payees={payees}
-          categories={categories}
-          tags={tags}
+          categories={categoryChoices}
+          tags={tagChoices}
           amountCurrency={amountCurrency}
           warnings={conflicts.filter((c) => c.index === index).map((c) => c.message)}
           onChange={(next) => update(index, next)}
@@ -139,10 +144,7 @@ function ConditionRows({
   const setValue = (value: TxnCondition['value']) => onChange({ ...condition, value })
   const several = takesSeveral(condition)
   const options = pickOptions(condition.field, accounts, payees, categories, tags)
-  // Category and Tags appear only where their lists are known (the Rule editor).
-  const fields = CONDITION_FIELDS.filter(
-    ([key]) => (key !== 'category' && key !== 'tags') || categories !== undefined,
-  )
+  const fields = CONDITION_FIELDS
   const picked = several ? conditionValues(condition.value) : []
   const below = (
     <>
@@ -202,6 +204,7 @@ function ConditionRows({
         value={picked}
         options={options}
         placeholder={pickPlaceholder(condition.field, false)}
+        colors={condition.field === 'category' ? colorsOf(categories) : undefined}
         onChangeMany={(values) => setValue(storedValues(values))}
         onCreate={condition.field === 'tags' ? async (name) => slugTag(name) || null : undefined}
       />
@@ -276,6 +279,15 @@ function ConditionRows({
       </Row>
     </>
   )
+}
+
+/** Category id → colour (Uncategorized takes the ledger's grey). */
+function colorsOf(categories: AutomationOption[] = []): Record<string, string> {
+  const colors: Record<string, string> = { [UNCATEGORIZED]: '#7c8595' }
+  for (const option of categories as Array<AutomationOption & { color?: string }>) {
+    if (option.color) colors[option.id] = option.color
+  }
+  return colors
 }
 
 /** A payee picked from the list and a payee name typed as text are different values: switching

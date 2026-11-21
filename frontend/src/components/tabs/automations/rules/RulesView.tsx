@@ -30,10 +30,10 @@ const NEW_RULE_PROMPT =
   'Draft a new transaction Rule for me. Ask which transactions it should match and what it should ' +
   'do to them, then show me the completed rule before creating it.'
 
-async function fetchCategories(): Promise<Array<{ id: string; label: string }>> {
+async function fetchCategories(): Promise<Array<{ id: string; label: string; color?: string }>> {
   const response = await authFetch(CATEGORIES_KEY)
   if (!response.ok) throw new Error(`Categories could not be loaded (${response.status})`)
-  return (await response.json()) as Array<{ id: string; label: string }>
+  return (await response.json()) as Array<{ id: string; label: string; color?: string }>
 }
 
 const messageOf = (error: unknown, fallback: string) =>

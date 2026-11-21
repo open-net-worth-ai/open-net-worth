@@ -101,11 +101,13 @@ what to check it for:
 | **Account** | **is** / **is not** one or more of your accounts — either side of a transfer counts |
 | **Kind** | **is** / **is not** one or more of **Expense**, **Income**, **Transfer**, **Investment**, **Investment: buy**, **Investment: sale** or **Adjustment** — **Investment** covers both a buy (cash leaving the account) and a sale (cash arriving) |
 | **Amount** | **over** / **under** a figure — the size of the transaction, whichever way the money moved |
-| **Payee** | **is** / **is not** one or more of your payees (a transaction with no payee, such as a transfer, is never "not" one either) |
+| **Payee** | **is** / **is not** one or more of your payees (a transaction with no payee, such as a transfer, is never "not" one either) — or its name **contains** / **doesn't contain** some text |
+| **Category** | **is** / **is not** one or more of your categories, or **Uncategorized** |
+| **Tags** | **has** / **doesn't have** one or more tags |
 | **Description** (the bank's text) | **contains**, **doesn't contain**, **starts with**, **matches regex** |
 | **Memo** (your note) | **contains**, **doesn't contain**, **starts with**, **matches regex** |
 
-**Account**, **Kind** and **Payee** take several values: each pick shows as a chip under the
+**Account**, **Kind**, **Payee**, **Category** and **Tags** take several values: each pick shows as a chip under the
 box (× removes it), and with two or more the condition reads **is any of** / **is none of** —
 "Payee is any of Grab, Uber" runs on either. **Contains** and **doesn't contain** take several
 phrases separated by commas — any one of them counts (`grabfood, ubereats, kestreleats`). Matching

@@ -453,6 +453,19 @@ describe('Rule conditions: category, tags and payee text', () => {
     await screen.findByLabelText('Name')
   }
 
+  it('a chosen category is a chip in that category’s own colour', async () => {
+    authFetch.mockImplementation((url: string) =>
+      url.startsWith('/api/categories')
+        ? reply([{ id: 'cat_a', label: 'Groceries', color: '#2e9e5b' }])
+        : Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) }),
+    )
+    await openEditor()
+    await waitFor(() => pick('rule-category', 'Groceries'))
+    const remove = await screen.findByRole('button', { name: 'Remove Groceries' })
+    const chip = remove.closest('.rl-color-chip') as HTMLElement
+    expect(chip.style.color).toBe('rgb(46, 158, 91)')
+  })
+
   it('a Category condition offers Uncategorized and the owner’s categories', async () => {
     await openEditor()
     pick('automation-condition-0-field', 'Category')

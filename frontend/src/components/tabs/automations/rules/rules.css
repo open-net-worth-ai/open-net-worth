@@ -475,3 +475,27 @@
 .rl-split .rl-combo-field.rl-combo-chips {
   min-height: 30px;
 }
+.acct-pill.rl-color-chip {
+  gap: 4px;
+  padding: 2px 4px 2px 9px;
+  font-size: 11.5px;
+}
+.rl-color-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.rl-color-chip-x:hover,
+.rl-color-chip-x:focus-visible {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}

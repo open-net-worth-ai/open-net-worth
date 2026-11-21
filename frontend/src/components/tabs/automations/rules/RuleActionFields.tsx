@@ -7,7 +7,7 @@ import { Checkbox } from '../../../ui'
 import { TagField } from '../../accounts/TagField'
 import { AnchoredMenu } from '../ComboSelect'
 import { Input, OptionSelect } from '../automationFormControls'
-import { creators, type RuleChoices } from './ruleCreators'
+import { categoryColors, creators, type RuleChoices } from './ruleCreators'
 import { RuleSplitFields } from './RuleSplitFields'
 import { blankSplit, type RuleForm } from './ruleModel'
 
@@ -171,6 +171,7 @@ function ActionControl({
           id={id}
           value={form.category}
           options={choices.categories}
+          colors={categoryColors(choices.categories)}
           placeholder="Choose a category"
           needed={!form.category}
           onChange={(category) => onChange({ category })}

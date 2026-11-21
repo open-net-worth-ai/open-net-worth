@@ -7,7 +7,13 @@ import type { RuleForm } from './ruleModel'
 export interface RuleChoices {
   accounts: AutomationOption[]
   payees: AutomationOption[]
-  categories: AutomationOption[]
+  /** With each category's colour, so its chip looks the way the ledger shows it. */
+  categories: Array<AutomationOption & { color?: string }>
+}
+
+/** Category id → its colour, for the editor's category chips. */
+export function categoryColors(categories: RuleChoices['categories']): Record<string, string> {
+  return Object.fromEntries(categories.filter((c) => c.color).map((c) => [c.id, c.color as string]))
 }
 
 /** A new category is income when the rule matches income, otherwise an expense. */

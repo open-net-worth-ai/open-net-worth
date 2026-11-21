@@ -3,7 +3,7 @@
 // chip and lets go of focus once made; `multiple` keeps the list open to add more, each a chip
 // with ×. A short list (all / any, an operator) is a plain button.
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Plus } from '../../../ui/icons'
+import { Plus, X } from '../../../ui/icons'
 import { Tag } from '../../ui'
 import { scrollHiIntoView, useAnchoredFixed } from '../accounts/pickers'
 
@@ -18,6 +18,7 @@ export function ComboSelect({
   placeholder,
   needed,
   multiple,
+  colors,
   onChange,
   onChangeMany,
   onCreate,
@@ -29,6 +30,8 @@ export function ComboSelect({
   placeholder?: string
   needed?: boolean
   multiple?: boolean
+  /** id → colour: a chip in that colour (the ledger's category pill), and a dot in the list. */
+  colors?: Record<string, string>
   onChange?: (value: string) => void
   /** With `multiple`: every chosen id, in the order picked. */
   onChangeMany?: (values: string[]) => void
@@ -155,15 +158,24 @@ export function ComboSelect({
         >
           {/* While searching for a single value, the old chip makes way for the box. */}
           {!(open && !multiple) &&
-            chosen.map((key) => (
-              <Tag
-                key={key}
-                removeLabel={`Remove ${labelOf(key)}`}
-                onRemove={() => emit(chosen.filter((k) => k !== key))}
-              >
-                {labelOf(key)}
-              </Tag>
-            ))}
+            chosen.map((key) =>
+              colors?.[key] ? (
+                <ColorChip
+                  key={key}
+                  label={labelOf(key)}
+                  color={colors[key]!}
+                  onRemove={() => emit(chosen.filter((k) => k !== key))}
+                />
+              ) : (
+                <Tag
+                  key={key}
+                  removeLabel={`Remove ${labelOf(key)}`}
+                  onRemove={() => emit(chosen.filter((k) => k !== key))}
+                >
+                  {labelOf(key)}
+                </Tag>
+              ),
+            )}
           <input
             {...common}
             ref={inputRef}
@@ -229,6 +241,9 @@ export function ComboSelect({
                   choose(key)
                 }}
               >
+                {colors?.[key] && (
+                  <i className="acct-payf-cdot" style={{ background: colors[key] }} />
+                )}
                 {label}
               </button>
             ))}
@@ -262,6 +277,31 @@ export function ComboSelect({
         </span>
       )}
     </div>
+  )
+}
+
+/** A chosen category in its own colour, as the ledger shows it, with × to take it off. */
+function ColorChip({
+  label,
+  color,
+  onRemove,
+}: {
+  label: string
+  color: string
+  onRemove: () => void
+}) {
+  return (
+    <span className="acct-pill rl-color-chip" style={{ background: `${color}26`, color }}>
+      {label}
+      <button
+        type="button"
+        className="rl-color-chip-x"
+        aria-label={`Remove ${label}`}
+        onClick={onRemove}
+      >
+        <X size={11} aria-hidden="true" />
+      </button>
+    </span>
   )
 }
 

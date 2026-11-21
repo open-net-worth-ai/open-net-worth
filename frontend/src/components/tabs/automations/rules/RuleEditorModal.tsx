@@ -33,7 +33,7 @@ export interface RuleEditorProps {
   /** A starting point for a new Rule ("Create rule…" on a transaction). */
   seed?: RuleForm | null
   options: AutomationOptions
-  categories: Array<{ id: string; label: string }>
+  categories: Array<{ id: string; label: string; color?: string }>
   /** Where a NEW Rule lands in the order: after every other. */
   position: number
   onSubmit: (draft: ReturnType<typeof formToDraft>) => Promise<unknown>

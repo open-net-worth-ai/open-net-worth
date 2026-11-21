@@ -48,6 +48,7 @@ export function Select({
   needed,
   onChange,
   onCreate,
+  colors,
 }: {
   id: string
   value: string
@@ -57,6 +58,8 @@ export function Select({
   onChange: (value: string) => void
   /** Rule editor only: offer "Create “…”" when a typed name matches nothing. */
   onCreate?: (name: string) => Promise<string | null>
+  /** Rule editor only: id → colour, for category chips. */
+  colors?: Record<string, string>
 }) {
   const combo = useContext(ComboDropdowns)
   if (combo) {
@@ -69,6 +72,7 @@ export function Select({
         needed={needed}
         onChange={onChange}
         onCreate={onCreate}
+        colors={colors}
       />
     )
   }
@@ -101,6 +105,7 @@ export function OptionSelect({
   needed?: boolean
   onChange: (value: string) => void
   onCreate?: (name: string) => Promise<string | null>
+  colors?: Record<string, string>
 }) {
   return (
     <Select
