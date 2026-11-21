@@ -101,11 +101,13 @@ what to check it for:
 | **Account** | **is** / **is not** one or more of your accounts — either side of a transfer counts |
 | **Kind** | **is** / **is not** one or more of **Expense**, **Income**, **Transfer**, **Investment**, **Investment: buy**, **Investment: sale** or **Adjustment** — **Investment** covers both a buy (cash leaving the account) and a sale (cash arriving) |
 | **Amount** | **over** / **under** a figure — the size of the transaction, whichever way the money moved |
-| **Payee** | **is** / **is not** one or more of your payees (a transaction with no payee, such as a transfer, is never "not" one either) |
+| **Payee** | **is** / **is not** one or more of your payees (a transaction with no payee, such as a transfer, is never "not" one either) — or its name **contains** / **doesn't contain** some text |
+| **Category** | **is** / **is not** one or more of your categories, or **Uncategorized** |
+| **Tags** | **has** / **doesn't have** one or more tags |
 | **Description** (the bank's text) | **contains**, **doesn't contain**, **starts with**, **matches regex** |
 | **Memo** (your note) | **contains**, **doesn't contain**, **starts with**, **matches regex** |
 
-**Account**, **Kind** and **Payee** take several values: each pick shows as a chip under the
+**Account**, **Kind**, **Payee**, **Category** and **Tags** take several values: each pick shows as a chip under the
 box (× removes it), and with two or more the condition reads **is any of** / **is none of** —
 "Payee is any of Grab, Uber" runs on either. **Contains** and **doesn't contain** take several
 phrases separated by commas — any one of them counts (`grabfood, ubereats, kestreleats`). Matching
@@ -214,9 +216,11 @@ Acme Gym and the amount is between 10 and 30"); use a Lucius Automation when it 
 
 A Rule has:
 
-- **Conditions**, all of them or any of them. Payee, account, kind (is, is not); amount (over,
-  under, is, between, approximately, which means within 7.5%); description and memo (contains,
-  starts with, matches).
+- **Conditions**, all of them or any of them. Account, kind (is, is not); payee (is, is not, or
+  its name contains / doesn't contain); category (is, is not, including Uncategorized); tags (has,
+  doesn't have); amount (over, under, is, between, approximately, which means within 7.5%);
+  description and memo (contains, starts with, matches). Category and tags see what a Rule above
+  already set, so one Rule can build on another.
 - **Actions**, added one at a time with **Add action**: set a category, add tags, add to the
   description or memo, set the payee, move to another account (imported transactions still in
   review). Or **split** the
@@ -229,6 +233,9 @@ and when two set the same thing the lower one wins. **Stop after this rule** kee
 running. A category you picked yourself is never replaced, and neither is one already set unless
 the Rule says **Replace a category already set**. The order for a new transaction is: what you
 entered, then Rules, then the payee's default category.
+
+When Lucius applies a Rule to past transactions, its approval card names the Rule and lists each
+transaction with what will change (from → to) and any it will skip, before anything is written.
 
 Every change a Rule makes is kept in the transaction's audit trail: which Rule changed it and
 which fields, a Rule that matched but could not act (and why), and when the payee's default
@@ -243,8 +250,10 @@ Balance or re-split a split.
 
 Under the list, **Start from a template** has the rules most books need: clean up a payee, a
 subscription, your salary, rent or a fixed bill, split a shared purchase, coffee and snacks, bank
-fees, and tagging a work card. Each opens the editor pre-filled; you pick your own payee, account
-and category.
+fees, and tagging a work card. Each opens the editor pre-filled. A template never invents a label:
+when your book already has a category with a usual name (Subscriptions, Salary, Groceries…) it is
+picked for you, otherwise the field is left for you to choose. In the editor, typing a payee or
+category that doesn't exist yet offers **Create** it.
 
 **New rule** offers **Create with Lucius** (describe it in chat and Lucius drafts it for you to
 confirm) or **Set up manually**. Another quick start is **Create rule…** on a transaction: it opens a Rule that matches

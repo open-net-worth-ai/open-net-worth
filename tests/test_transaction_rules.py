@@ -632,6 +632,54 @@ def test_deleting_a_category_reassigned_moves_a_split_line_to_the_replacement(bo
 
 
 @rules_on
+def test_a_category_condition_follows_a_reassign_and_blocks_a_bare_delete(book):
+    cats = book["cats"]
+    rule = _rule(
+        book,
+        [{"field": "category", "op": "is", "value": [cats["Gym"], cats["Fun"]]}],
+        {"tags": ["sport"]},
+        name="Tag sport",
+    )
+    with pytest.raises(ConflictError, match="Tag sport"):
+        categories_service.delete_category(cats["Gym"])
+
+    categories_service.delete_category(cats["Gym"], reassign=True, reassign_to=cats["Health"])
+    stored = AutomationStore().find_by_id(rule["id"])
+    (condition,) = stored["trigger"]["when"]["conditions"]
+    assert condition["value"] == [cats["Health"], cats["Fun"]]
+    assert stored["status"] == "active"
+    assert "category is Health or Fun" in stored["instructions"]
+
+
+@rules_on
+def test_rules_chain_on_category_and_tags_set_by_a_rule_above(book):
+    cats = book["cats"]
+    _rule(book, [_payee_is(book)], {"category": cats["Gym"]}, name="Gym it")
+    _rule(
+        book,
+        [{"field": "category", "op": "is", "value": cats["Gym"]}],
+        {"tags": ["fitness"]},
+        name="Tag gym",
+    )
+    _rule(
+        book,
+        [{"field": "tags", "op": "is", "value": "fitness"}],
+        {"memo_append": "claimable"},
+        name="Note fitness",
+    )
+    row = _txn(book, 20)
+    assert row["category"] == cats["Gym"]
+    assert row["tags"] == ["fitness"]
+    assert "claimable" in row["memo"]
+
+
+@rules_on
+def test_payee_name_contains_matches_on_create(book):
+    _rule(book, [{"field": "payee", "op": "contains", "value": ["gym"]}], {"tags": ["g"]})
+    assert _txn(book, 20)["tags"] == ["g"]  # Acme Gym
+
+
+@rules_on
 def test_deleting_a_category_a_rule_uses_is_refused_without_reassign(book):
     cats = book["cats"]
     _rule(book, [_payee_is(book)], {"category": cats["Health"]}, name="Gym rule")
@@ -831,3 +879,59 @@ def test_applying_one_rule_to_history_names_it_and_ordinary_edits_name_none(book
     assert applied["provenance"]["rules"][0]["fields"] == ["tags"]
     svc.update_transaction(row["id"], {"memo": "by hand"})
     assert "provenance" not in _events(row["id"], "update")[-1]
+
+
+# ── Lucius's approval card for applying a Rule to history: names, from → to, skips ─────────
+
+
+def _apply_card(args):
+    from backend.ai.tools.automations import _APPLY_RULE_PREVIEW
+
+    return _APPLY_RULE_PREVIEW.build(args)
+
+
+@rules_on
+def test_the_apply_card_names_the_rule_and_each_change_and_skip(book):
+    cats = book["cats"]
+    keep = _txn(book, 20, category=None)
+    svc.update_transaction(keep["id"], {"category": None}, labels_as_given=True)
+    already = _txn(book, 25, category=cats["Fun"])
+    rule = _rule(book, [_payee_is(book)], {"category": "Gym", "tags": ["T1"]}, name="Gym it")
+    card = _apply_card({"rule_id": rule["id"], "transaction_ids": [keep["id"], already["id"]]})
+
+    assert card["kind"] == "field_diff"
+    head, *rows = card["data"]["items"]
+    assert head["name"] == "Rule “Gym it”"
+    assert head["changes"]["Transactions"]["new"] == "2 will change"
+    first = next(r for r in rows if r["id"] == keep["id"])
+    assert "Acme Gym" in first["name"] and "20.00" in first["name"]
+    assert first["changes"]["Category"] == {"old": "Uncategorized", "new": "Gym"}
+    assert first["changes"]["Tags"] == {"old": "None", "new": "T1"}
+    # A category already on a row is kept (no override) — only the tag changes there.
+    second = next(r for r in rows if r["id"] == already["id"])
+    assert "Category" not in second["changes"]
+    from backend.ai.tools.automations import _APPLY_RULE_PREVIEW
+
+    assert _APPLY_RULE_PREVIEW.validate(card) is None
+
+
+@rules_on
+def test_the_apply_card_lists_a_starting_balance_as_skipped_and_writes_nothing(book):
+    opening = svc.opening_txn_ids()
+    opening_id = next(iter(opening))
+    rule = _rule(book, [_payee_is(book)], {"tags": ["T1"]}, name="Tag")
+    before = svc.transactions.find_by_id(opening_id)
+    card = _apply_card({"rule_id": rule["id"], "transaction_ids": [opening_id]})
+    head, row = card["data"]["items"]
+    assert head["changes"]["Transactions"]["new"] == "0 will change, 1 skipped"
+    assert "Starting Balance" in row["changes"]["Skipped"]["new"]
+    assert svc.transactions.find_by_id(opening_id) == before
+
+
+@rules_on
+def test_the_apply_card_for_every_rule_and_a_deleted_rule(book):
+    row = _txn(book, 20)
+    _rule(book, [_payee_is(book)], {"tags": ["T1"]}, name="Tag")
+    card = _apply_card({"transaction_ids": [row["id"]]})
+    assert card["data"]["items"][0]["name"] == "Every active rule, top to bottom"
+    assert _apply_card({"rule_id": "automation_gone", "transaction_ids": [row["id"]]}) is None

@@ -9,7 +9,7 @@ from backend.core.errors import ValidationError
 from backend.services import ledger as ledger_service
 from backend.services.actual_sync import app as actual_app
 from tests import test_actual_sync_engine as engine
-from tests.test_actual_sync_engine import by_ref, edit_here, enable, row, sync
+from tests.test_actual_sync_engine import by_ref, edit_here, enable, open_items, row, sync
 
 world = engine.world
 
@@ -74,18 +74,25 @@ def test_nothing_to_undo_says_so(world):
     assert row("ACME Corp")
 
 
-def test_an_undone_deletion_stays_back_when_the_sync_resumes(world):
-    """The restore is audited, so on resume it reads as a change made here."""
+def test_an_undone_deletion_is_audited_and_the_resumed_sync_asks_instead_of_deleting(world):
+    """The restore is in the row's history like any restore, and Actual no longer holding the row
+    doesn't delete it again: the resumed sync asks which side to keep."""
+    from backend.db.transaction_audit_store import TransactionAuditStore
+
     enable()
     sync()
     world.edit("UPDATE transactions SET tombstone = 1 WHERE id = 't-pay'")
     world.queue.clear()
     sync()
     actual_app.undo_last_sync()
+    pay = by_ref("t-pay")["id"]
     assert _live("t-pay")
+    assert [e["op"] for e in TransactionAuditStore().for_txn(pay)][-1] == "restore"
     enable()
     sync()
     assert _live("t-pay"), "the resumed sync didn't delete it again"
+    (item,) = open_items()
+    assert "no longer in Actual" in item["reason"]
 
 
 def test_undoing_a_pulled_row_leaves_no_rejection_behind(world):
@@ -98,14 +105,10 @@ def test_undoing_a_pulled_row_leaves_no_rejection_behind(world):
     )
     world.queue.clear()
     sync()
-    made = by_ref("t-new")["id"]
+    made = ledger_service.transactions.find_by_id(by_ref("t-new")["id"])
     actual_app.undo_last_sync()
     assert not _live("t-new")
-    assert (
-        not rejected_identities.is_rejected_txn(made)
-        if hasattr(rejected_identities, "is_rejected_txn")
-        else True
-    )
+    assert rejected_identities.rejection_for(made) is None, "a rollback, not a rejection"
 
 
 def test_a_blank_category_put_back_stays_blank(world):

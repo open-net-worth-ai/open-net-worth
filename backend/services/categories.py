@@ -503,7 +503,13 @@ def automations_naming_category(category_id: str) -> list[dict]:
 
 
 def _rule_names_category(row: dict, category_id: str) -> bool:
-    """A Rule names a category by id in its actions — its sentence shows the label instead."""
+    """A Rule names a category by id in its actions or a "Category is" condition — its sentence
+    shows the label instead. Any transaction-triggered Automation's condition counts too."""
+    for condition in ((row.get("trigger") or {}).get("when") or {}).get("conditions") or []:
+        if isinstance(condition, dict) and condition.get("field") == "category":
+            values = condition.get("value")
+            if category_id in (values if isinstance(values, list) else [values]):
+                return True
     execution = row.get("execution") or {}
     if execution.get("kind") != "transaction_transform":
         return False

@@ -21,6 +21,15 @@ function okResponse(body: object): Promise<Response> {
   } as Response)
 }
 
+/** The brief as `GET /api/query` streams it: one NDJSON line per query asked. */
+function queryAnswer(url: string, body: object): Response {
+  const { queries } = JSON.parse(new URL(url, 'http://x').searchParams.get('q') ?? '{}')
+  const lines = queries.map((q: { refId: string }) =>
+    JSON.stringify({ refId: q.refId, status: 200, data: body }),
+  )
+  return new Response(lines.join('\n') + '\n', { status: 200 })
+}
+
 function failResponse(): Promise<Response> {
   return Promise.resolve({ ok: false } as Response)
 }
@@ -127,27 +136,30 @@ describe('useInvestmentSignals (thin fetch)', () => {
     expect(result.current.decisionsCount).toBe(0)
   })
 
-  it('fetches /api/investments/brief (correct endpoint)', async () => {
-    mockAuthFetch.mockResolvedValue(okResponse(CANNED_BRIEF))
+  it('asks for the investments brief through the one query endpoint', async () => {
+    mockAuthFetch.mockImplementation(async (url: string) => queryAnswer(url, CANNED_BRIEF))
 
-    renderHook(() => useInvestmentSignals())
+    const { result } = renderHook(() => useInvestmentSignals())
 
-    await waitFor(() => {
-      expect(mockAuthFetch).toHaveBeenCalledWith('/api/investments/brief')
-    })
+    await waitFor(() => expect(result.current.signals).toHaveLength(2))
+    const url = new URL(String(mockAuthFetch.mock.calls[0][0]), 'http://x')
+    expect(url.pathname).toBe('/api/query')
+    expect(JSON.parse(url.searchParams.get('q') ?? '{}').queries[0].source).toBe(
+      'investments_brief',
+    )
   })
 
   it('keeps the previous brief visible while a remount revalidates', async () => {
-    mockAuthFetch.mockResolvedValueOnce(okResponse(CANNED_BRIEF))
+    mockAuthFetch.mockImplementationOnce(async (url: string) => queryAnswer(url, CANNED_BRIEF))
     const first = renderHook(() => useInvestmentSignals())
     await waitFor(() => expect(first.result.current.signals).toHaveLength(2))
     first.unmount()
 
-    let resolveRefresh!: (value: Response) => void
+    let resolveRefresh!: () => void
     mockAuthFetch.mockImplementationOnce(
-      () =>
+      (url: string) =>
         new Promise<Response>((resolve) => {
-          resolveRefresh = resolve
+          resolveRefresh = () => resolve(queryAnswer(url, CANNED_BRIEF))
         }),
     )
     const second = renderHook(() => useInvestmentSignals())
@@ -155,6 +167,25 @@ describe('useInvestmentSignals (thin fetch)', () => {
     expect(second.result.current.signals).toHaveLength(2)
     expect(second.result.current.loading).toBe(false)
 
-    await act(async () => resolveRefresh(await okResponse(CANNED_BRIEF)))
+    // The refresh joins the next tick's batch; wait for it to go out before answering it.
+    await waitFor(() => expect(resolveRefresh).toBeTypeOf('function'))
+    await act(async () => resolveRefresh())
+  })
+
+  it('keeps the last real signals when a refresh hits a network error', async () => {
+    mockAuthFetch.mockImplementationOnce(async (url: string) => queryAnswer(url, CANNED_BRIEF))
+    const first = renderHook(() => useInvestmentSignals())
+    await waitFor(() => expect(first.result.current.signals).toHaveLength(2))
+    first.unmount()
+
+    // Both the batch and its per-query fallback fail at the network.
+    mockAuthFetch.mockRejectedValue(new Error('network'))
+    const callsBefore = mockAuthFetch.mock.calls.length
+    const second = renderHook(() => useInvestmentSignals())
+    await waitFor(() => expect(mockAuthFetch.mock.calls.length).toBeGreaterThan(callsBefore + 1))
+    await act(async () => {})
+
+    expect(second.result.current.signals).toHaveLength(2)
+    expect(second.result.current.signals[0]!.kind).toBe('concentration')
   })
 })

@@ -31,6 +31,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 import { Automations } from '../../Automations'
 import { RulesView } from './RulesView'
+import { RULE_TEMPLATES, seedTemplate } from './ruleTemplateList'
 
 const OPTIONS = {
   accounts: [{ id: 'acc_card', label: 'Card', currency: 'USD' }],
@@ -121,7 +122,7 @@ describe('Rules list', () => {
     ])
     expect(screen.getByText(/When payee is Acme r1/)).toBeTruthy()
     expect(screen.getAllByText(/3 matches/).length).toBe(2)
-    expect(screen.getByText(/run top to bottom; every matching rule applies/i)).toBeTruthy()
+    expect(screen.getByText(/run from top to bottom.*lower one wins.*drag a rule/i)).toBeTruthy()
   })
 
   it('explains Rules versus Lucius when there are none', () => {
@@ -386,6 +387,117 @@ describe('Automations Rules tab', () => {
   })
 })
 
+describe('Rule editor actions', () => {
+  it('lists actions in the order they were added', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove set category' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add tags' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set category' }))
+    const labels = [...document.querySelectorAll('.rl-action-head label')].map((l) => l.textContent)
+    expect(labels).toEqual(['Add tags', 'Set category'])
+  })
+
+  it('offers to create a payee nothing matches, through the payee API', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set payee' }))
+    authFetch.mockImplementation((url: string, init?: { method?: string }) =>
+      url === '/api/payees' && init?.method === 'POST'
+        ? reply({ id: 'pay_new', name: 'Newco' })
+        : url.startsWith('/api/categories')
+          ? reply(CATEGORIES)
+          : Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) }),
+    )
+    const field = screen.getByLabelText('Set payee')
+    fireEvent.focus(field)
+    fireEvent.change(field, { target: { value: 'Newco' } })
+    fireEvent.mouseDown(screen.getByRole('option', { name: /create “newco”/i }))
+    await waitFor(() =>
+      expect(authFetch).toHaveBeenCalledWith(
+        '/api/payees',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    )
+    // The new payee shows as a chip; the search box is cleared and has let go of focus.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove Newco' })).toBeTruthy())
+    expect((field as HTMLInputElement).value).toBe('')
+    expect(document.activeElement).not.toBe(field)
+  })
+
+  it('a condition takes several values as chips, the list staying open to add more', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+    const field = document.getElementById('automation-condition-0-value')!
+    fireEvent.focus(field)
+    fireEvent.mouseDown(screen.getByRole('option', { name: 'Acme' }))
+    expect(screen.getByRole('button', { name: 'Remove Acme' })).toBeTruthy()
+    // Still open after a pick: the chosen one is gone from the list, nothing else to add here.
+    expect(screen.getByRole('listbox')).toBeTruthy()
+    expect(screen.queryByRole('option', { name: 'Acme' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Acme' }))
+    expect(screen.queryByRole('button', { name: 'Remove Acme' })).toBeNull()
+  })
+})
+
+describe('Rule conditions: category, tags and payee text', () => {
+  async function openEditor() {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+  }
+
+  it('a chosen category is a chip in that category’s own colour', async () => {
+    authFetch.mockImplementation((url: string) =>
+      url.startsWith('/api/categories')
+        ? reply([{ id: 'cat_a', label: 'Groceries', color: '#2e9e5b' }])
+        : Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) }),
+    )
+    await openEditor()
+    await waitFor(() => pick('rule-category', 'Groceries'))
+    const remove = await screen.findByRole('button', { name: 'Remove Groceries' })
+    const chip = remove.closest('.rl-color-chip') as HTMLElement
+    expect(chip.style.color).toBe('rgb(46, 158, 91)')
+  })
+
+  it('a Category condition offers Uncategorized and the owner’s categories', async () => {
+    await openEditor()
+    pick('automation-condition-0-field', 'Category')
+    fireEvent.focus(document.getElementById('automation-condition-0-value')!)
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Groceries' })).toBeTruthy())
+    expect(screen.getByRole('option', { name: 'Uncategorized' })).toBeTruthy()
+    expect(document.getElementById('automation-condition-0-op')!.textContent).toBe('is')
+  })
+
+  it('a Tags condition reads “has” and can take a tag that is not in use yet', async () => {
+    await openEditor()
+    pick('automation-condition-0-field', 'Tags')
+    expect(document.getElementById('automation-condition-0-op')!.textContent).toBe('has')
+    const field = document.getElementById('automation-condition-0-value')!
+    fireEvent.focus(field)
+    fireEvent.change(field, { target: { value: 'Reimburse' } })
+    fireEvent.mouseDown(screen.getByRole('option', { name: /create “reimburse”/i }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Remove reimburse' })).toBeTruthy(),
+    )
+  })
+
+  it('switching Payee to “contains” turns the value into text to type', async () => {
+    await openEditor()
+    pick('automation-condition-0-op', 'contains')
+    const field = document.getElementById('automation-condition-0-value') as HTMLInputElement
+    expect(field.tagName).toBe('INPUT')
+    fireEvent.change(field, { target: { value: 'starbucks' } })
+    expect(field.value).toBe('starbucks')
+  })
+})
+
 describe('Rule templates', () => {
   it('opens the editor pre-filled from a template, leaving the owner to pick their own values', async () => {
     render(<Harness initial={[]} />)
@@ -393,6 +505,30 @@ describe('Rule templates', () => {
     expect(await screen.findByLabelText('Set payee')).toBeTruthy()
     expect(screen.queryByLabelText('Set category')).toBeNull()
     expect(document.getElementById('automation-condition-0-field')!.textContent).toBe('Description')
+  })
+
+  it('never invents a label: a book with no matching category gets blanks and no tags', () => {
+    for (const template of RULE_TEMPLATES) {
+      const seed = seedTemplate(template, [{ id: 'cat_x', label: 'Something else' }])
+      expect(seed.tags, template.key).toEqual([])
+      expect(seed.category, template.key).toBe('')
+      expect(seed.splits.every((line) => line.category === '' && line.tags.length === 0)).toBe(true)
+    }
+  })
+
+  it('picks the owner’s own category by name when the book has one', () => {
+    const book = [
+      { id: 'cat_subs', label: 'subscriptions' },
+      { id: 'cat_groc', label: 'Groceries' },
+      { id: 'cat_home', label: 'Household' },
+    ]
+    const byKey = Object.fromEntries(RULE_TEMPLATES.map((t) => [t.key, t]))
+    expect(seedTemplate(byKey['subscription']!, book).category).toBe('cat_subs')
+    expect(seedTemplate(byKey['shared-purchase']!, book).splits.map((l) => l.category)).toEqual([
+      'cat_groc',
+      'cat_home',
+    ])
+    expect(seedTemplate(byKey['salary']!, book).category).toBe('')
   })
 
   it('a split template starts with half to one line and the rest to another', async () => {

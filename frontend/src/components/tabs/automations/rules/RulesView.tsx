@@ -30,10 +30,10 @@ const NEW_RULE_PROMPT =
   'Draft a new transaction Rule for me. Ask which transactions it should match and what it should ' +
   'do to them, then show me the completed rule before creating it.'
 
-async function fetchCategories(): Promise<Array<{ id: string; label: string }>> {
+async function fetchCategories(): Promise<Array<{ id: string; label: string; color?: string }>> {
   const response = await authFetch(CATEGORIES_KEY)
   if (!response.ok) throw new Error(`Categories could not be loaded (${response.status})`)
-  return (await response.json()) as Array<{ id: string; label: string }>
+  return (await response.json()) as Array<{ id: string; label: string; color?: string }>
 }
 
 const messageOf = (error: unknown, fallback: string) =>
@@ -188,11 +188,10 @@ export function RulesView({
         <EmptyState
           icon={<Workflow size={28} strokeWidth={1.5} aria-hidden="true" />}
           title="No rules yet"
-          body="A rule handles each new transaction for you: when its payee, amount, account or text matches, it sets the category or payee, adds tags or a note, or splits it. No AI, and it runs instantly. For older transactions, use Apply to past matches or Run rules. Use a Lucius automation when a judgement call is needed."
+          body="A rule sets the category, payee or tags of each new transaction, or splits it — instantly, with no AI. Start from a template below."
         />
       ) : (
         <>
-          <p className="a3-muted rl-note">Rules run top to bottom; every matching rule applies.</p>
           {visible.length === 0 ? (
             <div className="a3-empty">
               <span>Nothing matches “{query}”</span>.{' '}
@@ -211,9 +210,15 @@ export function RulesView({
               onDelete={setDeleteTarget}
             />
           )}
+          <p className="a3-muted rl-note">
+            Rules run from top to bottom. When two change the same thing, the lower one wins. Drag a
+            rule by its handle to change the order.
+          </p>
         </>
       )}
-      {!needle && <RuleTemplates onTemplate={(seed) => setEditor({ seed })} />}
+      {!needle && (
+        <RuleTemplates categories={categories} onTemplate={(seed) => setEditor({ seed })} />
+      )}
       {editor && (
         <RuleEditorModal
           rule={editor.rule}

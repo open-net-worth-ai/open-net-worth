@@ -3,12 +3,18 @@
    (centred, every new row made the whole dialog jump), up to the screen, where the body scrolls. */
 .ui-modal-card.rl-editor {
   align-self: flex-start;
-  margin-top: max(24px, 8vh);
-  max-height: calc(100vh - max(24px, 8vh) - 24px);
+  /* Until the editor measures itself (RuleEditorModal): an equal gap above and below. */
+  margin-top: 0;
+  max-height: calc(100vh - 48px);
 }
 .rl-editor .ui-modal__body {
   flex: 1 1 auto;
   max-height: none;
+  /* The scrollbar gets a gutter of its own, pushed out into the card's margin, so it never
+     sits against the fields. */
+  scrollbar-gutter: stable;
+  padding-right: 14px;
+  margin-right: -14px;
 }
 .rl-editor .a3-editor-stack {
   gap: 22px;
@@ -64,7 +70,7 @@
   align-items: stretch;
   gap: 12px;
 }
-.rl-actions > .rd-kebab {
+.rl-actions > .rl-anchored {
   align-self: flex-start;
 }
 .rl-empty {
@@ -87,17 +93,20 @@
 .rl-action-note {
   font-size: 12px;
 }
-.rd-kebab-pop.rl-add-pop {
-  left: 0;
-  right: auto;
-  min-width: 190px;
+.acct-payf-pop.rl-menu-pop {
+  width: 220px;
+}
+.rl-combo-pop .rl-combo-create {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
 }
 .rl-options {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  padding-top: 4px;
 }
 @media (max-width: 600px) {
   .ui-modal-card.rl-editor {
@@ -122,7 +131,7 @@
   }
 }
 .rl-note {
-  margin: 0 0 10px;
+  margin: 10px 0 0;
   font-size: 12.5px;
 }
 .rl-list {
@@ -135,7 +144,7 @@
 }
 .rl-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   padding: 12px 14px;
   background: var(--surface);
@@ -168,13 +177,6 @@
 .rl-grip:focus-visible {
   outline: 2px solid var(--accent);
   border-radius: 4px;
-}
-.rl-n {
-  min-width: 18px;
-  padding-top: 5px;
-  font-size: 12px;
-  color: var(--faint);
-  text-align: right;
 }
 .rl-body {
   flex: 1;
@@ -312,8 +314,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  padding-top: 6px;
 }
 .rl-preview-head {
   display: flex;
@@ -344,10 +345,13 @@
   color: var(--muted);
   padding: 4px 8px;
 }
+.rl-table th,
 .rl-table td {
-  padding: 6px 8px;
-  border-top: 1px solid var(--line);
-  vertical-align: top;
+  border: 0;
+}
+.rl-table td {
+  padding: 7px 8px;
+  vertical-align: baseline;
 }
 .rl-table .num {
   text-align: right;
@@ -438,4 +442,60 @@
 }
 .rl-split .rl-combo-field {
   height: 30px;
+}
+.rl-combo-field.rl-combo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  height: auto;
+  min-height: 32px;
+  padding: 3px 24px 3px 6px;
+  cursor: text;
+}
+.rl-combo-chips.open,
+.rl-combo-chips:focus-within {
+  border-color: var(--accent);
+}
+.rl-combo-input {
+  flex: 1 1 60px;
+  min-width: 60px;
+  height: 24px;
+  padding: 0 3px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+}
+.rl-combo-input::placeholder {
+  color: var(--faint);
+}
+.rl-split .rl-combo-field.rl-combo-chips {
+  min-height: 30px;
+}
+.acct-pill.rl-color-chip {
+  gap: 4px;
+  padding: 2px 4px 2px 9px;
+  font-size: 11.5px;
+}
+.rl-color-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.rl-color-chip-x:hover,
+.rl-color-chip-x:focus-visible {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 18%, transparent);
 }

@@ -31,7 +31,7 @@ from __future__ import annotations
 import re
 from typing import Callable
 
-FIELDS = ("account", "kind", "amount", "payee", "description", "memo")
+FIELDS = ("account", "kind", "amount", "payee", "description", "memo", "category", "tags")
 KINDS = (
     "expense",
     "income",
@@ -50,10 +50,16 @@ _OPS = {
     "account": _IS_OPS,
     "kind": _IS_OPS,
     "amount": _AMOUNT_OPS,
-    "payee": _IS_OPS,
+    # Payee is matched by id (is / is not) or by its NAME's text (contains / doesn't contain).
+    "payee": _IS_OPS | {"contains", "not_contains"},
     "description": _TEXT_OPS,
     "memo": _TEXT_OPS,
+    # Category is / is not (any of / none of); UNCATEGORIZED stands for "no category".
+    "category": _IS_OPS,
+    # Tags: "is" = has any of them, "is_not" = has none of them.
+    "tags": _IS_OPS,
 }
+UNCATEGORIZED = "uncategorized"
 OPS = (
     "is",
     "is_not",
@@ -272,11 +278,27 @@ def _condition_matches(
         return same if op == "is" else not same
     if field == "amount":
         return _amount_matches(op, value, payload, account, amount_on)
-    if field == "payee":
+    if field == "payee" and op in _IS_OPS:
         payee = str(payload.get("payee_id") or "")
         named = payee in _values(value)
         return named if op == "is" else bool(payee) and not named
+    if field == "category":
+        category = str(payload.get("category") or "") or UNCATEGORIZED
+        named = category in _values(value)
+        return named if op == "is" else not named
+    if field == "tags":
+        has = bool(set(payload.get("tags") or []) & set(_values(value)))
+        return has if op == "is" else not has
     return _text_matches(field, op, value, payload)
+
+
+def _payee_name(payload: dict) -> str:
+    """The row's payee NAME (a caller may pass it as ``payee_name``; otherwise it is looked up)."""
+    if payload.get("payee_name"):
+        return str(payload["payee_name"])
+    from backend.services import payee_registry
+
+    return payee_registry.payee_name(payload.get("payee_id"))
 
 
 def _kind_is(payload: dict, kind: str) -> bool:
@@ -314,6 +336,8 @@ def _amount_matches(
 def _text_matches(field: object, op: object, value: object, payload: dict) -> bool:
     if field == "description":
         text = str(payload.get("description") or payload.get("note") or "")
+    elif field == "payee":
+        text = _payee_name(payload)
     else:
         text = str(payload.get("memo") or "")
     folded = text.casefold()

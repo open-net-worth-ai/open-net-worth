@@ -11,7 +11,7 @@ import {
   type SplitForm,
   type SplitKind,
 } from './ruleModel'
-import type { RuleChoices } from './RuleActionFields'
+import { categoryColors, creators, type RuleChoices } from './ruleCreators'
 
 const KINDS: ReadonlyArray<readonly [SplitKind, string]> = [
   ['fixed', 'Fixed amount'],
@@ -69,9 +69,11 @@ export function RuleSplitFields({
                   id={`rule-split-${index}-category`}
                   value={line.category}
                   options={choices.categories}
+                  colors={categoryColors(choices.categories)}
                   placeholder="Category"
                   needed={!line.category}
                   onChange={(category) => update(index, { category })}
+                  onCreate={creators(form, choices).category}
                 />
               </span>
               <button

@@ -24,7 +24,7 @@ from typing import Callable, Iterator, Optional
 from sqlalchemy import Connection, Engine, Table, create_engine, event
 from sqlalchemy.engine import make_url
 
-from backend.core import req_timing
+from backend.core import req_timing, request_memo
 from backend.core.paths import DB_FILE
 
 _log = logging.getLogger(__name__)
@@ -79,6 +79,15 @@ def _attach_request_timing(eng: Engine) -> None:
         req_timing.record_db(elapsed_ms, rc if isinstance(rc, int) and rc > 0 else 0)
 
 
+def _attach_request_memo_invalidation(eng: Engine) -> None:
+    """A commit made inside an open `core.request_memo` drops what the scope memoised, so a read
+    after a write in the same request reads the write. No-op outside a scope."""
+
+    @event.listens_for(eng, "commit")
+    def _on_commit(conn):  # noqa: ANN001
+        request_memo.invalidate()
+
+
 _SQLITE_MAX_OVERFLOW = 45
 
 
@@ -113,9 +122,11 @@ def _make_engine(url: str) -> Engine:
             _restrict_sqlite_modes(sqlite_path)
 
         _attach_request_timing(eng)
+        _attach_request_memo_invalidation(eng)
         return eng
     eng = create_engine(url, pool_pre_ping=True, hide_parameters=True)
     _attach_request_timing(eng)
+    _attach_request_memo_invalidation(eng)
     return eng
 
 

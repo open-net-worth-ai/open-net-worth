@@ -424,7 +424,10 @@ def rewrite_rule_category_refs(old_id: str, new_id: str | None) -> list[str]:
         splits = [dict(line) for line in execution.get("splits") or []]
         in_set = action.get("category") == old_id
         in_splits = any(line.get("category") == old_id for line in splits)
-        if not (in_set or in_splits):
+        trigger, in_conditions = _rewrite_condition_category(
+            automation.get("trigger") or {}, old_id, new_id
+        )
+        if not (in_set or in_splits or in_conditions):
             continue
         if in_set:
             action["category"] = new_id
@@ -439,13 +442,41 @@ def rewrite_rule_category_refs(old_id: str, new_id: str | None) -> list[str]:
             execution["splits"] = splits
         patch = {
             "execution": execution,
-            "instructions": describe_transaction_transform({**automation, "execution": execution}),
+            "trigger": trigger,
+            "instructions": describe_transaction_transform(
+                {**automation, "execution": execution, "trigger": trigger}
+            ),
         }
         if new_id is None:
             patch["status"] = "paused"
         store.update_by_id(automation["id"], patch)
         changed.append(str(automation["id"]))
     return changed
+
+
+def _rewrite_condition_category(
+    trigger: dict, old_id: str, new_id: str | None
+) -> tuple[dict, bool]:
+    """A "Category is …" condition naming ``old_id`` names ``new_id`` instead. With no
+    replacement the dead id stays (the Rule is paused): emptying the condition would make it
+    fail validation, and dropping it would widen what the Rule matches."""
+    when = dict(trigger.get("when") or {})
+    conditions = [dict(c) for c in when.get("conditions") or [] if isinstance(c, dict)]
+    touched = False
+    for condition in conditions:
+        if condition.get("field") != "category":
+            continue
+        values = condition.get("value")
+        items = values if isinstance(values, list) else [values]
+        if old_id not in items:
+            continue
+        touched = True
+        if new_id is not None:
+            merged = list(dict.fromkeys(new_id if v == old_id else v for v in items))
+            condition["value"] = merged[0] if len(merged) == 1 else merged
+    if not touched:
+        return trigger, False
+    return {**trigger, "when": {**when, "conditions": conditions}}, True
 
 
 def rewrite_category_refs(old_id: str, new_id: str | None) -> int:

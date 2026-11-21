@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 
 import yfinance as yf
 
+from backend.core import request_memo
 from backend.core.config import get_settings
 from backend.core.errors import ValidationError
 from backend.core.fx import base_currency as _base_currency
@@ -3750,6 +3751,10 @@ def _fetch_live_uncached(
         if req_key in prices and states.get(req_key) == "live":
             resolved[req_key] = prices[req_key]
             _live_price_cache[cg_id] = (prices[req_key], now_mono)
+    if resolved:
+        # A fresher live price changes `hydration_context()`'s `last_known`: drop what this
+        # request's request memo already built from the older one (core.request_memo).
+        request_memo.invalidate()
 
     # ``record_history=False`` for a caller that is only ASKING what a price is — today the
     # ``get_live_prices`` AI tool. A price series is the portfolio's own record of itself,

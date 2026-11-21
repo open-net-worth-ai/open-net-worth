@@ -54,8 +54,9 @@ _RULE_DESC = (
     "omit for a Lucius Automation. {kind:'transaction_transform', set:{category?, tags?, "
     "note_append?, memo_append?, payee?}, splits?:[{amount:{type:'fixed'|'percent'|'remainder', "
     "value?}, category, tags?, memo?}] (≤10; percent = share of what fixed lines leave), "
-    "override_existing?:bool (replace a set category), stop?:bool}. Needs a txn event trigger. "
-    "Every matching Rule applies, top to bottom; the later wins."
+    "override_existing?:bool (replace a category already set; only if the user asks), stop?:bool}. "
+    "Needs a txn event trigger. Rules run top to bottom among Rules only, the lower winning a "
+    "conflict; a Lucius Automation is never in that order (it runs after the write)."
 )
 
 _INSTRUCTIONS_DESC = (
@@ -343,6 +344,36 @@ async def update_automations(input_data: dict):
     return json.dumps({"ok": not errors, "updated": updated, "errors": errors}), None
 
 
+class _ApplyRulePreview:
+    """The card names the Rule and shows each transaction's change (from → to) and every skip,
+    from the same per-row plan the write uses — never just the ids."""
+
+    def build(self, args: dict) -> Optional[dict]:
+        from backend.db.automation_store import AutomationStore
+        from backend.services.automations.rule_apply_preview import preview_apply
+
+        try:
+            rule_id = args.get("rule_id")
+            rule = AutomationStore().find_by_id(str(rule_id)) if rule_id else None
+            if rule_id and rule is None:
+                return None
+            data = preview_apply(rule, args.get("transaction_ids"))
+        except Exception:  # an unbuildable preview falls back to the plain card, never blocks
+            return None
+        return {"kind": "field_diff", "data": data, "raw_arguments": args}
+
+    def validate(self, preview: dict) -> Optional[str]:
+        from backend.db.automation_store import AutomationStore
+
+        rule_id = (preview.get("raw_arguments") or {}).get("rule_id")
+        if rule_id and AutomationStore().find_by_id(str(rule_id)) is None:
+            return f"rule {rule_id!r} was deleted"
+        return None
+
+
+_APPLY_RULE_PREVIEW: PreviewAdapter = _ApplyRulePreview()
+
+
 class ApplyRuleInput(ToolInput):
     rule_id: Optional[str] = Field(
         default=None,
@@ -371,6 +402,7 @@ class ApplyRuleInput(ToolInput):
     ),
     input_schema=schema_of(ApplyRuleInput, tool_name="apply_rule_to_transactions"),
     mutates=("ledger", "automations"),
+    preview_adapter=_APPLY_RULE_PREVIEW,
 )
 async def apply_rule_to_transactions(input_data: dict):
     from backend.db.automation_store import AutomationStore
@@ -384,7 +416,12 @@ async def apply_rule_to_transactions(input_data: dict):
             if rule is None or (rule.get("execution") or {}).get("kind") != "transaction_transform":
                 raise ValueError(f"{rule_id!r} is not a Rule — list_automations shows Rules")
             result = rule_apply.apply_rule(
-                {"id": rule["id"], "trigger": rule["trigger"], "execution": rule["execution"]},
+                {
+                    "id": rule["id"],
+                    "name": rule.get("name"),
+                    "trigger": rule["trigger"],
+                    "execution": rule["execution"],
+                },
                 input_data["transaction_ids"],
             )
         else:

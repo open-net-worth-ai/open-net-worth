@@ -1,6 +1,6 @@
 import { useDataVersion } from '../useDataVersion'
 import { type QueryCacheResult, useQueryCache } from '../../state/queryCache'
-import { fetchJson } from './fetchJson'
+import { querySource } from './dataQuery'
 import { NET_WORTH_KEY } from './keys'
 
 export interface NetWorthBreakdown {
@@ -24,7 +24,7 @@ export interface NetWorthData {
   breakdown: NetWorthBreakdown
 }
 
-const fetchNetWorth = () => fetchJson<NetWorthData>(NET_WORTH_KEY)
+const fetchNetWorth = () => querySource<NetWorthData>('net_worth', {}, NET_WORTH_KEY)
 
 /**
  * The ONE net worth — GET /api/net-worth (backend/services/ledger.py::net_worth()). Every

@@ -102,6 +102,7 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import insert as sa_insert
 from sqlalchemy import update as sa_update
 
+from backend.core import request_memo
 from backend.core.io import fire_db_write_hook
 from backend.db.engine import _lock_for_table
 from backend.db.tables import DEFAULT_BOOK_ID, metadata, settings
@@ -275,6 +276,9 @@ class PayloadTableStore:
                 self._row_item(r)
                 for r in conn.execute(select(self._table).order_by(self._table.c.seq))
             ]
+        return request_memo.memo_rows(("payload.all", self._table.name), self._read_all)
+
+    def _read_all(self) -> list[dict]:
         with self._eng().connect() as owned_conn:
             return [
                 self._row_item(r)

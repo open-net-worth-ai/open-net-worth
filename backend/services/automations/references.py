@@ -54,6 +54,15 @@ def resolve_trigger_references(
 
 
 _CONDITION_REFERENCES = {"account": "accounts", "payee": "payees"}
+_ID_OPS = ("is", "is_not")  # payee "contains" matches the NAME's text — not a reference
+
+
+def _names_ids(condition: object) -> bool:
+    return (
+        isinstance(condition, dict)
+        and condition.get("field") in _CONDITION_REFERENCES
+        and condition.get("op", "is") in _ID_OPS
+    )
 
 
 def referenced_ids(trigger: object) -> set[str]:
@@ -63,7 +72,7 @@ def referenced_ids(trigger: object) -> set[str]:
         return set()
     ids = {str(when[key]) for key in ("account", "account_id") if when.get(key)}
     for condition in when.get("conditions") or []:
-        if isinstance(condition, dict) and condition.get("field") in _CONDITION_REFERENCES:
+        if _names_ids(condition):
             value = condition.get("value")
             ids.update(str(v) for v in (value if isinstance(value, list) else [value]) if v)
     return ids
@@ -73,9 +82,8 @@ def _resolve_condition_references(when: dict, options: dict | None, keep: set[st
     conditions = when.get("conditions")
     if not isinstance(conditions, list):
         return
-    named = [
-        c for c in conditions if isinstance(c, dict) and c.get("field") in _CONDITION_REFERENCES
-    ]
+    _resolve_category_conditions(conditions)
+    named = [c for c in conditions if _names_ids(c)]
     if not named:
         return
     references: dict | None = options
@@ -96,6 +104,33 @@ def _resolve_condition_references(when: dict, options: dict | None, keep: set[st
             condition["value"] = [resolve(v, field) for v in value]
         elif value not in (None, ""):
             condition["value"] = resolve(value, field)
+
+
+def _resolve_category_conditions(conditions: list) -> None:
+    """A "Category is" value may be a category's id or its label (Lucius names them); it is
+    stored as the id. ``uncategorized`` stands for "no category" and is kept as is."""
+    from backend.core.errors import ValidationError
+    from backend.services import categories as categories_service
+
+    for condition in conditions:
+        if not isinstance(condition, dict) or condition.get("field") != "category":
+            continue
+        value = condition.get("value")
+        items = value if isinstance(value, list) else [value]
+        resolved = []
+        for item in items:
+            if not isinstance(item, str) or not item.strip():
+                continue
+            ref = item.strip()
+            if ref.lower() == "uncategorized":
+                resolved.append("uncategorized")
+                continue
+            category_id = categories_service.resolve_category_ref(ref)
+            if category_id is None:
+                raise ValidationError(f"category {ref!r} does not exist")
+            resolved.append(category_id)
+        if resolved:
+            condition["value"] = resolved[0] if len(resolved) == 1 else resolved
 
 
 def _resolve_reference(raw_ref: object, rows: list[dict], noun: str, event: str) -> str:

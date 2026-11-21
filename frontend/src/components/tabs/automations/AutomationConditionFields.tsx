@@ -7,6 +7,9 @@
 // trigger never passes it, so it stays "all". Conflicts are only a trap for "all".
 import type { AutomationOption } from '../../../api/automations'
 import { Cluster, Tag } from '../../ui'
+import { slugTag } from '../accounts/categories'
+import { ComboSelect } from './ComboSelect'
+import { useConditionChoices } from './conditionChoices'
 import { Input, Row, Select } from './automationFormControls'
 import { conditionConflicts } from './txnConditionConflicts'
 import {
@@ -14,6 +17,7 @@ import {
   betweenBounds,
   FLAT_FILTER_KEYS,
   KIND_OPTIONS,
+  UNCATEGORIZED,
   conditionAccount,
   conditionValueText,
   conditionValues,
@@ -34,17 +38,26 @@ export function TransactionConditionFields({
   baseCurrency,
   match = 'all',
   layout = 'rows',
+  categories,
+  tags,
   onChange,
 }: {
   when: Record<string, unknown>
   accounts: AutomationOption[]
   payees: AutomationOption[]
+  /** The owner's categories and tags: with them, Category and Tags can be conditions too. */
+  categories?: AutomationOption[]
+  tags?: string[]
   baseCurrency?: string
   match?: 'all' | 'any'
   /** `inline`: each condition on one line, labels on top of nothing (the Rule editor). */
   layout?: 'rows' | 'inline'
   onChange: (patch: Record<string, unknown>, path: string) => void
 }) {
+  // Given by the Rule editor; otherwise read here, so a Lucius trigger offers them too.
+  const loaded = useConditionChoices()
+  const categoryChoices = categories ?? loaded.categories
+  const tagChoices = tags ?? loaded.tags
   const conditions = readConditions(when)
   const write = (next: TxnCondition[]) =>
     onChange(
@@ -81,6 +94,8 @@ export function TransactionConditionFields({
           condition={condition}
           accounts={accounts}
           payees={payees}
+          categories={categoryChoices}
+          tags={tagChoices}
           amountCurrency={amountCurrency}
           warnings={conflicts.filter((c) => c.index === index).map((c) => c.message)}
           onChange={(next) => update(index, next)}
@@ -105,6 +120,8 @@ function ConditionRows({
   condition,
   accounts,
   payees,
+  categories,
+  tags,
   amountCurrency,
   warnings,
   onChange,
@@ -116,6 +133,8 @@ function ConditionRows({
   condition: TxnCondition
   accounts: AutomationOption[]
   payees: AutomationOption[]
+  categories?: AutomationOption[]
+  tags?: string[]
   amountCurrency: string
   warnings: string[]
   onChange: (next: TxnCondition) => void
@@ -124,7 +143,8 @@ function ConditionRows({
   const id = `automation-condition-${index}`
   const setValue = (value: TxnCondition['value']) => onChange({ ...condition, value })
   const several = takesSeveral(condition)
-  const options = pickOptions(condition.field, accounts, payees)
+  const options = pickOptions(condition.field, accounts, payees, categories, tags)
+  const fields = CONDITION_FIELDS
   const picked = several ? conditionValues(condition.value) : []
   const below = (
     <>
@@ -163,7 +183,7 @@ function ConditionRows({
     <Select
       id={`${id}-field`}
       value={condition.field}
-      options={CONDITION_FIELDS}
+      options={fields}
       onChange={(field) => onChange(newCondition(field as ConditionField))}
     />
   )
@@ -172,21 +192,48 @@ function ConditionRows({
       id={`${id}-op`}
       value={condition.op}
       options={opsFor(condition.field, picked.length > 1)}
-      onChange={(op) => onChange({ ...condition, op, value: reshapeAmount(condition, op) })}
+      onChange={(op) => onChange({ ...condition, op, value: reshapeValue(condition, op) })}
     />
   )
-  const valueControl = several ? (
-    <Select
-      id={`${id}-value`}
-      value=""
-      options={options.filter(([key]) => !picked.includes(key))}
-      placeholder={pickPlaceholder(condition.field, picked.length > 0)}
-      onChange={(value) => value && setValue(storedValues([...picked, value]))}
-    />
-  ) : (
-    <ConditionValue id={`${id}-value`} condition={condition} onChange={setValue} />
-  )
+  const valueControl =
+    several && inline ? (
+      // Several values are chips inside the one field; the list stays open to add another.
+      <ComboSelect
+        id={`${id}-value`}
+        multiple
+        value={picked}
+        options={options}
+        placeholder={pickPlaceholder(condition.field, false)}
+        colors={condition.field === 'category' ? colorsOf(categories) : undefined}
+        onChangeMany={(values) => setValue(storedValues(values))}
+        onCreate={condition.field === 'tags' ? async (name) => slugTag(name) || null : undefined}
+      />
+    ) : several ? (
+      <Select
+        id={`${id}-value`}
+        value=""
+        options={options.filter(([key]) => !picked.includes(key))}
+        placeholder={pickPlaceholder(condition.field, picked.length > 0)}
+        onChange={(value) => value && setValue(storedValues([...picked, value]))}
+      />
+    ) : (
+      <ConditionValue id={`${id}-value`} condition={condition} onChange={setValue} />
+    )
   if (inline) {
+    // The chips live inside the field here, so only the hint and any warning sit below.
+    const inlineBelow =
+      condition.op === 'contains' || condition.op === 'not_contains' || warnings.length ? (
+        <>
+          {(condition.op === 'contains' || condition.op === 'not_contains') && (
+            <span className="a3-muted">Separate several with commas — any of them counts.</span>
+          )}
+          {warnings.map((warning) => (
+            <span key={warning} className="a3-inline-error" role="status">
+              {warning}
+            </span>
+          ))}
+        </>
+      ) : null
     return (
       <div className="rl-cond" role="group" aria-label={`Condition ${index + 1}`}>
         <div className="rl-cond-line">
@@ -207,7 +254,7 @@ function ConditionRows({
             <X size={14} aria-hidden="true" />
           </button>
         </div>
-        {hasBelow && <div className="rl-cond-below">{below}</div>}
+        {inlineBelow && <div className="rl-cond-below">{inlineBelow}</div>}
       </div>
     )
   }
@@ -234,6 +281,23 @@ function ConditionRows({
   )
 }
 
+/** Category id → colour (Uncategorized takes the ledger's grey). */
+function colorsOf(categories: AutomationOption[] = []): Record<string, string> {
+  const colors: Record<string, string> = { [UNCATEGORIZED]: '#7c8595' }
+  for (const option of categories as Array<AutomationOption & { color?: string }>) {
+    if (option.color) colors[option.id] = option.color
+  }
+  return colors
+}
+
+/** A payee picked from the list and a payee name typed as text are different values: switching
+ *  between them starts the value over. */
+function reshapeValue(condition: TxnCondition, op: string): TxnCondition['value'] {
+  const text = (o: string) => o === 'contains' || o === 'not_contains'
+  if (condition.field === 'payee' && text(op) !== text(condition.op)) return ''
+  return reshapeAmount(condition, op)
+}
+
 /** Switching an amount to or from `between` carries the first figure across. */
 function reshapeAmount(condition: TxnCondition, op: string): TxnCondition['value'] {
   if (condition.field !== 'amount') return condition.value
@@ -247,6 +311,8 @@ const NOUN: Partial<Record<ConditionField, string>> = {
   account: 'an account',
   kind: 'a kind',
   payee: 'a payee',
+  category: 'a category',
+  tags: 'a tag',
 }
 
 function pickPlaceholder(field: ConditionField, more: boolean) {
@@ -258,8 +324,17 @@ function pickOptions(
   field: ConditionField,
   accounts: AutomationOption[],
   payees: AutomationOption[],
+  categories: AutomationOption[] = [],
+  tags: string[] = [],
 ): ReadonlyArray<readonly [string, string]> {
   if (field === 'kind') return KIND_OPTIONS
+  if (field === 'tags') return tags.map((tag) => [tag, tag] as const)
+  if (field === 'category') {
+    return [
+      [UNCATEGORIZED, 'Uncategorized'] as const,
+      ...categories.map((option) => [option.id, option.label] as const),
+    ]
+  }
   const list = field === 'account' ? accounts : field === 'payee' ? payees : []
   return list.map((option) => [option.id, option.label] as const)
 }

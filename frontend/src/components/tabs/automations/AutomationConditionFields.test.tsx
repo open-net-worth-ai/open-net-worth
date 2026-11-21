@@ -100,6 +100,8 @@ describe('transaction conditions', () => {
       'Kind',
       'Amount',
       'Payee',
+      'Category',
+      'Tags',
       'Description',
       'Memo',
     ])
@@ -278,7 +280,12 @@ describe('several values', () => {
     )
     cleanup()
     renderList({ conditions: [payeeIs(['pay_grab', 'pay_uber'])] })
-    expect(optionTexts('automation-condition-0-op')).toEqual(['is any of', 'is none of'])
+    expect(optionTexts('automation-condition-0-op')).toEqual([
+      'is any of',
+      'is none of',
+      'contains',
+      "doesn't contain",
+    ])
     expect(screen.getByRole('button', { name: 'Remove Grab' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Remove Uber' })).toBeTruthy()
   })

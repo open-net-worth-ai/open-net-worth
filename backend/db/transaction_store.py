@@ -119,6 +119,7 @@ from sqlalchemy import insert as sa_insert
 from sqlalchemy import update as sa_update
 from sqlalchemy.sql.elements import ColumnElement
 
+from backend.core import request_memo
 from backend.core.ids import new_id
 from backend.core.io import fire_db_write_hook
 from backend.db.engine import _lock_for_table
@@ -146,6 +147,13 @@ def txn_text(t: dict) -> str:
     of surfacing it. ``note`` now means nothing on a transaction; the per-split-line annotation
     was renamed ``TxnSplit.memo`` in the same pass."""
     return str(t.get("description") or "")
+
+
+def _scope_key(value: object) -> object:
+    """A hashable spelling of a filter that may be a str, a list of them, or None."""
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return tuple(sorted(str(v) for v in value))
+    return value
 
 
 class TransactionStore:
@@ -315,8 +323,14 @@ class TransactionStore:
         stmt = select(transactions.c.payload).order_by(transactions.c.seq)
         if conn is not None:
             return [r.payload for r in conn.execute(stmt)]
-        with self._eng().connect() as read_conn:
-            return [r.payload for r in read_conn.execute(stmt)]
+
+        def _read() -> list[dict]:
+            with self._eng().connect() as read_conn:
+                return [r.payload for r in read_conn.execute(stmt)]
+
+        # One decode of the whole table per request scope (core.request_memo); each caller still
+        # gets its own list of its own row dicts.
+        return request_memo.memo_rows(("transactions.all",), _read)
 
     def transfer_routes(self) -> frozenset:
         """``frozenset({from, to})`` for every live, unmerged transfer — read from the indexed
@@ -536,11 +550,29 @@ class TransactionStore:
             include_deleted=include_deleted,
             needs_review=needs_review,
         )
-        with self._eng().connect() as conn:
-            stmt = select(transactions).order_by(transactions.c.seq)
-            if clauses:
-                stmt = stmt.where(and_(*clauses))
-            items = [r.payload for r in conn.execute(stmt)]
+        stmt = select(transactions.c.payload).order_by(transactions.c.seq)
+        if clauses:
+            stmt = stmt.where(and_(*clauses))
+
+        def _read() -> list[dict]:
+            with self._eng().connect() as conn:
+                return [r.payload for r in conn.execute(stmt)]
+
+        # Same filters → one read per request scope (core.request_memo); `str(stmt)` alone would
+        # hide the bound values, so the key is the filters themselves.
+        key = (
+            "transactions.query_txns",
+            _scope_key(kind),
+            _scope_key(category),
+            account_id,
+            _scope_key(account_ids),
+            date_from,
+            date_to,
+            _scope_key(payee_id),
+            include_deleted,
+            needs_review,
+        )
+        items = request_memo.memo_rows(key, _read)
         if q:
             needle = q.strip().lower()
             if needle:

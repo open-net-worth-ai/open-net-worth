@@ -70,6 +70,7 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import insert as sa_insert
 from sqlalchemy import update as sa_update
 
+from backend.core import request_memo
 from backend.core.errors import ValidationError
 from backend.core.file_ext import file_ext as _file_ext
 from backend.core.ids import new_id
@@ -258,6 +259,9 @@ class StatementStore:
             return {r.statement_id: r.progress for r in rows}
 
     def all(self) -> list[dict]:
+        return request_memo.memo_rows(("statements.all",), self._read_all)
+
+    def _read_all(self) -> list[dict]:
         with self._eng().connect() as conn:
             rows = [
                 dict(r._mapping)

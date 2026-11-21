@@ -22,9 +22,11 @@
 
 import { useDataVersion } from '../useDataVersion'
 import { type QueryCacheResult, useQueryCache } from '../../state/queryCache'
+import { querySource } from './dataQuery'
 import { fetchJson } from './fetchJson'
 import {
   CASHFLOW_PROJECTIONS_KEY,
+  COMMITMENTS_COVERAGE_HORIZON_MONTHS,
   COMMITMENTS_SUMMARY_KEY,
   commitmentsCoverageKey,
   DIVIDEND_SUMMARY_KEY,
@@ -68,7 +70,7 @@ export function usePortfolioAnalytics(): QueryCacheResult<PortfolioAnalytics> {
   const version = useDataVersion([...PORTFOLIO_SIGNALS])
   return useQueryCache<PortfolioAnalytics>(
     PORTFOLIO_ANALYTICS_KEY,
-    () => fetchJson<PortfolioAnalytics>(PORTFOLIO_ANALYTICS_KEY),
+    () => querySource<PortfolioAnalytics>('portfolio_analytics', {}, PORTFOLIO_ANALYTICS_KEY),
     { version },
   )
 }
@@ -78,7 +80,7 @@ export function useNetWorthStats(): QueryCacheResult<NetWorthStats> {
   const version = useDataVersion([...PORTFOLIO_SIGNALS])
   return useQueryCache<NetWorthStats>(
     NETWORTH_STATS_KEY,
-    () => fetchJson<NetWorthStats>(NETWORTH_STATS_KEY),
+    () => querySource<NetWorthStats>('net_worth_stats', {}, NETWORTH_STATS_KEY),
     { version },
   )
 }
@@ -88,7 +90,7 @@ export function useCommitmentsSummary(): QueryCacheResult<CommitmentsSummary> {
   const version = useDataVersion(['ledger', 'accounts', 'commitments', 'assets'])
   return useQueryCache<CommitmentsSummary>(
     COMMITMENTS_SUMMARY_KEY,
-    () => fetchJson<CommitmentsSummary>(COMMITMENTS_SUMMARY_KEY),
+    () => querySource<CommitmentsSummary>('commitments_summary', {}, COMMITMENTS_SUMMARY_KEY),
     { version },
   )
 }
@@ -102,17 +104,29 @@ export function useCommitmentsCoverageRead(
 ): QueryCacheResult<PortfolioCoverage> {
   const version = useDataVersion(['ledger', 'accounts', 'commitments', 'assets'])
   const key = commitmentsCoverageKey(months, floor)
-  return useQueryCache<PortfolioCoverage>(key, () => fetchJson<PortfolioCoverage>(key), {
-    version,
-  })
+  return useQueryCache<PortfolioCoverage>(
+    key,
+    () =>
+      querySource<PortfolioCoverage>(
+        'commitments_coverage',
+        { months: months ?? COMMITMENTS_COVERAGE_HORIZON_MONTHS, floor },
+        key,
+      ),
+    { version },
+  )
 }
 
 /** One month rolled up: envelopes, goals, month-over-month moves, spend calendar, recurring,
  *  cash flow, Ready-to-Assign. */
 export function usePlanningSummary(ym?: string): QueryCacheResult<PlanningSummary> {
   const version = useDataVersion([...PLANNING_SIGNALS])
-  const key = `/api/planning/summary?ym=${resolveMonth(ym)}`
-  return useQueryCache<PlanningSummary>(key, () => fetchJson<PlanningSummary>(key), { version })
+  const month = resolveMonth(ym)
+  const key = `/api/planning/summary?ym=${month}`
+  return useQueryCache<PlanningSummary>(
+    key,
+    () => querySource<PlanningSummary>('planning_summary', { ym: month }, key),
+    { version },
+  )
 }
 
 /** Trailing-window income/expense rollups. */
