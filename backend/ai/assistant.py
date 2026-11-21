@@ -5264,24 +5264,13 @@ async def _run_turn(
                             # a queued follow-up does not imply that earlier instructions
                             # have expired.
 
-                        # If any tool proposed a change (propose_* positions OR the
-                        # skill-authoring tools), end the turn here — the UI shows the
-                        # confirm card and the user drives the next step. Keying off the
-                        # emitted proposed_change (not just the name prefix) makes the
-                        # skill create/update/delete confirm gate deterministic, matching
-                        # the PROPOSED CHANGE PROTOCOL in the system prompt.
-                        _propose_turn = emitted_proposed or any(
-                            tu["name"].startswith("propose_") for tu in pending_tool_uses
-                        )
-                        # A name-prefixed call whose id never entered `_round_awaiting_ids`
-                        # (already executed, or a legacy `stage_write` propose/apply-merge
-                        # tool) is a card-worthy reason the abort above cannot have touched —
-                        # same rule as the `if proposed and not _awaiting_approval` tracking.
-                        _round_other_propose_signal = _round_other_propose_signal or any(
-                            tu["name"].startswith("propose_")
-                            and tu["id"] not in _round_awaiting_ids
-                            for tu in pending_tool_uses
-                        )
+                        # If any tool emitted a confirm card, end the turn here — the UI
+                        # shows it and the user drives the next step, matching the PROPOSED
+                        # CHANGE PROTOCOL in the system prompt. Keyed on the card itself,
+                        # never on a ``propose_`` name: propose_paper_orders shows no card,
+                        # and ending on its name cut every Autopilot review off before its
+                        # memo (2026-11-22).
+                        _propose_turn = emitted_proposed
                         if (
                             _injected_events
                             and _propose_turn
