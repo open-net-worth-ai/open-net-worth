@@ -414,8 +414,11 @@ again). Every Assigned figure it sets adds a line to that category's note, such 
 `ONW 2026-10: assigned 120.00 (was 100.00)`; the last ten such lines are kept and the rest of the
 note is left as you wrote it.
 
-**Needs your review.** If the same transaction (or the same month and category's Assigned)
-changed on both sides and they now disagree, nothing is overwritten: both versions appear side by
+**Needs your review.** A transaction changed on both sides in different fields (a memo here, a
+category in YNAB) keeps both changes when the sync runs both ways; a category and a split's lines
+count as one field, and so do a row's amount, accounts and kind. If the same field of a
+transaction (or the same month and category's Assigned) changed on both sides and they now
+disagree, nothing is overwritten: both versions appear side by
 side with **Keep Open Net Worth's** and **Keep YNAB's**, and your choice is applied to both sides.
 Things YNAB's API cannot take are listed there too, with the reason — for example a split's date,
 amount or lines (it ignores them), a transaction dated in the future, or a currency other than the

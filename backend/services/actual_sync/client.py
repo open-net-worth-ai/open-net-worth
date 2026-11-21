@@ -331,6 +331,31 @@ _BEHIND_PROXY = (
 )
 
 
+# A sign-in proxy that turns away a request with no browser behind it answers 401 or 403 itself,
+# in plain text; Actual's own refusals are JSON.
+_PROXY_REFUSED = (
+    "The server turned the request away before it reached Actual: a sign-in proxy in front of "
+    "Actual wants its own sign-in. Add the header it accepts under Proxy headers, or let these "
+    "paths through: /account, /info, /sync, /data and /data-file-index.txt."
+)
+
+
+def _from_actual(status, auth) -> bool:
+    """Whether a 401/403 came from Actual (a JSON body) rather than a proxy in front of it. The
+    login's error carries the body in its text, after the status."""
+    if status is not None:
+        body = status.response.text
+    elif auth is not None and "HTTP error" in str(auth):
+        body = str(auth).partition("': '")[2].removesuffix("'")
+    else:
+        return True
+    try:
+        json.loads(body)
+    except ValueError:
+        return False
+    return True
+
+
 def _not_json(exc: BaseException) -> bool:
     import pydantic
 
@@ -362,6 +387,8 @@ def _plain_error(exc: Exception) -> Stopped:
         code = int(found[1]) if found else code
         if "Could not validate password on login" in said:
             code = 401
+    if code in (401, 403) and not _from_actual(status, auth):
+        return SignInRefused(_PROXY_REFUSED)
     if code in (401, 403):
         return SignInRefused("Actual refused the sign-in. Check its password or token.")
     elif has(ax.UnknownFileId):

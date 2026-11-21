@@ -392,7 +392,22 @@ def test_wrong_password_plain_error(store, work, fake, error, words):
 
 def _login_error(status: int) -> actual_exc.AuthorizationError:
     """What actualpy raises for a login answered with ``status`` (any above 400)."""
-    return actual_exc.AuthorizationError(f"Server returned an HTTP error '{status}': '{URL}'")
+    body = f'{{"status":"error","reason":"unauthorized","details":"{URL}"}}'
+    return actual_exc.AuthorizationError(f"Server returned an HTTP error '{status}': '{body}'")
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_plain_text_refusal_is_a_sign_in_proxy_not_actual(store, work, fake, status):
+    """Pangolin answers a request with no browser behind it 401 "Unauthorized", in plain text."""
+    fake.build_error = actual_exc.AuthorizationError(
+        f"Server returned an HTTP error '{status}': 'Unauthorized'"
+    )
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    never_leaks(err.value)
+    assert "a sign-in proxy in front of Actual wants its own sign-in" in err.value.message
+    assert "Proxy headers" in err.value.message
+    assert store.public()["last_status"] == "auth_error"
 
 
 @pytest.mark.parametrize(
@@ -970,7 +985,7 @@ def test_a_sync_run_that_cannot_connect_leaves_no_copy(store, work, fake):
 def refused(monkeypatch):
     def refuse(_creds):
         raise actual_exc.AuthorizationError(
-            f"Server returned an HTTP error '401': '{URL} {PASSWORD}'"
+            f"Server returned an HTTP error '401': '{{\"reason\":\"{URL} {PASSWORD}\"}}'"
         )
 
     monkeypatch.setattr(client, "_list_files", refuse)

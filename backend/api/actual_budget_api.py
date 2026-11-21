@@ -128,6 +128,8 @@ class MigrationRequest(BaseModel):
     account_types: Optional[dict[str, str]] = None
     # For a budget that states no currency.
     currency: Optional[str] = None
+    # Keep this book's unused starter categories rather than removing them at import.
+    keep_starters: bool = False
 
 
 def _migration(kind: str, body: MigrationRequest) -> dict:
@@ -143,6 +145,7 @@ def _migration(kind: str, body: MigrationRequest) -> dict:
             recheck_of=body.recheck_of if kind == "preview" else None,
             account_types=body.account_types,
             currency=body.currency,
+            keep_starters=body.keep_starters,
         )
     except ConfirmationRequired as exc:
         raise HTTPException(

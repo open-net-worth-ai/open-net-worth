@@ -55,7 +55,20 @@ leaving the field blank keeps it.
 **Behind a sign-in proxy?** If the proxy answers instead of Actual, with a redirect or its own login
 page, the connector says so. Either add the header your proxy accepts under **Proxy headers**, or let
 these paths through to Actual without the proxy's login: `/account`, `/info`, `/sync`, `/data` and
-`/data-file-index.txt`. The sync doesn't use `/api`.
+`/data-file-index.txt`. The sync doesn't use `/api`. If the proxy turns the app away, the connector
+says the proxy wants its own sign-in, rather than blaming your Actual password.
+
+**Pangolin**, with its own sign-in or an identity provider such as PocketID, takes either header,
+and keeps its sign-in for your browser:
+
+- A **share link** for the Actual resource: Pangolin shows it as two headers,
+  `P-Access-Token-Id: …` and `P-Access-Token: …`. Paste both lines under **Proxy headers**. Pangolin
+  offers 30 days by default; tick never-expire, or make a new link when it runs out.
+- **Header authentication** on the resource, with a user name and password you choose: write it as
+  `Authorization: Basic …`, the two joined as `name:password` and base64-encoded.
+
+Pangolin's rules can instead let the paths above through without a sign-in, but then anyone can
+reach your Actual sign-in from the internet, guarded only by Actual's own password.
 
 On a hosted instance the form says Actual isn't available, and **Data Sync** doesn't list it.
 
@@ -91,7 +104,7 @@ dropdown for each:
 | In Actual | Types you can choose | Starts as |
 |---|---|---|
 | On budget | Cash, Credit | Credit if the balance is negative and the name looks like a card; otherwise Cash |
-| Off budget | Fixed deposit, Investment, Retirement, Receivable, Loan | Investment |
+| Off budget | Fixed deposit, Investment, Retirement, Receivable, Loan | Loan if the balance is negative or the name says loan, mortgage or debt; otherwise Investment |
 
 Each one starts on a suggestion, marked `(suggested)`, and **Import** stays off until every account
 has been looked at. Pick one in its dropdown, even the one it suggests, or press **Accept
@@ -110,7 +123,8 @@ you always see them. **Show more notes** opens the rest.
 
 ## What comes across, and how
 
-- **Income categories** come in as income categories, with no envelope. Salary raises Ready to
+- **Income categories** come in as income categories, with no envelope; the review's **Envelope**
+  column says so. Salary raises Ready to
   Assign when it arrives. They pair only with your income categories, and your spending categories
   only with spending ones. An income category of yours that sits in an envelope can't be matched,
   because what comes in would stay in the envelope; the import makes a new one beside it.
@@ -187,8 +201,12 @@ same as YNAB's page. **Actual connection…** in the menu opens the connector's 
 
 What one direction held back isn't lost. Switch back to both ways and the next sync moves it.
 
-**When both sides changed the same thing.** It waits in the review list, whichever direction you
-chose, and you pick the version to keep. The same goes for a row someone edits in Actual during
+**When both sides changed the same transaction.** With the sync both ways, changes to different
+fields both stand: a note you wrote here and a category picked in Actual end up on both sides. A
+category and a split's lines count as one field, and so do a row's amount, accounts and kind. When
+both sides changed the same field to different values, it waits in the review list, whichever
+direction you chose, and you pick the version to keep. In one direction, any change on both sides
+waits there. The same goes for a row someone edits in Actual during
 the moments a sync is writing it: the sync checks each row just before writing and leaves one that
 moved. That narrows the gap to milliseconds, plus the time a request takes to reach your server. It
 can't close it, because an Actual server has no way to refuse a write over a newer one: if your edit
@@ -200,12 +218,16 @@ device whose clock runs more than ten minutes behind can lose the same way.
 - Future-dated transactions go across.
 - A split can be edited here, and an existing row split: its date, amount and lines are all sent. A
   split whose lines don't add up to its total is refused and goes to the review list. Changing a
-  transfer's accounts or category, or turning a row into a transfer or back, stays in the review list.
+  transfer's accounts, or turning a row into a transfer or back, stays in the review list. So does
+  changing a transfer's category, except on a transfer between a budget account and an off-budget
+  one: Actual keeps that category on the budget side, and it's sent.
 - A category you clear in Actual stays cleared here: no rule or payee default fills it back in,
   until you edit that row here.
-- A Starting Balance changed in Actual comes across, unless the direction is **To Actual**: your
-  opening balance moves by the same amount, so a change you made to it here stays. Its date follows
-  Actual's when it still matched it. A Starting Balance changed here isn't sent to Actual.
+- A Starting Balance changes both ways, by difference: change it in Actual and your opening
+  balance here moves by the same amount; change your opening balance here and Actual's Starting
+  Balance moves by that amount. Changed on both sides, each takes the other's difference, so
+  neither change is lost. Actual's date follows here when it still matched yours; a date you set
+  here stays here. **To Actual** holds Actual's changes back, and **To this book** holds yours.
 - A payee you clear here is cleared in Actual too.
 - Actual has no category on an off-budget row, or on a transfer between two budget accounts. A
   category you give one here stays here and isn't sent; Actual's blank doesn't clear it.
@@ -237,15 +259,25 @@ The import removes the ones you never used, so your Actual categories don't sit 
 half-matching set. The review lists them in its notes, which may be under **Show more notes**. A
 starter you renamed, funded or put a transaction on is always kept. To keep another, pick it for
 one of Actual's categories in the **Categories** tab: Actual's "Food" can go to Groceries, and the
-two are paired from then on.
+two are paired from then on. To keep them all, press **Keep them** beside that note. The sync then
+adds them to Actual, ready for you to fold Actual's categories into, as below.
 
 **Simplifying your categories.** Each Actual category pairs with one category here, so the review
 can't fold several into one. Do that after the import, here: in **Manage categories**, delete the
 category you're folding away and pick the one to keep under **Reassign activity to**. With the sync
 on, both ways or To Actual, Actual follows: its transactions move to the category you kept, which
-is created in Actual if it's new there, and the folded one is hidden in Actual, never deleted.
+is created in Actual if it's new there, and the folded one is hidden in Actual, never deleted. Its
+Assigned in Actual is set to 0 in every month, as it holds nothing here any more, so Actual's To
+Budget doesn't count it twice. With the sync set to To this book, Actual isn't changed.
 Renaming a category or moving it to another group here reaches Actual too. See
 [Categories and payees](categories-payees.md#manage-categories).
+
+**Starting your budget over here.** To budget afresh with a simpler set of categories, keeping
+your accounts and transactions, fold the categories as above, then use
+[Start fresh](budgeting.md#start-fresh) from the month you want to begin. It clears that month's
+Assigned and starts Ready to Assign from your cash then, with Undo. With the sync on, both ways or
+To Actual, the cleared Assigned reaches Actual too; set it to To this book first to leave Actual's
+budget as it is.
 
 **An income category you later put in an envelope** keeps syncing, but what it receives stays in
 that envelope and doesn't raise Ready to Assign. **Worth checking** warns you, and its Assigned stays

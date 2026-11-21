@@ -59,19 +59,37 @@ def test_a_starting_balance_date_changed_in_actual_comes_across(world):
     assert sync()["summary"] == "Nothing changed"
 
 
-def test_an_opening_edited_only_here_is_left_alone(world):
+def test_an_opening_edited_here_reaches_actual(world):
     enable()
+    sync()
+    acct = account_here("ACME Checking")
+    as_person(ledger_service.set_account_opening, acct["id"], 1200.0, "2019-11-30")
+    world.calls.clear()
+    sync()
+    sent = world.row("transactions", "t-open")
+    assert sent["amount"] == 120_000
+    assert sent["date"] == 20200101, "a date here is this book's own: never sent"
+    assert _opening() == (1200.0, "2019-11-30")
+    assert open_items() == []
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_an_opening_edited_here_waits_in_from_actual_mode(world):
+    enable("from_ynab")
     sync()
     acct = account_here("ACME Checking")
     as_person(ledger_service.set_account_opening, acct["id"], 1200.0, PAST)
     world.calls.clear()
     sync()
-    assert _opening() == (1200.0, PAST)
-    assert world.row("transactions", "t-open")["amount"] == 100_000
+    assert world.row("transactions", "t-open")["amount"] == 100_000 and writes_seen(world) == []
+    enable("both")
+    sync()
+    assert world.row("transactions", "t-open")["amount"] == 120_000
 
 
-def test_both_sides_moved_keeps_the_change_made_here(world):
-    """Actual's change is applied as a difference, so an adjustment made here survives it."""
+def test_both_sides_moved_each_takes_the_others_difference(world):
+    """Actual's change is applied here as a difference, and ours there: neither is lost."""
     enable()
     sync()
     acct = account_here("ACME Checking")
@@ -80,6 +98,9 @@ def test_both_sides_moved_keeps_the_change_made_here(world):
     world.queue.clear()
     sync()
     assert _opening() == (1700.0, PAST)
+    assert world.row("transactions", "t-open")["amount"] == 170_000
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
 
 
 # ── a payee cleared here ──

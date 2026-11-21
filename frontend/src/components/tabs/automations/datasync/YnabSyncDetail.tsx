@@ -306,7 +306,10 @@ export function YnabSyncDetail({
               <div className="a3-block-h">How it decides</div>
               <ul className="a3-rules">
                 <li>{flowLine(app, status.direction, tracking)}</li>
-                <li>A change on both sides waits for you.</li>
+                <li>
+                  A transaction changed on both sides keeps both changes when they touch different
+                  fields; the same field changed both ways waits for you.
+                </li>
                 {status.direction !== 'from_ynab' && trailRule(app, tracking) && (
                   <li>{trailRule(app, tracking)}</li>
                 )}

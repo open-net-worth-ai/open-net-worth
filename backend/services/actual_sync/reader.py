@@ -16,11 +16,15 @@ from backend.services.budget_app import current
 from backend.services.ynab_migration import source
 
 _CARD_LIKE = re.compile(r"\b(card|credit|visa|mastercard|amex|american express|discover)\b", re.I)
+_LOAN_LIKE = re.compile(r"\b(loan|mortgage|debt|owed|lend\w*|borrow\w*)\b", re.I)
 
 
 def _with_default_type(account: dict) -> dict:
+    """An off-budget account is an asset, unless it is owed: a balance below zero, or a name that
+    says loan, mortgage or debt. A budget account in debt with a card's name is a card."""
     if not account.get("on_budget"):
-        return {**account, "type": "otherAsset"}
+        owed = account.get("balance", 0) < 0 or _LOAN_LIKE.search(account.get("name") or "")
+        return {**account, "type": "otherDebt" if owed else "otherAsset"}
     if account.get("balance", 0) < 0 and _CARD_LIKE.search(account.get("name") or ""):
         return {**account, "type": "creditCard"}
     return account

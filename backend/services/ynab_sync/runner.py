@@ -276,7 +276,7 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> str | None:
             recorder.phase("reconciling Assigned")
             _assigned_phase(ctx, client, base, change, tally, first, st, fresh)
             _compared(base, fresh)
-        openings.pull(ctx, st, tally)
+        openings.sync(ctx, st, tally, client)
         starts.review(ctx, st)
         if current().caps.memo_tags and not st.get("note_tags_read"):
             recorder.phase("reading tags in notes")
