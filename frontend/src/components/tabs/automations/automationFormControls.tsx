@@ -47,6 +47,7 @@ export function Select({
   placeholder,
   needed,
   onChange,
+  onCreate,
 }: {
   id: string
   value: string
@@ -54,6 +55,8 @@ export function Select({
   placeholder?: string
   needed?: boolean
   onChange: (value: string) => void
+  /** Rule editor only: offer "Create “…”" when a typed name matches nothing. */
+  onCreate?: (name: string) => Promise<string | null>
 }) {
   const combo = useContext(ComboDropdowns)
   if (combo) {
@@ -65,6 +68,7 @@ export function Select({
         placeholder={placeholder ?? options.find(([key]) => key === '')?.[1]}
         needed={needed}
         onChange={onChange}
+        onCreate={onCreate}
       />
     )
   }
@@ -96,6 +100,7 @@ export function OptionSelect({
   placeholder: string
   needed?: boolean
   onChange: (value: string) => void
+  onCreate?: (name: string) => Promise<string | null>
 }) {
   return (
     <Select

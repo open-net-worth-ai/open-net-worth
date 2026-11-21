@@ -188,7 +188,7 @@ export function RulesView({
         <EmptyState
           icon={<Workflow size={28} strokeWidth={1.5} aria-hidden="true" />}
           title="No rules yet"
-          body="A rule handles each new transaction for you: when its payee, amount, account or text matches, it sets the category or payee, adds tags or a note, or splits it. No AI, and it runs instantly. For older transactions, use Apply to past matches or Run rules. Use a Lucius automation when a judgement call is needed."
+          body="A rule sets the category, payee or tags of each new transaction, or splits it — instantly, with no AI. Start from a template below."
         />
       ) : (
         <>
@@ -213,7 +213,9 @@ export function RulesView({
           )}
         </>
       )}
-      {!needle && <RuleTemplates onTemplate={(seed) => setEditor({ seed })} />}
+      {!needle && (
+        <RuleTemplates categories={categories} onTemplate={(seed) => setEditor({ seed })} />
+      )}
       {editor && (
         <RuleEditorModal
           rule={editor.rule}

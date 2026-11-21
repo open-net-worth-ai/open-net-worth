@@ -1,7 +1,7 @@
 // "Start from a template" for Rules, in the Lucius gallery's own cards.
 import { useState } from 'react'
 import { Briefcase, Coffee, House, Pencil, Receipt, Repeat, Split, Wallet } from 'lucide-react'
-import { RULE_TEMPLATES } from './ruleTemplateList'
+import { RULE_TEMPLATES, seedTemplate } from './ruleTemplateList'
 import type { RuleForm } from './ruleModel'
 
 const ICONS: Record<string, typeof Pencil> = {
@@ -15,7 +15,14 @@ const ICONS: Record<string, typeof Pencil> = {
   'work-card': Briefcase,
 }
 
-export function RuleTemplates({ onTemplate }: { onTemplate: (seed: RuleForm) => void }) {
+export function RuleTemplates({
+  categories,
+  onTemplate,
+}: {
+  /** The owner's categories: a template picks one of these by name, never invents one. */
+  categories: Array<{ id: string; label: string }>
+  onTemplate: (seed: RuleForm) => void
+}) {
   const [showAll, setShowAll] = useState(false)
   const templates = showAll ? RULE_TEMPLATES : RULE_TEMPLATES.slice(0, 4)
   return (
@@ -33,7 +40,7 @@ export function RuleTemplates({ onTemplate }: { onTemplate: (seed: RuleForm) => 
               type="button"
               className="a3-tpl"
               aria-label={`${template.title} template`}
-              onClick={() => onTemplate(template.seed())}
+              onClick={() => onTemplate(seedTemplate(template, categories))}
             >
               <span className="a3-tpl-ic">
                 <Icon size={15} strokeWidth={1.7} aria-hidden="true" />

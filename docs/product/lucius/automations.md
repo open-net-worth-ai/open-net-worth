@@ -243,8 +243,10 @@ Balance or re-split a split.
 
 Under the list, **Start from a template** has the rules most books need: clean up a payee, a
 subscription, your salary, rent or a fixed bill, split a shared purchase, coffee and snacks, bank
-fees, and tagging a work card. Each opens the editor pre-filled; you pick your own payee, account
-and category.
+fees, and tagging a work card. Each opens the editor pre-filled. A template never invents a label:
+when your book already has a category with a usual name (Subscriptions, Salary, Groceries…) it is
+picked for you, otherwise the field is left for you to choose. In the editor, typing a payee or
+category that doesn't exist yet offers **Create** it.
 
 **New rule** offers **Create with Lucius** (describe it in chat and Lucius drafts it for you to
 confirm) or **Set up manually**. Another quick start is **Create rule…** on a transaction: it opens a Rule that matches

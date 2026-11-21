@@ -31,6 +31,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 import { Automations } from '../../Automations'
 import { RulesView } from './RulesView'
+import { RULE_TEMPLATES, seedTemplate } from './ruleTemplateList'
 
 const OPTIONS = {
   accounts: [{ id: 'acc_card', label: 'Card', currency: 'USD' }],
@@ -386,6 +387,47 @@ describe('Automations Rules tab', () => {
   })
 })
 
+describe('Rule editor actions', () => {
+  it('lists actions in the order they were added', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove set category' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add tags' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set category' }))
+    const labels = [...document.querySelectorAll('.rl-action-head label')].map((l) => l.textContent)
+    expect(labels).toEqual(['Add tags', 'Set category'])
+  })
+
+  it('offers to create a payee nothing matches, through the payee API', async () => {
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set payee' }))
+    authFetch.mockImplementation((url: string, init?: { method?: string }) =>
+      url === '/api/payees' && init?.method === 'POST'
+        ? reply({ id: 'pay_new', name: 'Newco' })
+        : url.startsWith('/api/categories')
+          ? reply(CATEGORIES)
+          : Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) }),
+    )
+    const field = screen.getByLabelText('Set payee')
+    fireEvent.focus(field)
+    fireEvent.change(field, { target: { value: 'Newco' } })
+    fireEvent.mouseDown(screen.getByRole('option', { name: /create “newco”/i }))
+    await waitFor(() =>
+      expect(authFetch).toHaveBeenCalledWith(
+        '/api/payees',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    )
+    await waitFor(() => expect((field as HTMLInputElement).value).toBe('Newco'))
+  })
+})
+
 describe('Rule templates', () => {
   it('opens the editor pre-filled from a template, leaving the owner to pick their own values', async () => {
     render(<Harness initial={[]} />)
@@ -393,6 +435,30 @@ describe('Rule templates', () => {
     expect(await screen.findByLabelText('Set payee')).toBeTruthy()
     expect(screen.queryByLabelText('Set category')).toBeNull()
     expect(document.getElementById('automation-condition-0-field')!.textContent).toBe('Description')
+  })
+
+  it('never invents a label: a book with no matching category gets blanks and no tags', () => {
+    for (const template of RULE_TEMPLATES) {
+      const seed = seedTemplate(template, [{ id: 'cat_x', label: 'Something else' }])
+      expect(seed.tags, template.key).toEqual([])
+      expect(seed.category, template.key).toBe('')
+      expect(seed.splits.every((line) => line.category === '' && line.tags.length === 0)).toBe(true)
+    }
+  })
+
+  it('picks the owner’s own category by name when the book has one', () => {
+    const book = [
+      { id: 'cat_subs', label: 'subscriptions' },
+      { id: 'cat_groc', label: 'Groceries' },
+      { id: 'cat_home', label: 'Household' },
+    ]
+    const byKey = Object.fromEntries(RULE_TEMPLATES.map((t) => [t.key, t]))
+    expect(seedTemplate(byKey['subscription']!, book).category).toBe('cat_subs')
+    expect(seedTemplate(byKey['shared-purchase']!, book).splits.map((l) => l.category)).toEqual([
+      'cat_groc',
+      'cat_home',
+    ])
+    expect(seedTemplate(byKey['salary']!, book).category).toBe('')
   })
 
   it('a split template starts with half to one line and the rest to another', async () => {

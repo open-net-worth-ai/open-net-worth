@@ -1,7 +1,8 @@
 // The app's own dropdown for the Rule editor, in place of the browser's <select> list: a field that
 // opens a popover anchored under it (the ledger's picker chrome). A long list (categories, payees,
 // accounts) takes typing to filter; a short one (all / any, an operator) is a plain button.
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Plus } from '../../../ui/icons'
 import { scrollHiIntoView, useAnchoredFixed } from '../accounts/pickers'
 
 const SEARCH_FROM = 8
@@ -13,6 +14,7 @@ export function ComboSelect({
   placeholder,
   needed,
   onChange,
+  onCreate,
 }: {
   id: string
   value: string
@@ -20,16 +22,24 @@ export function ComboSelect({
   placeholder?: string
   needed?: boolean
   onChange: (value: string) => void
+  /** Offer "Create “…”" for a typed name nothing matches; resolves to the new id. */
+  onCreate?: (name: string) => Promise<string | null>
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [hi, setHi] = useState(0)
   const ref = useRef<HTMLDivElement | null>(null)
   const popRef = useRef<HTMLDivElement | null>(null)
-  const searchable = options.length >= SEARCH_FROM
+  // A name made here shows at once, before the list it came from is fetched again.
+  const [made, setMade] = useState<Array<readonly [string, string]>>([])
+  const [error, setError] = useState<string | null>(null)
+  const all = [...options, ...made.filter(([key]) => !options.some(([k]) => k === key))]
+  const searchable = Boolean(onCreate) || all.length >= SEARCH_FROM
   const ql = q.trim().toLowerCase()
-  const items = options.filter(([, label]) => label.toLowerCase().includes(ql))
-  const selected = options.find(([key]) => key === value)?.[1] ?? ''
+  const items = all.filter(([, label]) => label.toLowerCase().includes(ql))
+  const canCreate =
+    Boolean(onCreate) && ql !== '' && !all.some(([, label]) => label.toLowerCase() === ql)
+  const selected = all.find(([key]) => key === value)?.[1] ?? ''
   const fx = useAnchoredFixed(open, ref as React.RefObject<HTMLElement>, 280)
 
   useEffect(() => {
@@ -62,6 +72,19 @@ export function ComboSelect({
     onChange(key)
     close()
   }
+  async function create() {
+    const name = q.trim()
+    close()
+    setError(null)
+    try {
+      const created = await onCreate?.(name)
+      if (!created) return
+      setMade((current) => [...current, [created, name] as const])
+      onChange(created)
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Could not create it.')
+    }
+  }
   function onKey(event: KeyboardEvent) {
     if (!open) {
       if (['ArrowDown', 'Enter', ' '].includes(event.key) && !(searchable && event.key === ' ')) {
@@ -72,7 +95,7 @@ export function ComboSelect({
     }
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      setHi((h) => Math.min(h + 1, items.length - 1))
+      setHi((h) => Math.min(h + 1, items.length - (canCreate ? 0 : 1)))
     } else if (event.key === 'ArrowUp') {
       event.preventDefault()
       setHi((h) => Math.max(h - 1, 0))
@@ -80,6 +103,7 @@ export function ComboSelect({
       event.preventDefault()
       const item = items[hi]
       if (item) choose(item[0])
+      else if (canCreate) void create()
     } else if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
@@ -157,7 +181,93 @@ export function ComboSelect({
                 {label}
               </button>
             ))}
-            {items.length === 0 && <div className="acct-payf-empty">No matches</div>}
+            {canCreate && (
+              <button
+                type="button"
+                role="option"
+                aria-selected={false}
+                className={`acct-payf-item rl-combo-create${hi === items.length ? ' hi' : ''}`}
+                onMouseEnter={() => setHi(items.length)}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void create()
+                }}
+              >
+                <Plus size={12} aria-hidden="true" /> Create “{q.trim()}”
+              </button>
+            )}
+            {items.length === 0 && !canCreate && <div className="acct-payf-empty">No matches</div>}
+          </div>
+        </div>
+      )}
+      {error && (
+        <span className="a3-inline-error" role="alert">
+          {error}
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** A link-style button opening a short menu that floats above the page, so a scrolling
+ *  dialog body never clips it (an absolutely placed menu inside one was cut off). */
+export function AnchoredMenu({
+  label,
+  trigger,
+  items,
+}: {
+  label: string
+  trigger: ReactNode
+  items: Array<{ label: string; onSelect: () => void }>
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement | null>(null)
+  const fx = useAnchoredFixed(open, ref as React.RefObject<HTMLElement>, 220)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+  return (
+    <div className="rl-anchored" ref={ref}>
+      <button
+        type="button"
+        className="a3-linkbtn"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        onKeyDown={(event) => event.key === 'Escape' && setOpen(false)}
+      >
+        {trigger}
+      </button>
+      {open && (
+        <div
+          className="acct-payf-pop rl-menu-pop"
+          style={fx ?? undefined}
+          role="menu"
+          aria-label={label}
+        >
+          <div className="acct-payf-scroll">
+            {items.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                role="menuitem"
+                className="acct-payf-item"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setOpen(false)
+                  item.onSelect()
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         </div>
       )}

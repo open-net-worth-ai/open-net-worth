@@ -2,20 +2,16 @@
 // label on top, added from "Add action" and removed with ×. The two options under them say how a
 // row that already has a category is treated, and whether Rules after this one still run.
 import { useState } from 'react'
-import type { AutomationOption } from '../../../../api/automations'
 import { Plus, X } from '../../../../ui/icons'
 import { Checkbox } from '../../../ui'
 import { TagField } from '../../accounts/TagField'
-import { AutomationMenu } from '../AutomationMenu'
+import { AnchoredMenu } from '../ComboSelect'
 import { Input, OptionSelect } from '../automationFormControls'
+import { creators, type RuleChoices } from './ruleCreators'
 import { RuleSplitFields } from './RuleSplitFields'
 import { blankSplit, type RuleForm } from './ruleModel'
 
-export interface RuleChoices {
-  accounts: AutomationOption[]
-  payees: AutomationOption[]
-  categories: AutomationOption[]
-}
+export type { RuleChoices }
 
 type ActionKey = 'category' | 'split' | 'tags' | 'payee' | 'note' | 'memo' | 'route'
 
@@ -79,7 +75,8 @@ export function RuleActionFields({
     )
     return used.length > 0 ? used : ['category']
   })
-  const visible = ACTIONS.filter(([key]) => shown.includes(key))
+  // In the order they were added: a later action never jumps above an earlier one.
+  const visible = shown.flatMap((key) => ACTIONS.filter(([k]) => k === key))
   const addable = ACTIONS.filter(([key]) => {
     const other = EXCLUSIVE[key]
     return !shown.includes(key) && !(other && shown.includes(other))
@@ -120,10 +117,8 @@ export function RuleActionFields({
         </div>
       ))}
       {addable.length > 0 && (
-        <AutomationMenu
+        <AnchoredMenu
           label="Add action"
-          triggerClassName="a3-linkbtn"
-          popoverClassName="rl-add-pop"
           trigger={
             <>
               <Plus size={13} aria-hidden="true" /> Add action
@@ -168,6 +163,7 @@ function ActionControl({
   onChange: (patch: Partial<RuleForm>) => void
 }) {
   const id = `rule-${actionKey}`
+  const make = creators(form, choices)
   switch (actionKey) {
     case 'category':
       return (
@@ -178,6 +174,7 @@ function ActionControl({
           placeholder="Choose a category"
           needed={!form.category}
           onChange={(category) => onChange({ category })}
+          onCreate={make.category}
         />
       )
     case 'split':
@@ -206,6 +203,7 @@ function ActionControl({
           placeholder="Choose a payee"
           needed={!form.payee}
           onChange={(payee) => onChange({ payee })}
+          onCreate={make.payee}
         />
       )
     case 'note':
