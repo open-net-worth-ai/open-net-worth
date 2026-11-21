@@ -19,6 +19,7 @@ import { AutomationMenu } from '../AutomationMenu'
 import type { AutomationOptions } from '../AutomationTriggerSummary'
 import { RuleEditorModal } from './RuleEditorModal'
 import { RuleList } from './RuleList'
+import { RuleTemplates } from './RuleTemplates'
 import { nextPosition, rulesInOrder, type RuleForm } from './ruleModel'
 import { peekRuleSeed, takeRuleSeed } from './ruleSeed'
 import './rules.css'
@@ -212,6 +213,7 @@ export function RulesView({
           )}
         </>
       )}
+      {!needle && <RuleTemplates onTemplate={(seed) => setEditor({ seed })} />}
       {editor && (
         <RuleEditorModal
           rule={editor.rule}

@@ -2,7 +2,7 @@
 // what is left after the fixed lines, or the remainder (which also takes any rounding). Lines
 // are computed on the amount the transaction moved, in its own currency.
 import { Plus, Trash2 } from '../../../../ui/icons'
-import { TagInput } from '../../../ui'
+import { TagField } from '../../accounts/TagField'
 import { OptionSelect, Select } from '../automationFormControls'
 import {
   MAX_SPLIT_LINES,
@@ -84,9 +84,9 @@ export function RuleSplitFields({
               </button>
             </div>
             <div className="rl-split-bottom">
-              <TagInput
+              <TagField
                 value={line.tags}
-                placeholder="Tags for this line"
+                placeholder="Tags for this line…"
                 onChange={(tags) => update(index, { tags })}
               />
               <input

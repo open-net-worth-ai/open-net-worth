@@ -385,3 +385,57 @@
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+/* The editor's own dropdown (ComboSelect): the same field as the inputs around it, opening the
+   ledger's picker popover instead of the browser's list. */
+.rl-combo {
+  min-width: 0;
+}
+.rl-combo-field,
+.rl-combo .acct-addin.rl-combo-field {
+  width: 100%;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 24px 0 9px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  outline: none;
+}
+.rl-combo-btn {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.rl-combo-btn.empty,
+.rl-combo-field::placeholder {
+  color: var(--faint);
+}
+.rl-combo-field:focus,
+.rl-combo-field[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+.rl-combo.needed .rl-combo-field {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.acct-payf-pop.rl-combo-pop {
+  width: 280px;
+}
+.rl-section-title .rl-combo {
+  flex: none;
+  width: 72px;
+}
+.rl-section-title .rl-combo-field {
+  height: 28px;
+  font-weight: 600;
+}
+.rl-combo-pop .acct-payf-item.on {
+  font-weight: 600;
+}
+.rl-split .rl-combo-field {
+  height: 30px;
+}

@@ -46,6 +46,8 @@ export interface RuleForm {
   /** The amount a transaction this Rule was made from carried — lets the editor say whether
    *  fixed split lines add up. Never sent. */
   knownAmount?: number
+  /** Actions a template wants on screen before they have a value (e.g. "Set payee"). Never sent. */
+  showActions?: string[]
 }
 
 export function blankRuleForm(): RuleForm {

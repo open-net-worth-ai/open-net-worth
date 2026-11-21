@@ -4,7 +4,8 @@
 import { useState } from 'react'
 import type { AutomationOption } from '../../../../api/automations'
 import { Plus, X } from '../../../../ui/icons'
-import { Checkbox, TagInput } from '../../../ui'
+import { Checkbox } from '../../../ui'
+import { TagField } from '../../accounts/TagField'
 import { AutomationMenu } from '../AutomationMenu'
 import { Input, OptionSelect } from '../automationFormControls'
 import { RuleSplitFields } from './RuleSplitFields'
@@ -72,7 +73,10 @@ export function RuleActionFields({
 }) {
   // A brand-new rule opens with "Set category" ready — the action almost every rule has.
   const [shown, setShown] = useState<ActionKey[]>(() => {
-    const used = ACTIONS.map(([key]) => key).filter((key) => actionInUse(form, key))
+    const wanted = new Set(form.showActions ?? [])
+    const used = ACTIONS.map(([key]) => key).filter(
+      (key) => actionInUse(form, key) || wanted.has(key),
+    )
     return used.length > 0 ? used : ['category']
   })
   const visible = ACTIONS.filter(([key]) => shown.includes(key))
@@ -186,10 +190,10 @@ function ActionControl({
       )
     case 'tags':
       return (
-        <TagInput
+        <TagField
           id={id}
           value={form.tags}
-          placeholder="Type a tag, press Enter"
+          placeholder="Search or create a tag…"
           onChange={(tags) => onChange({ tags })}
         />
       )

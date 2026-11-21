@@ -6,6 +6,7 @@ import type { Automation, RuleApplyResult } from '../../../../api/automations'
 import { Button, Modal } from '../../../ui'
 import { TransactionConditionFields } from '../AutomationConditionFields'
 import { Select } from '../automationFormControls'
+import { ComboDropdowns } from '../comboDropdowns'
 import type { AutomationOptions } from '../AutomationTriggerSummary'
 import { RuleActionFields, type RuleChoices } from './RuleActionFields'
 import { RulePreviewPanel } from './RulePreviewPanel'
@@ -109,72 +110,74 @@ export function RuleEditorModal({
         </>
       }
     >
-      <div className="a3-editor-stack">
-        <div>
-          <label className="a3-field-label" htmlFor="rule-name">
-            Name
-          </label>
-          <input
-            id="rule-name"
-            className="rd-input"
-            data-autofocus
-            value={form.name}
-            placeholder="Named from what it does when left blank"
-            onChange={(event) => patch({ name: event.target.value })}
-          />
-        </div>
-        <section className="rl-clause" aria-label="Conditions">
-          <h3 className="rl-section-title">
-            If{' '}
-            <Select
-              id="rule-match"
-              value={form.match}
-              options={MATCH_OPTIONS}
-              onChange={(match) => patch({ match: match as 'all' | 'any' })}
-            />{' '}
-            of these match
-          </h3>
-          <TransactionConditionFields
-            layout="inline"
-            when={form.when}
-            match={form.match}
-            accounts={options.accounts}
-            payees={options.payees ?? []}
-            baseCurrency={options.base_currency}
-            onChange={(next) => patch({ when: { ...form.when, ...next } })}
-          />
-        </section>
-        <section className="rl-clause" aria-label="Actions">
-          <h3 className="rl-section-title">Then</h3>
-          <RuleActionFields form={form} choices={choices} onChange={patch} />
-        </section>
-        {((attempted && issues.blocking.length > 0) || issues.hints.length > 0) && (
-          <ul className="rl-issues" aria-label="Before you save">
-            {attempted &&
-              issues.blocking.map((message) => (
-                <li key={message} className="rl-issue blocking">
+      <ComboDropdowns.Provider value>
+        <div className="a3-editor-stack">
+          <div>
+            <label className="a3-field-label" htmlFor="rule-name">
+              Name
+            </label>
+            <input
+              id="rule-name"
+              className="rd-input"
+              data-autofocus
+              value={form.name}
+              placeholder="Named from what it does when left blank"
+              onChange={(event) => patch({ name: event.target.value })}
+            />
+          </div>
+          <section className="rl-clause" aria-label="Conditions">
+            <h3 className="rl-section-title">
+              If{' '}
+              <Select
+                id="rule-match"
+                value={form.match}
+                options={MATCH_OPTIONS}
+                onChange={(match) => patch({ match: match as 'all' | 'any' })}
+              />{' '}
+              of these match
+            </h3>
+            <TransactionConditionFields
+              layout="inline"
+              when={form.when}
+              match={form.match}
+              accounts={options.accounts}
+              payees={options.payees ?? []}
+              baseCurrency={options.base_currency}
+              onChange={(next) => patch({ when: { ...form.when, ...next } })}
+            />
+          </section>
+          <section className="rl-clause" aria-label="Actions">
+            <h3 className="rl-section-title">Then</h3>
+            <RuleActionFields form={form} choices={choices} onChange={patch} />
+          </section>
+          {((attempted && issues.blocking.length > 0) || issues.hints.length > 0) && (
+            <ul className="rl-issues" aria-label="Before you save">
+              {attempted &&
+                issues.blocking.map((message) => (
+                  <li key={message} className="rl-issue blocking">
+                    {message}
+                  </li>
+                ))}
+              {issues.hints.map((message) => (
+                <li key={message} className="rl-issue">
                   {message}
                 </li>
               ))}
-            {issues.hints.map((message) => (
-              <li key={message} className="rl-issue">
-                {message}
-              </li>
-            ))}
-          </ul>
-        )}
-        <RulePreviewPanel
-          body={body}
-          labels={labels}
-          incompleteHint="Finish the rule above to see which transactions it matches."
-          onApplied={onApplied}
-        />
-        {submitError && (
-          <div className="a3-inline-error" role="alert">
-            {submitError}
-          </div>
-        )}
-      </div>
+            </ul>
+          )}
+          <RulePreviewPanel
+            body={body}
+            labels={labels}
+            incompleteHint="Finish the rule above to see which transactions it matches."
+            onApplied={onApplied}
+          />
+          {submitError && (
+            <div className="a3-inline-error" role="alert">
+              {submitError}
+            </div>
+          )}
+        </div>
+      </ComboDropdowns.Provider>
     </Modal>
   )
 }

@@ -1,5 +1,8 @@
 // The editor's small form controls, shared by the trigger fields and the condition row.
+import { useContext } from 'react'
 import { DateField } from '../../ui'
+import { ComboSelect } from './ComboSelect'
+import { ComboDropdowns } from './comboDropdowns'
 
 export function Row({
   label,
@@ -52,6 +55,19 @@ export function Select({
   needed?: boolean
   onChange: (value: string) => void
 }) {
+  const combo = useContext(ComboDropdowns)
+  if (combo) {
+    return (
+      <ComboSelect
+        id={id}
+        value={value}
+        options={options.filter(([key]) => key !== '')}
+        placeholder={placeholder ?? options.find(([key]) => key === '')?.[1]}
+        needed={needed}
+        onChange={onChange}
+      />
+    )
+  }
   return (
     <select
       id={id}

@@ -236,6 +236,11 @@ preview what it matches and **Apply** (an **Undo** appears right after), or sele
 the Ledger and **Run rules**. Both are one change you can undo, and they never touch a Starting
 Balance or re-split a split.
 
+Under the list, **Start from a template** has the rules most books need: clean up a payee, a
+subscription, your salary, rent or a fixed bill, split a shared purchase, coffee and snacks, bank
+fees, and tagging a work card. Each opens the editor pre-filled; you pick your own payee, account
+and category.
+
 **New rule** offers **Create with Lucius** (describe it in chat and Lucius drafts it for you to
 confirm) or **Set up manually**. Another quick start is **Create rule…** on a transaction: it opens a Rule that matches
 that payee at about that amount, with the transaction's category, tags or split lines as its
