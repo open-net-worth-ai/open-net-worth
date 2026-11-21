@@ -78,6 +78,8 @@ export interface ConnectorListProps {
   filters: ListFilters
   onOpen: (entry: ConnectorEntry) => void
   onReconnect: (entry: ConnectorEntry) => void
+  /** The connector whose Reconnect is still running, if any. */
+  reconnectingId?: string | null
   /** Opens the directory scoped to a family — `all` only from the All tab. */
   onBrowse: (family: FamilyTab) => void
   /**
@@ -104,6 +106,7 @@ export function ConnectorList({
   filters,
   onOpen,
   onReconnect,
+  reconnectingId = null,
   onBrowse,
   onAddBank,
   suggestions = [],
@@ -194,6 +197,7 @@ export function ConnectorList({
                 entry={entry}
                 onOpen={onOpen}
                 onReconnect={onReconnect}
+                reconnecting={reconnectingId === entry.id}
               />
             ))}
           </div>

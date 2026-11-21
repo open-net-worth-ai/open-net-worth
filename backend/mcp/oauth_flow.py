@@ -403,6 +403,16 @@ def _is_stale(ob: McpOAuth, *, now: float) -> bool:
     return (now - last_known) >= UNKNOWN_EXPIRY_RECHECK_SECONDS
 
 
+def sign_in_is_dead(server: McpServerConfig) -> bool:
+    """The refresh just failed and the access token has run out: nothing a connect attempt
+    returns can say more. Some vendors answer an expired token with a 500, not a 401 — read
+    as a connection error, that hid the dead sign-in behind "Couldn't reach" and made
+    Reconnect run a connection test before it would open the sign-in."""
+    if server.auth_type != "oauth" or server.oauth is None:
+        return False
+    return server.last_status == "auth_error" and _is_stale(server.oauth, now=time.time())
+
+
 def dead_sign_in_reason() -> str:
     return "Connection has expired. You can reconnect to re-authenticate."
 

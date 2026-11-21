@@ -568,6 +568,7 @@ export function ConnectorsTab(): JSX.Element {
             filters={{ query, tab, statusFilter }}
             onOpen={(entry) => openConnector(entry.id)}
             onReconnect={(entry) => void reconnect(entry as ConnectorDetailEntry)}
+            reconnectingId={reconnectingId}
             onBrowse={openDirectory}
             onAddBank={() => setBankPickerOpen(true)}
             suggestions={suggestions}

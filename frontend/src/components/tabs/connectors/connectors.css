@@ -1636,6 +1636,16 @@
   height: 22px;
   border-width: 3px;
 }
+/* A busy button's spinner sits inline with its label, sized to the button. */
+.cn-page .rd-btn .cn-spinner {
+  width: 13px;
+  height: 13px;
+}
+.cn-page .rd-btn.xs .cn-spinner {
+  width: 10px;
+  height: 10px;
+  border-width: 1.5px;
+}
 @keyframes cn-spin {
   to {
     transform: rotate(360deg);

@@ -518,7 +518,7 @@ export function ConnectorDetail({
         </Btn>
       </>
     ) : (
-      <Btn size="lg" variant="primary" disabled={reconnecting} onClick={onReconnect}>
+      <Btn size="lg" variant="primary" busy={reconnecting} onClick={onReconnect}>
         {!reconnecting
           ? entry.fixLabel
           : entry.fixLabel === 'Authenticate'

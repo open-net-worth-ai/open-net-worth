@@ -225,3 +225,27 @@ describe('name and tag', () => {
     expect(container.querySelector('.cn-tag')).toBeNull()
   })
 })
+
+// A reconnect can take seconds (a server that answers slowly, then fails): the row's button
+// must show it's working rather than sit there looking like the click did nothing.
+describe("the row's Reconnect shows it's working", () => {
+  const failing = { tone: 'bad', statusText: 'Error', attention: true } as const
+
+  it('spins and disables while its reconnect runs', () => {
+    const { container } = render(
+      <ConnectorRow entry={entry(failing)} onOpen={vi.fn()} onReconnect={vi.fn()} reconnecting />,
+    )
+    const button = screen.getByRole('button', { name: 'Reconnect' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(button.getAttribute('aria-busy')).toBe('true')
+    expect(container.querySelector('.rd-btn .cn-spinner')).not.toBeNull()
+  })
+
+  it('is idle otherwise', () => {
+    const { container } = renderRow(entry(failing))
+    const button = screen.getByRole('button', { name: 'Reconnect' }) as HTMLButtonElement
+    expect(button.disabled).toBe(false)
+    expect(button.hasAttribute('aria-busy')).toBe(false)
+    expect(container.querySelector('.rd-btn .cn-spinner')).toBeNull()
+  })
+})
