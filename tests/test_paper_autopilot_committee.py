@@ -17,7 +17,6 @@ from backend.core.errors import ConflictError, ValidationError
 from backend.services.paper_trading import autopilot_committee, autopilot_run, facade, views
 from backend.services.paper_trading.facade import place
 from backend.services.paper_trading.service import apply_paper_change
-from tests.flags import flags
 
 ACME = "inst:inst_acme"
 BUY = {"asset": "ACME", "action": "buy", "conviction": "high", "why": "Leader", "case": "Grows"}
@@ -68,8 +67,7 @@ def lucius(monkeypatch):
 def _review(pid: str) -> dict:
     apply_paper_change({"op": "autopilot", "id": pid, "mode": "auto"})
     apply_paper_change({"op": "autopilot_run_now", "id": pid})
-    with flags(autopilot_committee=True):
-        return asyncio.run(autopilot_run.review(pid))
+    return asyncio.run(autopilot_run.review(pid))
 
 
 def _weight(pid: str) -> float:

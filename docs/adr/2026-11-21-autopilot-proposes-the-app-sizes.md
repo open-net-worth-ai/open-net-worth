@@ -20,8 +20,9 @@ proposals before anything is placed.
 
 ## Decision
 
-Behind the flag `autopilot_committee` (off by default; off = the review places its own orders, as
-before, from the same code):
+Every Autopilot review works this way (first shipped behind a flag, `autopilot_committee`; the
+owner dropped the flag the same day, so there is no second path where the review places its own
+orders):
 
 - **The review proposes.** It is offered `propose_paper_orders` instead of `place_paper_orders`.
   Each proposal is buy (a new name or more of a holding), trim or sell, with a one-sentence why

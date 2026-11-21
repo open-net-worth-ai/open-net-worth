@@ -17,7 +17,6 @@ from backend.core.errors import ConflictError, ValidationError
 from backend.services.paper_trading import autopilot_run, autopilot_sizing, facade, views
 from backend.services.paper_trading.facade import place
 from backend.services.paper_trading.service import apply_paper_change
-from tests.flags import flags
 
 ACME = "inst:inst_acme"
 
@@ -124,33 +123,22 @@ def test_whole_shares_for_stocks_fractions_for_the_rest():
     assert autopilot_sizing.units(125, 50.0, fractional=True) == pytest.approx(2.5)
 
 
-# ── a review with the flag on ───────────────────────────────────────────────────────────────
+# ── a review ───────────────────────────────────────────────────────────────────────────
 
 
-def test_flag_on_the_review_proposes_and_cannot_place(paper_db, lucius):
+def test_the_review_proposes_and_cannot_place(paper_db, lucius):
     pid = _new()["id"]
     seen = lucius(proposals=[])
-    with flags(autopilot_committee=True):
-        _review(pid)
+    _review(pid)
     assert "propose_paper_orders" in seen["allowed_tools"]
     assert "place_paper_orders" not in seen["allowed_tools"]
     assert "propose_paper_orders" in seen["prompt"]
 
 
-def test_flag_off_the_review_places_its_own_orders_as_before(paper_db, lucius):
-    pid = _new()["id"]
-    seen = lucius()
-    with flags(autopilot_committee=False):
-        _review(pid)
-    assert "place_paper_orders" in seen["allowed_tools"]
-    assert "propose_paper_orders" not in seen["allowed_tools"]
-
-
 def test_a_new_name_is_bought_to_its_conviction_weight(paper_db, lucius):
     pid = _new()["id"]
     lucius(proposals=[{"asset": "ACME", "action": "buy", "conviction": "high", "why": "Leader"}])
-    with flags(autopilot_committee=True):
-        out = _review(pid)
+    out = _review(pid)
     assert out["status"] == "done"
     assert 0.09 < _weight(pid) <= 0.10
     [p] = _last_run(pid)["proposals"]
@@ -162,8 +150,7 @@ def test_a_holding_competes_and_is_topped_up_to_its_weight(paper_db, lucius):
     pid = _new()["id"]
     _hold(pid, 30)  # about 3%
     lucius(proposals=[{"asset": ACME, "action": "buy", "conviction": "medium", "why": "Add"}])
-    with flags(autopilot_committee=True):
-        _review(pid)
+    _review(pid)
     assert 0.065 < _weight(pid) <= 0.07
 
 
@@ -175,8 +162,7 @@ def test_sells_go_first_and_a_sell_exits_in_full(paper_db, lucius):
         {"asset": ACME, "action": "sell", "why": "Past its stop"},
     ]
     lucius(proposals=proposals)
-    with flags(autopilot_committee=True):
-        _review(pid)
+    _review(pid)
     assert _weight(pid) == 0.0
     run = _last_run(pid)
     assert [p["action"] for p in run["proposals"]] == ["sell", "buy"]
@@ -187,8 +173,7 @@ def test_a_trim_sells_down_to_its_weight(paper_db, lucius):
     pid = _new()["id"]
     _hold(pid, 150)  # about 15%
     lucius(proposals=[{"asset": ACME, "action": "trim", "conviction": "low", "why": "Too big"}])
-    with flags(autopilot_committee=True):
-        _review(pid)
+    _review(pid)
     assert 0.035 < _weight(pid) < 0.045
 
 
@@ -198,8 +183,7 @@ def test_a_trim_of_a_holding_over_its_cap_ends_under_the_cap(paper_db, lucius):
     body = {"asset_key": ACME, "side": "buy", "quantity": 120, "override_mandate": True}
     place(pid, body, origin="owner")  # about 12%, over the cap
     lucius(proposals=[{"asset": ACME, "action": "trim", "conviction": "high", "why": "Over cap"}])
-    with flags(autopilot_committee=True):
-        _review(pid)
+    _review(pid)
     assert 0.07 < _weight(pid) <= 0.08
 
 
@@ -218,8 +202,7 @@ def test_cash_promised_to_an_open_order_is_not_spent_again(paper_db, lucius):
     body = {**waiting, "limit_price": 50.0, "tif": "gtc", "override_mandate": True}
     place(pid, body, origin="owner")  # holds 90,000
     lucius(proposals=[{"asset": "ACOIN", "action": "buy", "conviction": "high", "why": "Bet"}])
-    with flags(autopilot_committee=True):
-        _review(pid)
+    _review(pid)
     coin = _weight(pid, "inst:inst_coin")
     # 10,000 free, 5,000 kept as the floor: about 5% bought, never the 10% high conviction asks.
     assert 0.04 < coin < 0.055
@@ -234,8 +217,7 @@ def test_a_committee_error_places_nothing_and_the_review_still_logs(paper_db, lu
     monkeypatch.setattr(autopilot_committee, "_draft", broken)
     pid = _new()["id"]
     lucius(proposals=[{"asset": ACME, "action": "buy", "conviction": "high", "why": "Leader"}])
-    with flags(autopilot_committee=True):
-        out = _review(pid)
+    out = _review(pid)
     assert out["status"] == "done" and _weight(pid) == 0.0
     assert _last_run(pid)["proposals"] == []
 
@@ -252,8 +234,7 @@ def test_a_proposal_the_mandate_refuses_is_logged_not_fatal(paper_db, lucius, mo
         {"asset": "NOSUCHTICKER", "action": "buy", "conviction": "low", "why": "Unknown"},
     ]
     lucius(proposals=proposals)
-    with flags(autopilot_committee=True):
-        out = _review(pid)
+    out = _review(pid)
     assert out["status"] == "done"
     by_asset = {p["asset"]: p for p in _last_run(pid)["proposals"]}
     assert by_asset["ACOIN"]["status"] == "skipped" and "holdings" in by_asset["ACOIN"]["detail"]
@@ -263,8 +244,7 @@ def test_a_proposal_the_mandate_refuses_is_logged_not_fatal(paper_db, lucius, mo
 def test_no_proposals_places_nothing(paper_db, lucius):
     pid = _new()["id"]
     lucius(proposals=None)
-    with flags(autopilot_committee=True):
-        out = _review(pid)
+    out = _review(pid)
     assert out["status"] == "done" and _last_run(pid)["proposals"] == []
     assert _last_run(pid)["orders"] == []
 

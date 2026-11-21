@@ -47,7 +47,7 @@ export type AutopilotMode = 'manual' | 'auto'
 export type AutopilotCadence = 'daily' | 'weekly'
 export type AutopilotEffort = 'low' | 'medium' | 'high'
 
-/** One proposal of a review (flag autopilot_committee): Lucius proposes, the app sizes it. */
+/** One proposal of a review: Lucius proposes, the app sizes it. */
 export interface AutopilotProposal {
   asset: string
   symbol: string
@@ -83,7 +83,7 @@ export interface AutopilotRun {
   looked_up?: { tool: string; query: string }[]
   /** One sentence each on stocks it fully sold; later reviews read them as its earlier read. */
   lessons?: { symbol: string; lesson: string }[]
-  /** Flag autopilot_committee: what the review proposed, and what the app did with each. */
+  /** What the review proposed, and what the app did with each. */
   proposals?: AutopilotProposal[]
   error: string | null
   /** What it ran on: '' is the app's default model. */
