@@ -23,6 +23,10 @@ export interface ProviderAccountRow {
   not_listed?: boolean
   // Linked here, at a bank that couldn't be read just now (an expired sign-in, an outage).
   unread?: boolean
+  // A card's credit limit (the bank's, else the linked account's), and whether its balance is
+  // money the card HOLDS — worked out on the server by the same rule the balance check reads.
+  credit_limit?: number | null
+  in_credit?: boolean
 }
 
 export interface RowGroup {
@@ -70,17 +74,24 @@ export function shownBalance(row: ProviderAccountRow): number | null {
   return row.balance ?? row.cleared_balance ?? null
 }
 
+/** A card or loan's balance is owed — unless the card is in credit, when it is held. */
 export function isOwed(row: ProviderAccountRow): boolean {
-  return row.account_type != null && LIABILITY_TYPES.has(row.account_type)
+  return row.account_type != null && LIABILITY_TYPES.has(row.account_type) && !row.in_credit
+}
+
+export function isHeld(row: ProviderAccountRow): boolean {
+  return row.account_type === 'credit' && !!row.in_credit
 }
 
 /** The create form's seed for a provider account: its suggested type, and its balance in the
  *  form's terms — a card or loan's amount OWED is entered positive (the form signs it), and a
  *  provider may report it either way round. The balance comes ONLY with a known type: the form
  *  otherwise starts on Cash, where a card's prefilled debt would book as an asset. It is the
- *  SETTLED figure when the bank sends one: a bank sync books pending rows on top, uncleared. */
+ *  SETTLED figure when the bank sends one: a bank sync books pending rows on top, uncleared.
+ *  A card IN CREDIT starts at 0 owed: the form can only say owed, and its first import takes
+ *  the bank's limit and then sets the money the card holds (``bank_data_sync/balances``). */
 export function prefillFor(row: ProviderAccountRow, institution?: string): AccountPrefill {
-  const start = row.cleared_balance ?? row.balance
+  const start = isHeld(row) ? 0 : (row.cleared_balance ?? row.balance)
   return {
     type: row.account_type ?? undefined,
     name: row.name,

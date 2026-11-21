@@ -27,6 +27,7 @@ from typing import Optional
 
 from backend.core.errors import ValidationError
 from backend.services import ledger as ledger_service
+from backend.services.aggregation import balance_kinds
 from backend.services.aggregation.providers import Provider
 from backend.services.bank_data_sync import budget
 
@@ -48,11 +49,9 @@ def _target(account: dict, amount: float, bank: Optional[dict] = None) -> float:
 
 def _in_credit(account: dict, bank: dict, amount: float) -> bool:
     """A card whose available credit exceeds its limit by exactly this balance holds it."""
-    limit, available = account.get("credit_limit"), bank.get("available")
-    if account.get("type") != "credit" or not limit or available is None:
+    if account.get("type") != "credit":
         return False
-    over = float(available) - float(limit)
-    return over > _TOL and abs(abs(amount) - over) <= _TOL
+    return balance_kinds.holds_credit(amount, bank.get("available"), account.get("credit_limit"))
 
 
 def _settled(bank: dict) -> Optional[float]:
