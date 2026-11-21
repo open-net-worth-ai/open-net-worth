@@ -45,7 +45,7 @@ function stubServer(options: { draft?: ProblemReport | null; send?: () => Respon
 async function openDialog(error?: string) {
   render(<ReportProblemHost />)
   act(() => openReportProblem({ error }))
-  await screen.findByLabelText(/What happened/)
+  await screen.findByLabelText(/Your feedback/)
 }
 
 beforeEach(() => {
@@ -60,7 +60,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('Report a problem dialog (browser)', () => {
+describe('Send feedback dialog (browser)', () => {
   it('asks the server for a draft carrying the error and the screen, and sends nothing yet', async () => {
     const calls = stubServer()
     await openDialog('Boom at render')
@@ -91,14 +91,14 @@ describe('Report a problem dialog (browser)', () => {
     await openDialog()
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Post on Discord' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Send report' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy()
     phone.mockRestore()
   })
 
   it('says why it asks for an email', async () => {
     stubServer()
     await openDialog()
-    expect(screen.getByText(/tell you when the fix is out/)).toBeTruthy()
+    expect(screen.getByText(/when your fix or feature ships/)).toBeTruthy()
   })
 
   it('posts on Discord beside Send: copies the report with its logs but never the email, and opens the invite', async () => {
@@ -110,7 +110,7 @@ describe('Report a problem dialog (browser)', () => {
       configurable: true,
     })
     const open = vi.spyOn(window, 'open').mockReturnValue(null)
-    fireEvent.change(screen.getByLabelText(/What happened/), {
+    fireEvent.change(screen.getByLabelText(/Your feedback/), {
       target: { value: 'It froze on import' },
     })
     fireEvent.change(screen.getByLabelText(/Email/), { target: { value: 'someone@example.com' } })
@@ -141,18 +141,18 @@ describe('Report a problem dialog (browser)', () => {
   it('offers one action, Send, which needs a description first', async () => {
     stubServer()
     await openDialog()
-    const send = () => screen.getByRole('button', { name: 'Send report' }) as HTMLButtonElement
+    const send = () => screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement
     expect(send().disabled).toBe(true)
     expect(screen.queryByRole('button', { name: 'Copy report' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Email instead' })).toBeNull()
-    fireEvent.change(screen.getByLabelText(/What happened/), { target: { value: 'It froze' } })
+    fireEvent.change(screen.getByLabelText(/Your feedback/), { target: { value: 'It froze' } })
     expect(send().disabled).toBe(false)
   })
 
   it('sends exactly what the exact-data box shows, edits included', async () => {
     const calls = stubServer()
     await openDialog()
-    fireEvent.change(screen.getByLabelText(/What happened/), {
+    fireEvent.change(screen.getByLabelText(/Your feedback/), {
       target: { value: '  It froze  ' },
     })
     fireEvent.change(screen.getByLabelText('Email'), {
@@ -160,8 +160,8 @@ describe('Report a problem dialog (browser)', () => {
     })
     fireEvent.change(screen.getByLabelText('Recent logs'), { target: { value: 'edited logs' } })
     const shown = JSON.parse(document.querySelector('.report-problem__exact pre')!.textContent!)
-    fireEvent.click(screen.getByRole('button', { name: 'Send report' }))
-    await screen.findByText('Thank you. Your report was sent.')
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await screen.findByText('Thank you. Your feedback was sent.')
     const sent = calls.find((call) => call.url.endsWith('/send'))!
     expect(sent.body).toEqual(shown)
     expect(sent.body).toEqual({
@@ -180,9 +180,9 @@ describe('Report a problem dialog (browser)', () => {
     expect(screen.getByText('Also sent: app details and recent logs (masked)')).toBeTruthy()
     fireEvent.click(screen.getByLabelText(/Include recent logs/))
     expect(screen.getByText('Also sent: app details')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText(/What happened/), { target: { value: 'It froze' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send report' }))
-    await screen.findByText('Thank you. Your report was sent.')
+    fireEvent.change(screen.getByLabelText(/Your feedback/), { target: { value: 'It froze' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await screen.findByText('Thank you. Your feedback was sent.')
     expect(calls.find((call) => call.url.endsWith('/send'))!.body).toMatchObject({ logs: null })
   })
 
@@ -196,8 +196,8 @@ describe('Report a problem dialog (browser)', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { ...window.navigator, clipboard: { writeText } })
     await openDialog()
-    fireEvent.change(screen.getByLabelText(/What happened/), { target: { value: 'It froze' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send report' }))
+    fireEvent.change(screen.getByLabelText(/Your feedback/), { target: { value: 'It froze' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(screen.getByText(/Couldn't reach the report server/)).toBeTruthy())
     expect(
       document.querySelector('.report-problem__status .report-problem__address')!.textContent,
@@ -214,8 +214,8 @@ describe('Report a problem dialog (browser)', () => {
     stubServer({ draft: null })
     await openDialog('Cannot reach')
     expect(screen.getByText(/nothing was masked/)).toBeTruthy()
-    fireEvent.change(screen.getByLabelText(/What happened/), { target: { value: 'No server' } })
-    expect(screen.queryByRole('button', { name: 'Send report' })).toBeNull()
+    fireEvent.change(screen.getByLabelText(/Your feedback/), { target: { value: 'No server' } })
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
     for (const name of ['Copy report', 'Email instead']) {
       expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false)
     }
@@ -257,7 +257,7 @@ describe('entry points', () => {
     render(<ReportProblemHost />)
     act(() => openReportProblem({ error: 'Bad key' }))
     expect(reportProblem).toHaveBeenCalledWith('Bad key')
-    expect(screen.queryByLabelText(/What happened/)).toBeNull()
+    expect(screen.queryByLabelText(/Your feedback/)).toBeNull()
   })
 
   it('a desktop shell that refuses still leaves the page dialog', async () => {
@@ -269,6 +269,6 @@ describe('entry points', () => {
     } as unknown as typeof window.onwDesktopClient
     render(<ReportProblemHost />)
     act(() => openReportProblem())
-    await screen.findByLabelText(/What happened/)
+    await screen.findByLabelText(/Your feedback/)
   })
 })

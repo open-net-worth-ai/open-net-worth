@@ -117,7 +117,7 @@ export function helpMenu(platform: NodeJS.Platform, { send, checkForUpdates, ser
       { label: 'Restart Server', enabled: !serverMode, click: restartServer },
     ] },
     // Always enabled: it must work on the welcome and recovery pages, and with no book open.
-    { label: 'Report a Problem…', click: reportProblem },
+    { label: 'Send Feedback…', click: reportProblem },
     ...(platform === 'darwin' ? [] : [{ type: 'separator' } as const, checkForUpdates]),
   ] };
 }

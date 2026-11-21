@@ -76,11 +76,11 @@ test('the focus-free QA mode never applies to a packaged build or without QA mod
   assert.equal(qaInactiveMode(false, { ONW_QA_MODE: '1' }), false);
 });
 
-test('Help has Report a Problem, enabled for a local book and a server connection alike', () => {
+test('Help has Send Feedback, enabled for a local book and a server connection alike', () => {
   for (const serverMode of [false, true]) {
     let opened = 0;
     const menu = helpMenu('darwin', { send: () => {}, checkForUpdates: { label: 'Check for Updates…' }, serverMode, openLogs: () => {}, revealBook: () => {}, restartServer: () => {}, reportProblem: () => { opened += 1; } });
-    const item = (menu.submenu as Electron.MenuItemConstructorOptions[]).find(entry => entry.label === 'Report a Problem…')!;
+    const item = (menu.submenu as Electron.MenuItemConstructorOptions[]).find(entry => entry.label === 'Send Feedback…')!;
     assert.notEqual(item.enabled, false);
     (item.click as () => void)();
     assert.equal(opened, 1);

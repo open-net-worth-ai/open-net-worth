@@ -71,8 +71,8 @@ Some features do connect out, and each sends only what it needs:
   With no provider connected, nothing is sent and the rest of the app still works.
 - **Connectors** — email, Telegram, a bank or broker link, web search, an external MCP server.
   Each one talks only to its own service, and none is on until you add it.
-- **Problem reports** — only when you open **Report a problem**, read it, and click **Send
-  report**. See [Reporting a problem](../troubleshooting/reporting-a-problem.md).
+- **Problem reports** — only when you open **Send feedback**, read it, and click
+  **Send**. See [Reporting a problem](../troubleshooting/reporting-a-problem.md).
 
 The full list, with how to turn each off, is in
 [Security and privacy](../operations/security-and-privacy.md#what-leaves-your-computer-and-when).

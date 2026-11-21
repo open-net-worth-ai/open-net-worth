@@ -145,9 +145,9 @@ test('the dialog page embeds the draft as data, shows one primary button and hol
 
 test('the dialog page says why it asks for an email, and offers Discord without naming any URL', async () => {
   const html = reportPage(await buildDraft(environment(), {}), 'dark');
-  assert.match(html, /tell you when the fix is out/);
+  assert.match(html, /when your fix or feature ships/);
   assert.match(html, /aria-describedby="email-hint"/);
-  assert.match(html, /<button id="send" type="button">Send report<\/button><button id="discord" class="primary" type="button"><svg class="mark"/, 'Discord is the primary action, beside Send');
+  assert.match(html, /<button id="send" type="button">Send<\/button><button id="discord" class="primary" type="button"><svg class="mark"/, 'Discord is the primary action, beside Send');
   assert.match(html, /Post on Discord copies your message for you to paste in #bugs\./, 'it says what the button does before the click');
   assert.doesNotMatch(html, /discord\.gg/, 'the main process opens the one community link it knows');
 });

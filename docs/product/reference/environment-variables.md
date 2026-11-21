@@ -92,7 +92,7 @@ gets a 403 (only `GET /api/health` is exempt). Setup steps:
 |---|---|---|
 | `ONW_TERMINAL_ENABLED` | `false` | Turns on **Settings → Terminal**, a shell on this machine in your browser. Needs a password set. Always on behind a gateway. See [Terminal](../operations/terminal.md). |
 | `ONW_ALLOW_PRIVATE_ENDPOINTS` | `1` | Lets an AI provider address, webhook or MCP server point at your own machine or local network (a local Ollama or LiteLLM, for example). `0` blocks those. Always blocked in gateway mode. |
-| `ONW_REPORTS_URL` | `https://cloud.opennetworth.ai/api/problem-reports` | Where **Report a problem** sends a report, only when you press Send. Must be `https` (plain `http` only for a loopback address). The desktop app reads it too. See [Reporting a problem](../troubleshooting/reporting-a-problem.md). |
+| `ONW_REPORTS_URL` | `https://cloud.opennetworth.ai/api/problem-reports` | Where **Send feedback** sends a report, only when you press Send. Must be `https` (plain `http` only for a loopback address). The desktop app reads it too. See [Reporting a problem](../troubleshooting/reporting-a-problem.md). |
 | `ONW_TURN_TIMEOUT_S` | `1200` | The default limit, in seconds, on how long one Lucius reply may run. **Settings → AI → Turn time limit** overrides it. |
 | `SSL_CERT_FILE` / `SSL_CERT_DIR` | unset | Standard variables for a custom certificate bundle — for a network that inspects HTTPS with its own certificate. |
 

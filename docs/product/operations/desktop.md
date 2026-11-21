@@ -247,7 +247,7 @@ Where things are in the menus:
   tray.
 - **Help**: **Open Net Worth Help** (this documentation), **Keyboard Shortcuts**, a
   **Troubleshooting** submenu (**Open Logs Folder**, **Reveal Book Folder**, **Restart Server**),
-  **Report a Problem…**, and on Windows/Linux **Check for Updates…**.
+  **Send Feedback…**, and on Windows/Linux **Check for Updates…**.
 
 The tray icon menu has **Open Open Net Worth**, **Open in browser**, **Import statement or
 receipt…**, **Review documents** and **Quit Open Net Worth**.

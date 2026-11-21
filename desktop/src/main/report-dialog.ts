@@ -62,7 +62,7 @@ export class ReportDialog {
       const frame = parent
         ? { ...parent.getContentBounds(), parent, frame: false, transparent: true, hasShadow: false, resizable: false, movable: false, minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, backgroundColor: '#00000000' }
         : { width: 720, height: 780, minWidth: 560, minHeight: 560, backgroundColor: theme === 'dark' ? '#0e1014' : '#ffffff' };
-      const owned = new BrowserWindow({ ...frame, show: false, title: 'Report a problem — Open Net Worth', webPreferences: { preload: join(__dirname, '..', 'report-preload.js'), session: isolated, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, devTools: false } });
+      const owned = new BrowserWindow({ ...frame, show: false, title: 'Send feedback — Open Net Worth', webPreferences: { preload: join(__dirname, '..', 'report-preload.js'), session: isolated, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, devTools: false } });
       this.window = owned;
       owned.webContents.on('will-navigate', event => event.preventDefault());
       owned.webContents.on('will-attach-webview', event => event.preventDefault());

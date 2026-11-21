@@ -88,12 +88,12 @@ These happen **only because you set them up**:
 |---|---|
 | Your AI provider | Your conversation with Lucius and the data he looks up for it, using your own key or subscription — see [Models and cost](../lucius/models-and-cost.md). Nothing goes through a server run by this project. |
 | Connectors | [Email](../connectors/email-ingestion.md) (read-only), [Telegram](../connectors/telegram.md), a [web search provider](../connectors/web-search.md), a [bank or brokerage sync](../connectors/bank-brokerage.md), [external MCP servers](../connectors/external-mcp.md), a [REST API](../connectors/rest-api.md) you point it at. Each page says what it sends. None is on by default. |
-| A problem report | Only when you open **Report a problem** and press **Send report** — see below. |
+| A problem report | Only when you open **Send feedback** and press **Send** — see below. |
 
 ### Problem reports
 
 The only thing the app ever sends about itself is a problem report, and only when you press
-**Send report**. You see the whole report first and can edit or cancel it. It holds what you
+**Send**. You see the whole report first and can edit or cancel it. It holds what you
 wrote, an optional **Email (optional)** contact, the app version, your operating system, the
 screen you were on and the error — and, only if you tick **Include recent logs**, up to 200 recent
 log lines with amounts, names and keys masked. It never contains your book, accounts or

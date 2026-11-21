@@ -185,7 +185,7 @@ function ReportProblemDialog({
       <Modal
         open
         onClose={onClose}
-        title="Thank you. Your report was sent."
+        title="Thank you. Your feedback was sent."
         size="sm"
         footer={
           <Button size="sm" variant="primary" data-report-close onClick={onClose}>
@@ -195,7 +195,7 @@ function ReportProblemDialog({
       >
         <Stack gap="--space-4">
           <Text as="p" size="sm">
-            We will investigate and fix this within 48 hours!
+            We read every one and will look into it within 48 hours.
           </Text>
           {reference && (
             <Text as="p" size="sm" tone="muted">
@@ -211,7 +211,8 @@ function ReportProblemDialog({
     <Modal
       open
       onClose={onClose}
-      title="Report a problem"
+      title="Send feedback"
+      subtitle="Report a bug, suggest an idea, or share what’s working well."
       size="lg"
       footer={
         <>
@@ -241,7 +242,7 @@ function ReportProblemDialog({
               disabled={!ready}
               onClick={() => void send()}
             >
-              Send report
+              Send
             </Button>
           )}
           {report && (
@@ -281,9 +282,12 @@ function ReportProblemDialog({
               </Text>
             )}
           </div>
-          <FormField label="What happened?" htmlFor="report-description" required>
+          <FormField htmlFor="report-description">
             <TextArea
               id="report-description"
+              aria-label="Your feedback"
+              aria-required="true"
+              placeholder="“My card balance didn’t update after I imported a statement.”"
               rows={4}
               maxLength={REPORT_LIMITS.description}
               value={description}
@@ -294,7 +298,7 @@ function ReportProblemDialog({
           <FormField
             label="Email"
             htmlFor="report-email"
-            help="We need it only to tell you when the fix is out — never for marketing, and it’s never shared."
+            help="We use it only to reply, or to tell you when your fix or feature ships — never for marketing, and it’s never shared."
           >
             <TextField
               id="report-email"

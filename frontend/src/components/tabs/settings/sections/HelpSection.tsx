@@ -68,9 +68,9 @@ export function HelpSection() {
         )}
       </Panel>
 
-      <Panel title="Send feedback" sub="Tell us when something breaks.">
+      <Panel title="Send feedback" sub="Report a bug or suggest a feature.">
         {row(
-          'Send feedback or report a problem',
+          'Report a bug or request a feature',
           'You see and can edit the whole report before it is sent. Never your book or your files.',
           // The dialog (or, in the desktop app, its native twin) is where the user reads and
           // edits the report; this row only opens it, so nothing here sends anything.

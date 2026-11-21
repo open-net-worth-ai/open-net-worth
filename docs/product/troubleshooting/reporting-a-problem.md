@@ -1,28 +1,29 @@
 ---
-title: Reporting a problem
-description: Send us a problem report in a few clicks — where to find it, what it contains, how logs are masked, and what to do if it can't be sent.
+title: Sending feedback and reporting a problem
+description: Report a bug or request a feature in a few clicks — where to find it, what it contains, how logs are masked, and what to do if it can't be sent.
 category: troubleshooting
 order: 90
 audience: [user, operator]
 status: stable
 related: [operations/security-and-privacy, operations/logs, operations/desktop, troubleshooting/backend-wont-start]
-keywords: [report a problem, bug report, feedback, support, logs, privacy, redaction, error, send feedback]
+keywords: [report a problem, bug report, feature request, feedback, support, logs, privacy, redaction, error, send feedback]
 ---
 
-# Reporting a problem
+# Sending feedback and reporting a problem
 
-Something broken or confusing? Send a report straight from the app. Open Net Worth never sends
+Something broken or confusing, or an idea for something the app should do? Send it straight
+from the app — bug reports and feature requests go through the same **Send feedback** window. Open Net Worth never sends
 anything about itself on its own — a report goes only when **you** open it, read it, and click
-**Send report**. Closing the window sends nothing.
+**Send**. Closing the window sends nothing.
 
 To close it without sending, press **Cancel**, the **×** in its corner or **Esc**. On a phone it
 opens as a sheet with no Cancel: tap the **×**, tap outside it or drag it down. In the desktop
 app the report opens over the main window: clicking outside it, or choosing another menu command,
 closes it too.
 
-## Send a report
+## Send feedback
 
-1. Open the report window — any of these works:
+1. Open the **Send feedback** window — any of these works:
    - **Next to an error:** click **Report this problem**. The error is filled in for you. It
      appears on the "Something went wrong" panel (beside **Try again** and **Reload app**), the
      "Can't reach Open Net Worth" screen, a failed restore or import, a failed AI provider
@@ -30,22 +31,22 @@ closes it too.
    - **Sidebar:** **Send feedback** (the bug icon at the bottom, below Search and Hide amounts).
    - **Settings → Help → Send feedback…**
    - **On a phone:** **More → Send feedback**.
-   - **Desktop app:** **Help → Report a Problem…** — works on every screen, even when no book is
+   - **Desktop app:** **Help → Send Feedback…** — works on every screen, even when no book is
      open or the app couldn't start.
-2. Under **What happened?**, describe what you did and what went wrong. This is the only
-   required field.
-3. Optionally add your **Email**. We need it only to tell you when the fix is out — never for marketing, and it’s never shared.
+2. In the box, describe what you did and what went wrong — or what
+   you'd like the app to do. This is the only required field.
+3. Optionally add your **Email**. We use it only to reply, or to tell you when your fix or feature ships — never for marketing, and it’s never shared.
 4. The line **Also sent: app details and recent logs (masked)** says what goes with your words.
    Click it to see the version, platform and screen, and the log lines. Untick **Include recent
    logs** if you'd rather not share them, or edit or delete any line. With no logs yet, the box
    is greyed out. **Show exactly what is sent** displays the final report exactly as it will be
    posted.
-5. Click **Send report**.
+5. Click **Send**.
 
-When it's sent you'll see **Thank you. Your report was sent.** and a **Reference** — quote it if
-you write to us about the same problem. We aim to investigate and fix reports within 48 hours.
+When it's sent you'll see **Thank you. Your feedback was sent.** and a **Reference** — quote it if
+you write to us about the same thing. We read every one and look into it within 48 hours.
 
-Prefer to talk it through? Click **Post on Discord** instead of **Send report**. Discord can't
+Prefer to talk it through? Click **Post on Discord** instead of **Send**. Discord can't
 fill in a message for you, so the app copies the report to your clipboard — what happened, the
 version, platform and screen, and the recent logs (masked) if they're ticked — and opens the
 #bugs channel on our [Discord](https://discord.gg/RTUMyHcUmN). The line above the buttons then
@@ -59,8 +60,8 @@ Everything is shown to you before it's sent:
 
 | Field | What it is |
 |---|---|
-| What happened? | Your description. |
-| Email | Optional — only used to tell you when the fix is out. |
+| Your feedback | What you wrote in the box. |
+| Email | Optional — only used to reply, or to tell you when your fix or feature ships. |
 | Error | Only when you started from an error: the message it showed. You can edit it. |
 | Version, Platform, Mode, Screen | The app version, your operating system, whether you're using the desktop app, a browser on the same machine, or a server, and which screen you were on (such as `/accounts`). |
 | Recent logs | Up to the last 200 log lines, only if **Include recent logs** is ticked. |
