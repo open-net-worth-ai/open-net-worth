@@ -103,22 +103,24 @@ def test_a_create_no_longer_carries_a_rule_block(env):
     assert "automation_applied" not in event
 
 
-def test_the_declarative_transform_engine_is_unreachable():
-    """The reason the create-time tests are gone rather than rewritten.
-
-    Both halves matter: nothing on disk IS a transform, and the store can no longer be made
-    to create one — so this cannot regress back into a half-live second code path.
-    """
+@pytest.mark.flags(transaction_rules=False)
+def test_the_declarative_transform_engine_is_unreachable_while_rules_are_off():
+    """With ``transaction_rules`` off nothing on disk IS a transform and the service refuses to
+    create one, so the engine stays a dormant path (ADR 2026-11-21-rules-are-a-visible-kind-of-
+    automation brings it back behind the flag). The store itself only ever holds Lucius or a Rule."""
+    from backend.core.errors import ValidationError
     from backend.db.automation_store import AutomationStore
+    from backend.services.automations.service import apply_automation_change
     from backend.services.automations.transaction_events import active_transaction_transforms
 
     assert active_transaction_transforms() == []
+    draft = {
+        "name": "x",
+        "instructions": "y",
+        "trigger": {"kind": "event", "event": "txn", "when": {}, "limit": "each"},
+        "execution": {"kind": "transaction_transform", "set": {"category": "cat_x"}},
+    }
+    with pytest.raises(ValidationError, match="Lucius"):
+        apply_automation_change({"op": "create", "automation": draft})
     with pytest.raises(ValueError, match="must run Lucius"):
-        AutomationStore().create(
-            {
-                "name": "x",
-                "instructions": "y",
-                "trigger": {"kind": "event", "event": "txn", "when": {}},
-                "execution": {"kind": "transaction_transform", "set": {"category": "cat_x"}},
-            }
-        )
+        AutomationStore().create({**draft, "execution": {"kind": "shell"}})

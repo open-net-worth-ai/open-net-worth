@@ -204,6 +204,43 @@ paused or finished Automation doesn't sit there for good.
 
 Deleting an Automation also deletes its run history. It can't be undone.
 
+## Rules
+
+*Needs **Rules in Automations** turned on in Settings, Developer, Experimental.*
+
+A Rule labels transactions with fixed conditions and no AI, so it costs nothing and applies the
+instant a transaction is saved. Use a Rule when you can say exactly what should match ("payee is
+Acme Gym and the amount is between 10 and 30"); use a Lucius Automation when it takes judgement.
+
+A Rule has:
+
+- **Conditions**, all of them or any of them. Payee, account, kind (is, is not); amount (over,
+  under, is, between, approximately, which means within 7.5%); description and memo (contains,
+  starts with, matches).
+- **Actions**: set a category, add tags, add to the note or memo, set the payee. Or **split** the
+  amount into lines: a fixed figure, a percent of what the fixed lines leave, or the remainder
+  (rounding lands on the last of those). A split that doesn't add up is skipped for that
+  transaction; it never blocks the transaction being saved.
+
+Rules run top to bottom, and **every matching Rule applies**. Each sees what the one above left,
+and when two set the same thing the lower one wins. **Stop here** keeps the Rules below from
+running. A category you picked yourself is never replaced, and neither is one already set unless
+the Rule says **Replace a category already set**. The order for a new transaction is: what you
+entered, then Rules, then the payee's default category.
+
+Rules apply when a transaction is created, from any source (typed, imported, synced, logged by
+Lucius). Editing a transaction never re-runs them. To use a Rule on transactions you already have,
+preview what it matches and **Apply** (an **Undo** appears right after), or select transactions in
+the Ledger and **Run rules**. Both are one change you can undo, and they never touch a Starting
+Balance or re-split a split.
+
+The quickest way to start one is **Create rule…** on a transaction: it opens a Rule that matches
+that payee at about that amount, with the transaction's category, tags or split lines as its
+actions, ready to adjust and save.
+
+Ask Lucius ("make a rule for my gym payments") and he makes a Rule rather than a model-run
+Automation. He can also apply one to past transactions after you agree.
+
 ## Data syncs
 
 The switch at the top of **Automations** has two sides. **Lucius** holds the jobs you give Lucius

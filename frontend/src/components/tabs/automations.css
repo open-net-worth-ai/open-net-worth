@@ -2355,3 +2355,17 @@
   box-sizing: border-box;
   object-fit: contain;
 }
+/* A "between" amount: two figures sharing one control's width. */
+.a3-cond-between {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 280px;
+  width: 280px;
+  min-width: 0;
+}
+.a3-cond-between > .a3-mini-select {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 30px;
+}

@@ -31,13 +31,14 @@ _TRIGGER_DESC = (
     "'RRULE:' prefix, dtstart?, tzid?} for anything the fixed types cannot express. "
     "event: {kind:'event', event:'txn'|'balance'|'price', when:{…}, "
     "limit:'each'|'hour'|'day'}. "
-    "txn when: {conditions:[{field, op, value}]} — ALL must hold; omit for every transaction. "
+    "txn when: {conditions:[{field, op, value}], match?:'all'|'any'} — ALL must hold unless "
+    "match is 'any'; omit for every transaction. "
     "account is|is_not <account id or name> (either side of a transfer); kind is|is_not expense|"
     "income|transfer|investment|investment_buy|investment_sale|adjustment (a buy pays out of the "
     "account, a sale pays in; investment = both); payee is|is_not <payee id or name> — these "
-    "three take a list too (is = any of, is_not = none of); amount over|under <number> — "
-    "absolute, in the account's currency when 'account is' names one account, else the base "
-    "currency; "
+    "three take a list too (is = any of, is_not = none of); amount over|under|is|approx "
+    "<number> or between [low, high] (inclusive; approx = within 7.5%) — absolute, in the "
+    "account's currency when 'account is' names one account, else the base currency; "
     "description|memo contains|not_contains <comma-separated phrases, any counts>, "
     "starts_with|regex <text>. "
     "balance when: {account:<account id>, direction:'below'|'above', amount:<number in that "
@@ -47,6 +48,15 @@ _TRIGGER_DESC = (
     "close), value:<number>}."
 )
 
+
+_RULE_DESC = (
+    "Only for a RULE (fixed labelling, no model call, runs inside each new transaction's write); "
+    "omit for a Lucius Automation. {kind:'transaction_transform', set:{category?, tags?, "
+    "note_append?, memo_append?, payee?}, splits?:[{amount:{type:'fixed'|'percent'|'remainder', "
+    "value?}, category, tags?, memo?}] (≤10; percent = share of what fixed lines leave), "
+    "override_existing?:bool (replace a set category), stop?:bool}. Needs a txn event trigger. "
+    "Every matching Rule applies, top to bottom; the later wins."
+)
 
 _INSTRUCTIONS_DESC = (
     "Exactly what the Automation should do when it runs — never WHEN: no schedule, cadence or "
@@ -99,6 +109,9 @@ class CreateAutomationInput(ToolInput):
         description=_TRIGGER_DESC,
         json_schema_extra=bare_object_schema,
     )
+    execution: Optional[Dict[str, Any]] = Field(
+        default=None, description=_RULE_DESC, json_schema_extra=bare_object_schema
+    )
     permission_mode: Optional[Literal["manual", "auto", "skip"]] = None
     model: Optional[str] = Field(default=None, description="Optional model override.")
     effort: Optional[Literal["low", "medium", "high", "xhigh", "max", "ultra"]] = None
@@ -128,6 +141,11 @@ class AutomationUpdateInput(NestedInput):
         description="Replacement trigger, same shape as create_automation. " + _TRIGGER_DESC,
         json_schema_extra=bare_object_schema,
     )
+    execution: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="A Rule's replacement actions — the shape create_automation's execution takes.",
+        json_schema_extra=bare_object_schema,
+    )
     permission_mode: Optional[Literal["manual", "auto", "skip"]] = None
     model: Optional[str] = None
     effort: Optional[Literal["low", "medium", "high", "xhigh", "max", "ultra"]] = None
@@ -147,6 +165,7 @@ _AI_UPDATABLE_FIELDS = frozenset(
         "instructions",
         "description",
         "trigger",
+        "execution",
         "permission_mode",
         "model",
         "effort",
@@ -188,9 +207,16 @@ class _AutomationUpdatesPreview:
 _AUTOMATION_UPDATES_PREVIEW: PreviewAdapter = _AutomationUpdatesPreview()
 
 
+def _rule_execution(value: object) -> dict | None:
+    """The one execution a model may name: a Rule. Anything else is Lucius, as before."""
+    if isinstance(value, dict) and value.get("kind") == "transaction_transform":
+        return value
+    return None
+
+
 def _create_spec(input_data: dict) -> dict:
     spec = {key: input_data[key] for key in _AI_UPDATABLE_FIELDS if input_data.get(key) is not None}
-    spec["execution"] = {"kind": "lucius"}
+    spec["execution"] = _rule_execution(input_data.get("execution")) or {"kind": "lucius"}
     # Create-only, and only ever switched ON: a paper-only Automation (ai.simulation_guard).
     # Never in _AI_UPDATABLE_FIELDS, so no update can turn it off.
     if input_data.get("simulation_only") is True or input_data.get("paper_portfolio_id"):
@@ -260,9 +286,13 @@ async def list_automations(input_data: dict):
         "Create one Lucius Automation only when the user explicitly asks to save it now. "
         "For a draft they want to see or review, call preview_automation and then "
         "run_screen_command with automations.review_draft instead. An Automation is also "
-        "how a SPEND CATEGORIZATION RULE is expressed — a txn event trigger with match "
-        "conditions, whose run categorizes the matching transaction (the old standalone "
-        "rules engine was retired 2026-08-02). It is ALSO how a REMINDER is expressed — "
+        "how a SPEND CATEGORIZATION RULE is expressed. When the user wants fixed, "
+        "deterministic labelling — 'categorize Acme payments between 10 and 30 as Gym', a tag, "
+        "a split across categories, a payee fix — make a RULE: pass execution "
+        "{kind:'transaction_transform', …} with a txn event trigger. A Rule costs no model call "
+        "and runs inside every new transaction's write; use a Lucius Automation (no execution) "
+        "only for judgement a fixed condition cannot express. A Rule is refused while the Rules "
+        "feature is off. It is ALSO how a REMINDER is expressed — "
         "remind me to pay a bill, nudge me before a due date, follow up on a deadline — a "
         "schedule trigger whose run notifies the user. A reminder is NOT a commitment: do "
         "not create a commitment, installment or action row just to remind someone of a "
@@ -286,7 +316,10 @@ async def create_automation(input_data: dict):
 
 @tool(
     "update_automations",
-    description="Update one or more existing Automations, including their trigger or paused state.",
+    description=(
+        "Update one or more existing Automations, including their trigger, a Rule's actions "
+        "(execution) or paused state."
+    ),
     input_schema=schema_of(UpdateAutomationsInput, tool_name="update_automations"),
     mutates=("automations",),
     preview_adapter=_AUTOMATION_UPDATES_PREVIEW,
@@ -299,6 +332,8 @@ async def update_automations(input_data: dict):
     for item in input_data.get("updates") or []:
         automation_id = item.get("id")
         changes = {key: value for key, value in item.items() if key in _AI_UPDATABLE_FIELDS}
+        if _rule_execution(changes.get("execution")) is None:
+            changes.pop("execution", None)
         try:
             updated.append(
                 apply_automation_change({"op": "update", "id": automation_id, "changes": changes})
@@ -306,6 +341,57 @@ async def update_automations(input_data: dict):
         except Exception as exc:
             errors.append({"id": automation_id, "error": str(exc)})
     return json.dumps({"ok": not errors, "updated": updated, "errors": errors}), None
+
+
+class ApplyRuleInput(ToolInput):
+    rule_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "A Rule's id from list_automations (execution.kind transaction_transform). Applies "
+            "ONLY that Rule's actions to the transactions, without checking its conditions. "
+            "Omit to re-run every active Rule, in order, on them."
+        ),
+    )
+    transaction_ids: List[str] = Field(
+        min_length=1,
+        max_length=500,
+        description="Transaction ids from get_transactions — at most 500.",
+    )
+
+
+@tool(
+    "apply_rule_to_transactions",
+    description=(
+        "Apply a saved Rule (or, with no rule_id, every active Rule in order) to transactions "
+        "already in the ledger — to backfill history. Writes categories, tags, notes, payees or "
+        "splits through the normal ledger edit, as one undoable change. A category already on a "
+        "row is kept unless the Rule says to replace it; split and Starting Balance rows are "
+        "left alone. Reports applied, unchanged and skipped (with the reason). Find the "
+        "matching rows with get_transactions first."
+    ),
+    input_schema=schema_of(ApplyRuleInput, tool_name="apply_rule_to_transactions"),
+    mutates=("ledger", "automations"),
+)
+async def apply_rule_to_transactions(input_data: dict):
+    from backend.db.automation_store import AutomationStore
+    from backend.services.automations import rule_apply
+
+    try:
+        rule_apply.require_rules_enabled()
+        rule_id = input_data.get("rule_id")
+        if rule_id:
+            rule = AutomationStore().find_by_id(str(rule_id))
+            if rule is None or (rule.get("execution") or {}).get("kind") != "transaction_transform":
+                raise ValueError(f"{rule_id!r} is not a Rule — list_automations shows Rules")
+            result = rule_apply.apply_rule(
+                {"id": rule["id"], "trigger": rule["trigger"], "execution": rule["execution"]},
+                input_data["transaction_ids"],
+            )
+        else:
+            result = rule_apply.run_rules(input_data["transaction_ids"])
+        return json.dumps({"ok": True, **result}, ensure_ascii=False), None
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), None
 
 
 @tool(

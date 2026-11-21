@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dateutil.rrule import rrulestr
 
 from backend.core.user_time import user_zone
-from backend.services.automations.txn_conditions import validate_conditions
+from backend.services.automations.txn_conditions import MATCH_MODES, validate_conditions
 
 MIN_INTERVAL_SECONDS = 60
 _WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
@@ -44,6 +44,7 @@ _TRANSACTION_WHEN_KEYS = frozenset(
         "min_amount",
         "max_amount",
         "conditions",
+        "match",
     }
 )
 _TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -140,8 +141,10 @@ def _validate_transaction_when(when: dict) -> dict:
         _validate_optional_regex(out, field, f"transaction event {field}")
     for field in ("keywords", "memo_keywords"):
         _validate_optional_string_list(out, field, f"transaction event {field}")
+    if out.get("match") is not None and out["match"] not in MATCH_MODES:
+        raise ValueError("transaction event match must be all or any")
     if out.get("conditions") is not None:
-        out["conditions"] = validate_conditions(out["conditions"])
+        out["conditions"] = validate_conditions(out["conditions"], out.get("match") or "all")
         if not out["conditions"]:
             del out["conditions"]
     if out.get("currency") is not None:

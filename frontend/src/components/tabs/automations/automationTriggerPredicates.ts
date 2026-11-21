@@ -9,6 +9,7 @@ const EDITABLE_TRANSACTION_KEYS = new Set([
   'max_amount',
   'contains',
   'conditions',
+  'match',
 ])
 
 export interface TransactionTriggerView {

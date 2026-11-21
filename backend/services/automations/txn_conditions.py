@@ -1,6 +1,7 @@
 """Conditions on a transaction trigger: each picks a field, an operation and a value.
 
-``when.conditions`` is a list of ``{field, op, value}``; every condition must hold (AND). The older
+``when.conditions`` is a list of ``{field, op, value}``; every condition must hold (AND), or just one
+when ``when.match`` is ``"any"`` (a Rule's "any of these"). The older
 keys (``account``, ``direction``, ``over``, ``contains``, ``keywords``, ``*_regex``…) keep working
 beside it — existing Automations and migrated rules still carry them.
 
@@ -11,7 +12,8 @@ beside it — existing Automations and migrated rules still carry them.
 - **Kind** is/is not: expense, income, transfer, investment, adjustment — or an investment buy
   / sale, told apart by its one cash leg (the ledger allows exactly one): a buy pays out of an
   account (``from_account_id``), a sale pays into one (``to_account_id``).
-- **Amount** over/under: on the account "Account is" names, in that account's currency (its own
+- **Amount** over / under / is / between (inclusive, ``[low, high]``) / approx (within ±7.5%,
+  inclusive), all on an absolute value: on the account "Account is" names, in that account's currency (its own
   leg) — only when exactly one account is named across them; otherwise in the base currency
   (ADR 2026-10-11).
 - Conditions that can never all hold are REFUSED, not stored to sit silently: two "Payee is" /
@@ -41,7 +43,8 @@ KINDS = (
 )
 _INVESTMENT_LEG = {"investment_buy": "from_account_id", "investment_sale": "to_account_id"}
 _IS_OPS = frozenset({"is", "is_not"})
-_AMOUNT_OPS = frozenset({"over", "under"})
+_AMOUNT_OPS = frozenset({"over", "under", "is", "between", "approx"})
+APPROX_TOLERANCE = 0.075
 _TEXT_OPS = frozenset({"contains", "not_contains", "starts_with", "regex"})
 _OPS = {
     "account": _IS_OPS,
@@ -51,7 +54,19 @@ _OPS = {
     "description": _TEXT_OPS,
     "memo": _TEXT_OPS,
 }
-OPS = ("is", "is_not", "over", "under", "contains", "not_contains", "starts_with", "regex")
+OPS = (
+    "is",
+    "is_not",
+    "over",
+    "under",
+    "between",
+    "approx",
+    "contains",
+    "not_contains",
+    "starts_with",
+    "regex",
+)
+MATCH_MODES = ("all", "any")
 _LIST_OPS = frozenset({"contains", "not_contains"})
 MAX_CONDITIONS = 10
 MAX_PATTERN_LENGTH = 200
@@ -60,13 +75,15 @@ MAX_VALUES = 50
 AmountOn = Callable[[str | None], "float | None"]
 
 
-def validate_conditions(raw: object) -> list[dict]:
+def validate_conditions(raw: object, match: str = "all") -> list[dict]:
+    """``match="any"`` skips the never-all-true check: conditions that cannot hold together can
+    still each hold alone."""
     if not isinstance(raw, list):
         raise ValueError("transaction event conditions must be a list")
     if len(raw) > MAX_CONDITIONS:
         raise ValueError(f"transaction event allows at most {MAX_CONDITIONS} conditions")
     conditions = [_validate_condition(item) for item in raw]
-    conflict = _conflict(conditions)
+    conflict = _conflict(conditions) if match == "all" else None
     if conflict:
         raise ValueError(conflict)
     return conditions
@@ -82,7 +99,7 @@ def _validate_condition(item: object) -> dict:
         allowed = ", ".join(sorted(_OPS[field]))
         raise ValueError(f"{field} condition op must be one of {allowed}")
     if field == "amount":
-        return {"field": field, "op": op, "value": _amount_value(value)}
+        return {"field": field, "op": op, "value": _amount_operand(op, value)}
     if op in _IS_OPS:
         return {"field": field, "op": op, "value": _is_value(field, value)}
     if op in _LIST_OPS:
@@ -181,6 +198,17 @@ def _amount_conflict(conditions: list[dict]) -> str | None:
     return None
 
 
+def _amount_operand(op: str, value: object) -> float | list[float]:
+    if op != "between":
+        return _amount_value(value)
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise ValueError("amount between needs [low, high]")
+    low, high = _amount_value(value[0]), _amount_value(value[1])
+    if low > high:
+        raise ValueError("amount between needs low <= high")
+    return [low, high]
+
+
 def _amount_value(value: object) -> float:
     try:
         number = float(value)  # type: ignore[arg-type]
@@ -199,7 +227,9 @@ def _phrases(value: object) -> list[str]:
     return list(dict.fromkeys(str(item).strip() for item in items if str(item).strip()))
 
 
-def conditions_match(conditions: object, payload: dict, amount_on: AmountOn | None = None) -> bool:
+def conditions_match(
+    conditions: object, payload: dict, amount_on: AmountOn | None = None, match: str = "all"
+) -> bool:
     """``amount_on(account)`` is the transaction's amount on that account (its own leg, in its
     currency), or in the base currency when ``account`` is None."""
     if not conditions:
@@ -207,7 +237,9 @@ def conditions_match(conditions: object, payload: dict, amount_on: AmountOn | No
     if not isinstance(conditions, list):
         return False
     rows = [c for c in conditions if isinstance(c, dict)]
-    return all(_condition_matches(c, payload, _amount_account(rows), amount_on) for c in rows)
+    account = _amount_account(rows)
+    hits = (_condition_matches(c, payload, account, amount_on) for c in rows)
+    return any(hits) if match == "any" else all(hits)
 
 
 def _amount_account(rows: list[dict]) -> str | None:
@@ -266,9 +298,16 @@ def _amount_matches(
     if amount is None:
         return False
     try:
+        if op == "between":
+            low, high = (float(v) for v in value)  # type: ignore[union-attr]
+            return low <= amount <= high
         threshold = float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return False
+    if op == "is":
+        return round(amount, 2) == round(threshold, 2)
+    if op == "approx":
+        return abs(amount - threshold) <= threshold * APPROX_TOLERANCE + 1e-9
     return amount > threshold if op == "over" else amount < threshold
 
 

@@ -303,7 +303,12 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # 2026-11-21: 499_800 -> 500_800. record_challenge + record_risk_review (same flag) measured
     # 500,626: the committee's challenge and risk turns record their verdicts. Same gating as
     # propose_paper_orders: flag-hidden, offered only inside their own review turn. Not CORE.
-    budget = 500_800
+    # 2026-11-21: 500_800 -> 503_200. Rules (flag transaction_rules, ADR 2026-11-21-rules-are-a-
+    # visible-kind-of-automation): create/update_automation take a Rule `execution`,
+    # apply_rule_to_transactions backfills history, and the txn trigger gains amount is /
+    # between / approx and match any. 503,075 measured after trimming the Rule shape to one
+    # copy (update_automations points at create's). Not CORE.
+    budget = 503_200
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

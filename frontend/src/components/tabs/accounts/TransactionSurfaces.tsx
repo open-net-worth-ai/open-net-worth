@@ -162,6 +162,7 @@ export function TransactionSurfacesProvider({
   children,
   onManagePayees,
   onOpenAccounts,
+  onCreateRule,
 }: {
   children: ReactNode
   /** The payees manager lives on the Accounts tab; the drawer's link goes there. */
@@ -169,6 +170,9 @@ export function TransactionSurfacesProvider({
   /** Takes the owner to the Accounts tab — where a finished background statement read's
    *  "Review" (BackgroundStatementNotices) opens its import review. */
   onOpenAccounts?: () => void
+  /** "Create rule…" on a transaction: the shell opens the Rules tab's editor prefilled from it.
+   *  Omitted while the `transaction_rules` flag is off, which hides the drawer's button. */
+  onCreateRule?: (txn: Txn) => void
 }) {
   const [reviewScope, setReviewScope] = useState<ReviewScope | null>(null)
   const [reviewAccountId, setReviewAccountId] = useState<string | null>(null)
@@ -397,6 +401,13 @@ export function TransactionSurfacesProvider({
               })
               .catch((e) => noteDetailFailure(txn.id, e, 'Update failed'))
           }}
+          onCreateRule={
+            onCreateRule &&
+            ((txn) => {
+              setDetail(null)
+              onCreateRule(txn)
+            })
+          }
           onManagePayees={() => {
             setDetail(null)
             onManagePayees()

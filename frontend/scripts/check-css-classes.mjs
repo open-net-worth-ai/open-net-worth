@@ -75,6 +75,8 @@ const CSS_FILES = [
   join(ROOT, 'frontend/src/components/tabs/automations.css'),
   // Bank sync without AI — connector panel, review list, run history (bs-* classes)
   join(ROOT, 'frontend/src/components/tabs/automations/datasync/bankSync.css'),
+  // Rules view of Automations — ordered list, editor sections, live preview (rl-* classes)
+  join(ROOT, 'frontend/src/components/tabs/automations/rules/rules.css'),
   // Settings overlay redesign module CSS (rd-set-*/rd-* classes, scoped under .onw-settings)
   join(ROOT, 'frontend/src/components/tabs/settings/settings.css'),
   join(ROOT, 'frontend/src/components/tabs/connectors/connectors.css'),

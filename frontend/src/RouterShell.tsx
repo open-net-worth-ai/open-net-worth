@@ -86,6 +86,11 @@ import { LuciusChatProvider, useLuciusChat } from './state/luciusChat'
 import { ChatHistorySync } from './components/chat/ChatHistorySync'
 import { startFreshConversation } from './utils/freshConversation'
 import { useDataVersion } from './hooks/useDataVersion'
+import { useFlag } from './hooks/useFlag'
+import {
+  ruleSeedFromTransaction,
+  stashRuleSeed,
+} from './components/tabs/automations/rules/ruleSeed'
 import { connectDataEvents } from './lucius/dataEventsStream'
 import {
   useInboxCount,
@@ -331,6 +336,7 @@ function RouterShellInner() {
   const { auth, onLogout, onAuthChanged } = useRouteContext({ from: '__root__' })
   const gatewayIdentity = useGatewayIdentity(auth.mode === 'gateway')
   const navigate = useNavigate()
+  const rulesOn = useFlag('transaction_rules') === true
   const macChrome = macDesktopChrome()
   const historyNav = useHistoryNav()
   const { back: goBack, forward: goForward } = historyNav
@@ -1396,6 +1402,17 @@ function RouterShellInner() {
         <LuciusChatProvider>
           <TransactionSurfacesProvider
             onManagePayees={() => navigate({ to: '/accounts/payees' as never })}
+            onCreateRule={
+              rulesOn
+                ? (txn) => {
+                    stashRuleSeed(ruleSeedFromTransaction(txn))
+                    void navigate({
+                      to: '/automations',
+                      search: { view: 'rules' } as never,
+                    } as never)
+                  }
+                : undefined
+            }
             onOpenAccounts={() =>
               void navigate({
                 to: '/accounts',

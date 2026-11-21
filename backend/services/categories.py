@@ -469,6 +469,7 @@ def _fold_automations(old_key: str, new_key: str) -> int:
     cannot collide with prose.
     """
     from backend.db.automation_store import AutomationStore
+    from backend.services.automations.transaction_events import rewrite_rule_category_refs
 
     store = AutomationStore()
     changed = 0
@@ -478,7 +479,9 @@ def _fold_automations(old_key: str, new_key: str) -> int:
             continue
         store.update_by_id(row["id"], {"instructions": instructions.replace(old_key, new_key)})
         changed += 1
-    return changed
+    # A Rule holds the id in its structured actions (its sentence shows the label), so it
+    # follows through its own rewrite, which also re-renders the sentence.
+    return changed + len(rewrite_rule_category_refs(old_key, new_key))
 
 
 def automations_naming_category(category_id: str) -> list[dict]:
@@ -495,8 +498,18 @@ def automations_naming_category(category_id: str) -> list[dict]:
     return [
         {"id": row["id"], "name": row.get("name") or row["id"]}
         for row in AutomationStore().all()
-        if category_id in (row.get("instructions") or "")
+        if category_id in (row.get("instructions") or "") or _rule_names_category(row, category_id)
     ]
+
+
+def _rule_names_category(row: dict, category_id: str) -> bool:
+    """A Rule names a category by id in its actions — its sentence shows the label instead."""
+    execution = row.get("execution") or {}
+    if execution.get("kind") != "transaction_transform":
+        return False
+    if (execution.get("set") or {}).get("category") == category_id:
+        return True
+    return any(line.get("category") == category_id for line in execution.get("splits") or [])
 
 
 # ── Delete (in-use safe) ──────────────────────────────────────────────────────
@@ -722,7 +735,13 @@ def delete_category(
             # owner's work, worth keeping to edit — and rather than leave it active, where
             # its next run would fail on an unknown category.
             from backend.db.automation_store import AutomationStore
+            from backend.services.automations.transaction_events import (
+                rewrite_rule_category_refs,
+            )
 
+            # A Rule also drops the dead id from its actions, so resuming it can never write
+            # an unknown category; the rest only pause.
+            rewrite_rule_category_refs(category_id, None)
             automation_store = AutomationStore()
             for row in naming:
                 automation_store.update_by_id(row["id"], {"status": "paused"})

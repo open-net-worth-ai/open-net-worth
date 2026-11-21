@@ -195,12 +195,25 @@ def test_private_execution_union_rejects_unknown_or_unvalidated_variants(
     assert AutomationStore().all() == []
 
 
+@pytest.mark.flags(transaction_rules=False)
 @pytest.mark.parametrize("kind", ["agent", "transaction_transform", "notify"])
 def test_configuration_choke_accepts_only_lucius_execution(isolated_automation_paths, kind):
     bad = _manual()
     bad["execution"] = {"kind": kind}
 
     with pytest.raises(ValidationError, match="Lucius"):
+        apply_automation_change({"op": "create", "automation": bad})
+
+
+@pytest.mark.flags(transaction_rules=True)
+@pytest.mark.parametrize("kind", ["agent", "notify"])
+def test_configuration_choke_with_rules_on_still_refuses_other_executions(
+    isolated_automation_paths, kind
+):
+    bad = _manual()
+    bad["execution"] = {"kind": kind}
+
+    with pytest.raises(ValidationError):
         apply_automation_change({"op": "create", "automation": bad})
 
 

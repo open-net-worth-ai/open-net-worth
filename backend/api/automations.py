@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
+from backend.ai import checkpoint as ckpt
+from backend.core import audit_context
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.db.automation_run_store import AutomationRunStore
 from backend.db.automation_store import AutomationStore
+from backend.services.automations import rule_apply
 from backend.services.automations.activity import automation_activity
 from backend.services.automations.options import automation_options
 from backend.services.automations.runs import get_run, list_runs
@@ -21,8 +24,10 @@ router = APIRouter()
 class AutomationCreate(BaseModel):
     name: str
     description: str = ""
-    instructions: str
+    instructions: str = ""
     trigger: dict[str, Any]
+    # A Rule (``transaction_transform``) while the ``transaction_rules`` flag is on; else Lucius.
+    execution: Optional[dict[str, Any]] = None
     permission_mode: str = "manual"
     always_allowed: list[dict[str, Any]] = Field(default_factory=list)
     blocked: list[str] = Field(default_factory=list)
@@ -41,6 +46,7 @@ class AutomationPatch(BaseModel):
     description: Optional[str] = None
     instructions: Optional[str] = None
     trigger: Optional[dict[str, Any]] = None
+    execution: Optional[dict[str, Any]] = None
     permission_mode: Optional[str] = None
     always_allowed: Optional[list[dict[str, Any]]] = None
     blocked: Optional[list[str]] = None
@@ -48,6 +54,29 @@ class AutomationPatch(BaseModel):
     effort: Optional[str] = None
     status: Optional[str] = None
     max_runs: Optional[int] = None
+
+
+class RuleBody(BaseModel):
+    trigger: dict[str, Any]
+    execution: dict[str, Any]
+
+
+class RuleReorder(BaseModel):
+    ids: list[str]
+
+
+class RulePreview(BaseModel):
+    rule: RuleBody
+    limit: int = Field(50, ge=1, le=200)
+
+
+class RuleApply(BaseModel):
+    rule: RuleBody
+    transaction_ids: list[str] = Field(max_length=rule_apply.MAX_TRANSACTIONS)
+
+
+class RuleRun(BaseModel):
+    transaction_ids: list[str] = Field(max_length=rule_apply.MAX_TRANSACTIONS)
 
 
 class ActiveActivityItem(BaseModel):
@@ -115,7 +144,7 @@ def get_automation_activity():
 def create_automation(body: AutomationCreate):
     try:
         automation = body.model_dump(exclude_none=True)
-        automation["execution"] = {"kind": "lucius"}
+        automation["execution"] = automation.get("execution") or {"kind": "lucius"}
         return apply_automation_change({"op": "create", "automation": automation})
     except Exception as exc:
         _raise_http(exc)
@@ -142,6 +171,65 @@ def delete_automation(automation_id: str):
     except Exception as exc:
         _raise_http(exc)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def _ui_audit_scope() -> None:
+    """A Rule applied from the screen is the owner acting through the UI. ``async`` so the
+    ContextVar reaches the endpoint (see ``api.checkpoints``)."""
+    audit_context.set_audit_scope("user", "ui")
+
+
+def _checkpointed(label: str, work) -> dict:
+    """Run a Rules write inside one checkpoint, so a single Undo reverts the whole batch."""
+    if ckpt._session_turn_active("rules"):
+        raise HTTPException(409, "a Rules run is already in progress")
+    context, token = ckpt.begin_turn(
+        session_id="rules", anchor_history_len=0, message_preview=label, kind="rules"
+    )
+    try:
+        result = work()
+    finally:
+        entry = ckpt.end_turn(context, token)
+    return {**result, "checkpoint_id": entry["id"] if entry else None}
+
+
+@router.post("/api/automations/rules/reorder")
+def reorder_rules(body: RuleReorder):
+    try:
+        rule_apply.require_rules_enabled()
+        return {"automations": rule_apply.reorder_rules(body.ids)}
+    except Exception as exc:
+        _raise_http(exc)
+
+
+@router.post("/api/automations/rules/preview")
+def preview_rule(body: RulePreview):
+    try:
+        rule_apply.require_rules_enabled()
+        return rule_apply.preview_rule_matches(body.rule.model_dump(), body.limit)
+    except Exception as exc:
+        _raise_http(exc)
+
+
+@router.post("/api/automations/rules/apply", dependencies=[Depends(_ui_audit_scope)])
+def apply_rule(body: RuleApply):
+    try:
+        rule_apply.require_rules_enabled()
+        rule = body.rule.model_dump()
+        return _checkpointed(
+            "Apply a rule", lambda: rule_apply.apply_rule(rule, body.transaction_ids)
+        )
+    except Exception as exc:
+        _raise_http(exc)
+
+
+@router.post("/api/automations/rules/run", dependencies=[Depends(_ui_audit_scope)])
+def run_rules(body: RuleRun):
+    try:
+        rule_apply.require_rules_enabled()
+        return _checkpointed("Run rules", lambda: rule_apply.run_rules(body.transaction_ids))
+    except Exception as exc:
+        _raise_http(exc)
 
 
 @router.post(

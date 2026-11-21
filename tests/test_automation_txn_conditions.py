@@ -202,7 +202,7 @@ def test_amounts_are_absolute_whatever_the_sign():
         _c("amount", "over", -5),
         _c("amount", "under", "lots"),
         _c("account", "contains", "acc_bank"),
-        _c("amount", "is", 5),
+        _c("amount", "contains", 5),
     ],
 )
 def test_bad_account_kind_or_amount_conditions_are_refused(condition):

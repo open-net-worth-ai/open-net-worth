@@ -1,0 +1,241 @@
+/* Rules view of Automations: the ordered list, the editor's sections and the live preview. */
+.rl-editor .a3-editor-stack {
+  gap: 18px;
+}
+.rl-note {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+}
+.rl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rl-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.rl-item.off .rl-name-t,
+.rl-item.off .rl-sentence {
+  opacity: 0.55;
+}
+.rl-item.dragging {
+  opacity: 0.5;
+}
+.rl-item.over {
+  border-color: var(--accent);
+}
+.rl-grip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  cursor: grab;
+}
+.rl-grip:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.rl-grip:focus-visible {
+  outline: 2px solid var(--accent);
+  border-radius: 4px;
+}
+.rl-n {
+  min-width: 18px;
+  padding-top: 5px;
+  font-size: 12px;
+  color: var(--faint);
+  text-align: right;
+}
+.rl-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rl-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.rl-name-t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl-sentence {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.rl-stats {
+  font-size: 11.5px;
+}
+.rl-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.rl-trows .a3-trow-label {
+  white-space: normal;
+}
+.rl-tags {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 420px;
+}
+.rl-splits {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+.rl-splits-empty {
+  margin: 0;
+}
+.rl-split {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.rl-split-n {
+  font-size: 12px;
+  color: var(--faint);
+  padding-top: 6px;
+}
+.rl-split-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rl-split-top,
+.rl-split-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rl-split-value {
+  width: 90px;
+  height: 30px;
+}
+.rl-split-unit {
+  font-size: 11px;
+  color: var(--faint);
+}
+.rl-icon-btn {
+  display: inline-flex;
+  padding: 6px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.rl-issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rl-issue {
+  font-size: 12px;
+  color: var(--muted);
+}
+.rl-issue.blocking {
+  color: var(--bad);
+}
+.rl-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.rl-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rl-preview-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.rl-result {
+  margin: 0;
+  font-size: 12.5px;
+}
+.rl-table-wrap {
+  max-height: 280px;
+  overflow: auto;
+}
+.rl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.rl-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 4px 8px;
+}
+.rl-table td {
+  padding: 6px 8px;
+  border-top: 1px solid var(--line);
+  vertical-align: top;
+}
+.rl-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+.rl-date {
+  white-space: nowrap;
+}
+.rl-row.skipped {
+  opacity: 0.7;
+}
+.rl-title {
+  display: block;
+}
+.rl-sub {
+  display: block;
+  font-size: 11.5px;
+}
+.rl-changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rl-skip {
+  color: var(--bad);
+}
+.rl-more {
+  margin: 6px 0 0;
+}
