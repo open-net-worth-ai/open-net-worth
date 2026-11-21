@@ -42,6 +42,7 @@ from backend.services.ynab_sync import (
     recorder,
     starts,
     txn_sync,
+    undo,
     units,
 )
 from backend.services.ynab_sync import state as sync_state
@@ -430,13 +431,15 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
     st["failures"] = st.get("failures", 0) + 1 if retry else 0
     if error is None:
         st["last_ok_at"] = st["last_run"]["finished_at"]
-    if tally["pulled"]:
-        # What this run changed in the book, for "Undo the last sync here" (``undo``).
-        st["undo"] = {
-            "from": audit_from,
-            "to": TransactionAuditStore().max_seq(),
-            "at": st["last_run"]["finished_at"],
-        }
+    # What this run changed in the book's transactions, for "Undo the last sync here" (``undo``):
+    # only the latest run's, and only when it changed one.
+    audit_to = TransactionAuditStore().max_seq()
+    wrote = undo.changes(
+        TransactionAuditStore().of_surface(audit_from, upto=audit_to, surface=current().surface)
+    )
+    st["undo"] = (
+        {"from": audit_from, "to": audit_to, "at": st["last_run"]["finished_at"]} if wrote else None
+    )
     sync_state.schedule_next(st, started)
     sync_state.save(st)
     if error is None and tally["requests"]:

@@ -228,7 +228,8 @@ same as YNAB's page. **Actual connection…** in the menu opens the connector's 
 **Undoing a sync here.** **Undo the sync from …** on the sync page puts back what the last sync
 that changed this book did to its transactions: a row it added is removed, a row it changed gets
 its values back, a row it deleted comes back. A row anyone has changed since stays as it is, and
-the result names it. The sync is switched off afterwards and Actual isn't changed then. When you
+the result names it, as it does one that couldn't be put back in full because a category or account
+it used is gone. Only the latest sync can be undone, and only if it changed a transaction here. The sync is switched off afterwards and Actual isn't changed then. When you
 turn the sync on again, what was put back here is sent to Actual like any change made here, so it
 undoes Actual's side too, edits made in Actual included. To keep Actual as it is instead, import a
 restore point there (below) before turning the sync back on. Assigned, categories and Starting

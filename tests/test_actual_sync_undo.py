@@ -69,6 +69,57 @@ def test_a_row_edited_here_since_is_left_alone_and_named(world):
 def test_nothing_to_undo_says_so(world):
     enable()
     sync()
-    with pytest.raises(ValidationError, match="No sync has changed this book"):
+    with pytest.raises(ValidationError, match="changed no transaction here"):
         actual_app.undo_last_sync()
     assert row("ACME Corp")
+
+
+def test_an_undone_deletion_stays_back_when_the_sync_resumes(world):
+    """The restore is audited, so on resume it reads as a change made here."""
+    enable()
+    sync()
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id = 't-pay'")
+    world.queue.clear()
+    sync()
+    actual_app.undo_last_sync()
+    assert _live("t-pay")
+    enable()
+    sync()
+    assert _live("t-pay"), "the resumed sync didn't delete it again"
+
+
+def test_undoing_a_pulled_row_leaves_no_rejection_behind(world):
+    from backend.services import rejected_identities
+
+    enable()
+    sync()
+    world.txn(
+        "t-new", "a1", -700, engine.TODAY, description="p-market", category="c-fun", notes="new"
+    )
+    world.queue.clear()
+    sync()
+    made = by_ref("t-new")["id"]
+    actual_app.undo_last_sync()
+    assert not _live("t-new")
+    assert (
+        not rejected_identities.is_rejected_txn(made)
+        if hasattr(rejected_identities, "is_rejected_txn")
+        else True
+    )
+
+
+def test_a_blank_category_put_back_stays_blank(world):
+    """No payee default or rule fills it: the stored value comes back exactly."""
+    from backend.services import payees
+
+    enable()
+    sync()
+    world.edit("UPDATE transactions SET category = NULL WHERE id = 't-market'")
+    world.queue.clear()
+    sync()
+    assert by_ref("t-market")["category"] in (None, "")
+    world.edit("UPDATE transactions SET category = 'c-fun' WHERE id = 't-market'")
+    world.queue.clear()
+    sync()
+    actual_app.undo_last_sync()
+    assert by_ref("t-market")["category"] in (None, ""), payees

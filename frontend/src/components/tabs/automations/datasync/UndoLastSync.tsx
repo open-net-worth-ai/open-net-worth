@@ -30,12 +30,15 @@ export function UndoLastSync({
         setResult(await detailOf(r, 'Could not undo the last sync.'))
         return
       }
-      const body = (await r.json()) as { put_back: number; skipped: string[] }
+      const body = (await r.json()) as { put_back: number; skipped: string[]; partly?: string[] }
       const left = body.skipped.length
         ? ` ${body.skipped.length} changed here since stayed as they are: ${body.skipped.slice(0, 3).join(', ')}.`
         : ''
+      const partly = body.partly?.length
+        ? ` ${body.partly.length} couldn't be put back in full (a category or account gone since): ${body.partly.slice(0, 3).join(', ')}.`
+        : ''
       setResult(
-        `Put back ${body.put_back} transaction${body.put_back === 1 ? '' : 's'}, and switched the sync off.${left}`,
+        `Put back ${body.put_back} transaction${body.put_back === 1 ? '' : 's'}, and switched the sync off.${left}${partly}`,
       )
       onDone()
     } catch {
