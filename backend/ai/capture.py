@@ -131,7 +131,7 @@ async def run_capture(
     """
     from backend.ai.assistant import mark_sessions_read, release_session, upsert_session_meta
     from backend.ai.assistant import run as assistant_run
-    from backend.ai.prompts import build_system_prompt
+    from backend.ai.conversation import system_prompt_for
     from backend.ai.tools import _skill_scope
     from backend.core.cost_context import clear_cost_surface, set_cost_surface
     from backend.core.unattended import reset_unattended, set_unattended
@@ -169,7 +169,7 @@ async def run_capture(
         async for event in assistant_run(
             session_id=session_id,
             new_messages=[{"role": "user", "content": prompt}],
-            system=build_system_prompt(),
+            system=system_prompt_for(model),
             model=model or ModelConfigStore().resolved()["model"],
             surface=f"capture:{source}",
         ):

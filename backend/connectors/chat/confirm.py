@@ -162,8 +162,7 @@ async def _resolve_via_pending_tool_use(
     """
     import json as _json
 
-    from backend.ai import assistant
-    from backend.ai.prompts import build_system_prompt
+    from backend.ai.conversation import resume_pending
 
     tool_use_id = change.get("tool_use_id")
     if not tool_use_id:
@@ -185,11 +184,8 @@ async def _resolve_via_pending_tool_use(
             sender_id=target.sender_id,
         )
 
-    system = build_system_prompt()
     result: Optional[dict] = None
-    async for event in assistant.resolve_pending_tool_use(
-        session_id, tool_use_id, decision, system
-    ):
+    async for event in resume_pending(session_id, tool_use_id, decision):
         etype = event.get("type")
         if etype == "error":
             raise RuntimeError(event.get("message") or "could not resolve the pending approval")
