@@ -208,6 +208,16 @@ then **Needs your review**, **Worth checking** (only when there's something to s
 that went fine, since each re-check of the review would add one; a failed preview stays. It reads the
 same as YNAB's page. **Actual connection…** in the menu opens the connector's form.
 
+**Preview** beside **Sync now** is a dry run: it reads Actual as a sync does and decides every
+transaction and month's Assigned by the same rules, then shows what would change and where (new,
+changed or deleted, here or in Actual, what would keep both sides' changes and what would wait for
+review), with a few of the rows. Nothing is written on either side, and nothing is filed. Category
+changes aren't in it: the run's report shows those.
+
+**Many answers at once.** With two or more transactions in **Needs your review**, **Keep all Open
+Net Worth's** and **Keep all Actual's** answer them together, after asking once more how many rows
+change and where. Categories, groups and Starting Balances still ask one at a time.
+
 **Which way changes go.** You choose a direction at import or later:
 
 - **Both ways**: a change on either side reaches the other.

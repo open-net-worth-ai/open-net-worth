@@ -233,6 +233,15 @@ def ynab_sync_run():
     return _sync(ynab_sync.start_now)
 
 
+@router.post("/api/ynab/sync/preview")
+async def ynab_sync_preview():
+    """A dry run: what the next sync would send and pull. Nothing is written on either side."""
+    try:
+        return await asyncio.to_thread(ynab_sync.preview)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+
+
 @router.post("/api/ynab/sync/conflicts/{conflict_id}/resolve")
 def ynab_sync_resolve(conflict_id: str, body: SyncResolution):
     return _sync(ynab_sync.resolve_item, conflict_id, body.keep, body.choice)

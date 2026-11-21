@@ -5,6 +5,7 @@ import { invalidateQueryCache } from '../../../../state/queryCache'
 import { fDate, fScheduleWhen, timeAgo } from '../../../../utils/format'
 import { Button, ErrorState, Switch, TabSkeleton } from '../../../ui'
 import { BulkReview } from '../../imports/BulkReview'
+import { SyncPreviewPanel, usePreview } from './SyncPreview'
 import { ReviewCard } from '../../imports/ReviewItem'
 import { RunReportModal } from '../../imports/RunReport'
 import { detailOf } from '../../imports/runs'
@@ -33,6 +34,7 @@ export function YnabSyncDetail({
   onOpenReport: (runId: string | null) => void
 }) {
   const sync = useBudgetSync(app)
+  const preview = usePreview(app)
   useConnectors() // warm the connector list, so the app's panel opens at once
   const [connectOpen, setConnectOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
@@ -177,6 +179,15 @@ export function YnabSyncDetail({
               >
                 Sync now
               </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!sync.planId || status.running || paused || preview.busy}
+                loading={preview.busy}
+                onClick={() => void preview.run()}
+              >
+                Preview
+              </Button>
               <AutomationMenu
                 label="More actions"
                 items={[
@@ -214,6 +225,7 @@ export function YnabSyncDetail({
       {setUp ? (
         <div className="a3-cols">
           <div className="a3-col-setup">
+            <SyncPreviewPanel app={app} preview={preview} />
             {status.conflicts.length > 0 && (
               <section className="a3-block a3-attention" data-od-id="ynab-sync-review">
                 <div className="a3-block-h">

@@ -226,6 +226,15 @@ def actual_budget_sync_status():
     return _sync(actual_app.sync_status)
 
 
+@router.post("/api/actual-budget/sync/preview")
+async def actual_budget_sync_preview():
+    """A dry run: what the next sync would send and pull. Nothing is written on either side."""
+    try:
+        return await asyncio.to_thread(actual_app.sync_preview)
+    except OpenNetWorthError as exc:
+        raise _refuse(exc) from exc
+
+
 @router.put("/api/actual-budget/sync/settings")
 def actual_budget_sync_settings(body: SyncSettings):
     return _sync(
