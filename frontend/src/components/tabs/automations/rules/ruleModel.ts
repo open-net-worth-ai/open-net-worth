@@ -9,12 +9,7 @@ import type {
   RuleSplitLine,
 } from '../../../../api/automations'
 import { conditionConflicts } from '../txnConditionConflicts'
-import {
-  conditionIsComplete,
-  newCondition,
-  readConditions,
-  transactionLabel,
-} from '../txnConditions'
+import { conditionIsComplete, readConditions, transactionLabel } from '../txnConditions'
 
 export const MAX_SPLIT_LINES = 10
 
@@ -54,8 +49,8 @@ export function blankRuleForm(): RuleForm {
   return {
     name: '',
     match: 'all',
-    // One blank payee condition to fill in, so a new rule opens ready to write — not empty.
-    when: { conditions: [newCondition('payee')] },
+    // A new rule opens empty: nothing is chosen for the owner (templates start pre-filled).
+    when: {},
     category: '',
     tags: [],
     noteAppend: '',

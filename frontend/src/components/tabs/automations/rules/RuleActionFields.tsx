@@ -71,13 +71,10 @@ export function RuleActionFields({
   choices: RuleChoices
   onChange: (patch: Partial<RuleForm>) => void
 }) {
-  // A brand-new rule opens with "Set category" ready — the action almost every rule has.
+  // The actions this rule already uses (or a template asks for); a new rule starts with none.
   const [shown, setShown] = useState<ActionKey[]>(() => {
     const wanted = new Set(form.showActions ?? [])
-    const used = ACTIONS.map(([key]) => key).filter(
-      (key) => actionInUse(form, key) || wanted.has(key),
-    )
-    return used.length > 0 ? used : ['category']
+    return ACTIONS.map(([key]) => key).filter((key) => actionInUse(form, key) || wanted.has(key))
   })
   // In the order they were added: a later action never jumps above an earlier one.
   const visible = shown.flatMap((key) => ACTIONS.filter(([k]) => k === key))

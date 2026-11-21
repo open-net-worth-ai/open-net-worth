@@ -104,7 +104,12 @@ export function TransactionConditionFields({
         />
       ))}
       {layout === 'inline' ? (
-        addButton
+        <>
+          {conditions.length === 0 && (
+            <p className="a3-muted rl-empty">Add what a transaction must match.</p>
+          )}
+          {addButton}
+        </>
       ) : (
         <Row label={conditions.length ? '' : 'Conditions'} htmlFor="automation-add-condition">
           {addButton}

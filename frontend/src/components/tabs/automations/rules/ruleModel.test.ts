@@ -86,9 +86,10 @@ describe('ruleIssues', () => {
     ])
   })
 
-  it('opens a new rule with one blank payee condition to fill in', () => {
+  it('opens a new rule empty: nothing chosen for the owner', () => {
+    expect(blankRuleForm().when).toEqual({})
     expect(ruleIssues(blankRuleForm()).blocking).toEqual([
-      'Finish every condition.',
+      'Add at least one condition.',
       'Add at least one action.',
     ])
   })

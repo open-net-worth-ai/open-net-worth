@@ -105,6 +105,14 @@ function pick(id: string, label: string) {
   fireEvent.mouseDown(screen.getByRole('option', { name: label }))
 }
 
+/** A new rule starts empty; most tests want one payee condition and Set category to work with. */
+async function addPayeeAndCategory() {
+  await screen.findByLabelText('Name')
+  fireEvent.click(document.getElementById('automation-add-condition')!)
+  fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Set category' }))
+}
+
 function Harness({ initial }: { initial: Automation[] }) {
   const [rows, setRows] = useState(initial)
   return (
@@ -178,6 +186,7 @@ describe('Rule editor', () => {
     )
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await addPayeeAndCategory()
     const field = await screen.findByLabelText('Set category')
     expect(field.tagName).not.toBe('SELECT')
     await waitFor(() => {
@@ -187,10 +196,15 @@ describe('Rule editor', () => {
     expect(screen.queryByRole('option', { name: 'Split' })).toBeNull()
   })
 
-  it('opens with Set category ready and offers only the actions not yet added', async () => {
+  it('starts empty, then offers only the actions not yet added', async () => {
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
     await screen.findByLabelText('Name')
+    expect(document.getElementById('automation-condition-0-field')).toBeNull()
+    expect(screen.queryByLabelText('Set category')).toBeNull()
+    expect(screen.getByText('Add what a transaction must match.')).toBeTruthy()
+    expect(screen.getByText('Add what this rule does to a matching transaction.')).toBeTruthy()
+    await addPayeeAndCategory()
     expect(screen.getByLabelText('Set category')).toBeTruthy()
     expect(screen.queryByLabelText('Set payee')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
@@ -212,9 +226,9 @@ describe('Rule editor', () => {
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
     await screen.findByLabelText('Name')
-    expect(screen.queryByText('Finish every condition.')).toBeNull()
+    expect(screen.queryByText('Add at least one condition.')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Create rule' }))
-    expect(await screen.findByText('Finish every condition.')).toBeTruthy()
+    expect(await screen.findByText('Add at least one condition.')).toBeTruthy()
     expect(screen.getByText('Add at least one action.')).toBeTruthy()
     expect(api.createRule).not.toHaveBeenCalled()
   })
@@ -293,6 +307,7 @@ describe('Rule editor', () => {
     api.createRule.mockImplementation(async (draft) => rule('new', 0, { name: draft.name }))
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await addPayeeAndCategory()
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Acme split' } })
     pick('rule-match', 'any')
     pick('automation-condition-0-value', 'Acme')
@@ -393,6 +408,7 @@ describe('Rule editor actions', () => {
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
     await screen.findByLabelText('Name')
+    await addPayeeAndCategory()
     fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
     fireEvent.click(
       screen.getByRole('menuitem', { name: 'Split into lines (instead of one category)' }),
@@ -409,6 +425,7 @@ describe('Rule editor actions', () => {
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
     await screen.findByLabelText('Name')
+    await addPayeeAndCategory()
     fireEvent.click(screen.getByRole('button', { name: 'Remove set category' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Add tags' }))
@@ -422,6 +439,7 @@ describe('Rule editor actions', () => {
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
     await screen.findByLabelText('Name')
+    await addPayeeAndCategory()
     fireEvent.click(screen.getByRole('button', { name: 'Add action' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Set payee' }))
     authFetch.mockImplementation((url: string, init?: { method?: string }) =>
@@ -451,6 +469,7 @@ describe('Rule editor actions', () => {
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
     await screen.findByLabelText('Name')
+    await addPayeeAndCategory()
     const field = document.getElementById('automation-condition-0-value')!
     fireEvent.focus(field)
     fireEvent.mouseDown(screen.getByRole('option', { name: 'Acme' }))
@@ -468,6 +487,7 @@ describe('Rule conditions: category, tags and payee text', () => {
     render(<Harness initial={[]} />)
     fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
     await screen.findByLabelText('Name')
+    await addPayeeAndCategory()
   }
 
   it('a chosen category is a chip in that category’s own colour', async () => {

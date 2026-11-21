@@ -64,7 +64,9 @@ export function RuleEditorModal({
       // The overlay already pads the card 24px; `gap` is its distance from the window's top, and
       // it may only grow until the gap below is the same — never touching the bottom edge.
       const pad = 24
-      const gap = Math.max(pad, Math.round((window.innerHeight - card.offsetHeight) / 2))
+      // Rounded DOWN: rounding up could cap the card a pixel short of its content, and that one
+      // pixel showed a full-height scrollbar on an editor with nothing to scroll.
+      const gap = Math.max(pad, Math.floor((window.innerHeight - card.offsetHeight) / 2))
       card.style.setProperty('margin-top', `${gap - pad}px`)
       card.style.setProperty('max-height', `calc(100vh - ${2 * gap}px)`)
     })
