@@ -483,6 +483,12 @@ async def update_action_status(input_data: dict):
     return json.dumps({"ok": False, "error": "action not found"}), None
 
 
+_RESOLVE_MANUAL_PRICE_DESC = (
+    "With price_source='manual': price per unit in quote_currency (the price paid, unless the "
+    "user gives a newer valuation). REQUIRED to create one — else it is worth 0."
+)
+
+
 class ResolveInstrumentItem(ToolInput):
     """One query in a batched ``resolve_instruments`` call — same fields as the single-item
     form, kept in sync with ``ResolveInstrumentInput`` deliberately (a batch item is a
@@ -510,6 +516,7 @@ class ResolveInstrumentItem(ToolInput):
         ),
     )
     unit: Optional[str] = Field(default=None, description="Holding unit for physical metal.")
+    manual_price: Optional[float] = Field(default=None, description=_RESOLVE_MANUAL_PRICE_DESC)
     allow_duplicate_symbol: Optional[bool] = Field(
         default=None, description="true only for an asset the user said is genuinely different."
     )
@@ -557,6 +564,7 @@ class ResolveInstrumentInput(ToolInput):
             "Holding unit for physical metal: g|kg|ozt|tael|luong|tola|baht. Omit for stocks/crypto (counted in shares/coins)."
         ),
     )
+    manual_price: Optional[float] = Field(default=None, description=_RESOLVE_MANUAL_PRICE_DESC)
     allow_duplicate_symbol: Optional[bool] = Field(
         default=None,
         description=(
@@ -609,6 +617,8 @@ def _resolve_batch_item(_resolve, item: dict) -> dict:
             item.get("asset_subclass"),
             allow_duplicate_symbol=bool(item.get("allow_duplicate_symbol")),
             quote_currency=item.get("quote_currency"),
+            manual_price=item.get("manual_price"),
+            require_manual_price=True,
         )
     except ValidationError as exc:
         entry["resolved"] = False
@@ -682,6 +692,8 @@ async def resolve_instruments(input_data: dict):
         input_data.get("asset_subclass"),
         allow_duplicate_symbol=bool(input_data.get("allow_duplicate_symbol")),
         quote_currency=input_data.get("quote_currency"),
+        manual_price=input_data.get("manual_price"),
+        require_manual_price=True,
     )
     if inst is None:
         return json.dumps(
@@ -1340,7 +1352,7 @@ class ApplyPositionAddInput(ToolInput):
 @tool(
     "add_positions",
     description=(
-        "Add a NEW holding — an instrument NOT already held in that account. Buying MORE of an existing holding is a lot acquisition: use acquire_lots with its position_id from get_portfolio (a duplicate add is refused). ALWAYS call resolve_instruments first to get an instrument_id (this pins a live price source — essential for crypto). Identify the venue with account_id (from list_accounts) when it already exists, otherwise pass account_name and account_type and it will be created. Account = the custodian's securities account (e.g. 'IBKR'), never a currency wallet. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. REFUSED when an active position for the same instrument+account already exists. Every add records the holding's lot (lot_id in the result): with acquired_at a buy lot, without it an opening-balance lot dated today — NEVER also call acquire_lots for the same trade. Paid from cash still in the book (e.g. moved into the platform account first)? Pass funding_account_id. A private/crowdfunded stake (Crowdcube, Seedrs, startup) is a holding too: resolve_instruments price_source='manual' — never create_asset. If the user doesn't know when they bought it, leave acquired_at out — never invent a placeholder date. Automated flows: pass idempotency_key so a retry/reprocess is a no-op. Adding a whole portfolio's worth of new holdings? Pass `adds` (a list) instead — one call."
+        "Add a NEW holding — an instrument NOT already held in that account. Buying MORE of an existing holding is a lot acquisition: use acquire_lots with its position_id from get_portfolio (a duplicate add is refused). ALWAYS call resolve_instruments first to get an instrument_id (this pins a live price source — essential for crypto). Identify the venue with account_id (from list_accounts) when it already exists, otherwise pass account_name and account_type and it will be created. Account = the custodian's securities account (e.g. 'IBKR'), never a currency wallet. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. REFUSED when an active position for the same instrument+account already exists. Every add records the holding's lot (lot_id in the result): with acquired_at a buy lot, without it an opening-balance lot dated today — NEVER also call acquire_lots for the same trade. Paid from cash still in the book (e.g. moved into the platform account first)? Pass funding_account_id. A private/crowdfunded stake (Crowdcube, Seedrs, startup) is a holding too: resolve_instruments price_source='manual' + manual_price — never create_asset. If the user doesn't know when they bought it, leave acquired_at out — never invent a placeholder date. Automated flows: pass idempotency_key so a retry/reprocess is a no-op. Adding a whole portfolio's worth of new holdings? Pass `adds` (a list) instead — one call."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).

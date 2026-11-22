@@ -125,3 +125,86 @@ def test_add_positions_offers_funding_and_routes_private_stakes_to_holdings():
 def test_create_asset_sends_shares_to_add_positions():
     text = _description("create_asset")
     assert "crowdfunded" in text and "add_positions" in text
+
+
+# ── A new manual instrument starts at its price, never at 0 ──────────────────
+# Retest 2026-11-22 (Claude CLI, real app): Lucius created the two crowdfunded companies
+# with no price, so they were worth £0 and net worth dropped by the £1,000 invested until
+# it asked to mark them. resolve_instruments now takes manual_price and refuses a manual
+# create without one, as update_instruments already refused a switch to manual without one.
+
+
+def _resolve(**kw):
+    import asyncio
+    import json
+
+    from backend.ai.tools import execute_tool
+
+    text, _ = asyncio.run(execute_tool("resolve_instruments", kw, tool_use_id="toolu_test"))
+    return json.loads(text)
+
+
+def test_resolve_creates_a_manual_instrument_at_its_price(book):
+    out = _resolve(
+        queries=[
+            {
+                "query": "Gamma Labs Ltd",
+                "price_source": "manual",
+                "quote_currency": "GBP",
+                "manual_price": 10.0,
+            }
+        ]
+    )
+    (row,) = out["results"]
+    assert row["resolved"] is True
+    inst = InstrumentStore().find_by_id(row["instrument_id"])
+    assert inst["manual_price"] == 10.0
+
+
+def test_resolve_refuses_a_manual_create_without_a_price(book):
+    out = _resolve(
+        queries=[{"query": "Gamma Labs Ltd", "price_source": "manual", "quote_currency": "GBP"}]
+    )
+    (row,) = out["results"]
+    assert row["resolved"] is False
+    assert "manual_price" in row["error"]
+    assert not [i for i in InstrumentStore().all() if i.get("symbol") == "Gamma Labs Ltd"]
+
+
+def test_a_duplicate_manual_name_still_gets_the_duplicate_refusal_first(book):
+    """The price rule runs only when a NEW instrument would be created: a name that already
+    exists is refused by the duplicate guard (unchanged), never asked for a price."""
+    _, startup = book
+    out = _resolve(
+        queries=[{"query": startup["symbol"], "price_source": "manual", "quote_currency": "GBP"}]
+    )
+    (row,) = out["results"]
+    assert row["resolved"] is False
+    assert "manual_price" not in row["error"]
+    assert row.get("existing_instrument_id") == startup["id"]
+
+
+def test_other_callers_may_still_create_a_manual_instrument_without_a_price(book):
+    from backend.services.instruments import resolve_instrument
+
+    inst, created = resolve_instrument(
+        "Delta Ventures Ltd", price_source="manual", quote_currency="GBP"
+    )
+    assert created and inst.get("manual_price") in (None, 0)
+
+
+@pytest.mark.parametrize("bad", [0, -5, "abc"])
+def test_a_bad_manual_price_is_refused(book, bad):
+    out = _resolve(
+        queries=[
+            {
+                "query": "Gamma Labs Ltd",
+                "price_source": "manual",
+                "quote_currency": "GBP",
+                "manual_price": bad,
+            }
+        ]
+    )
+    refused = out.get("results", [{}])[0].get("resolved") is False or "error" in out
+    assert refused
+    assert not [i for i in InstrumentStore().all() if i.get("symbol") == "Gamma Labs Ltd"]

@@ -6983,6 +6983,10 @@
         "type": "string",
         "description": "Holding unit for physical metal: g|kg|ozt|tael|luong|tola|baht. Omit for stocks/crypto (counted in shares/coins)."
       },
+      "manual_price": {
+        "type": "number",
+        "description": "With price_source='manual': price per unit in quote_currency (the price paid, unless the user gives a newer valuation). REQUIRED to create one — else it is worth 0."
+      },
       "allow_duplicate_symbol": {
         "type": "boolean",
         "description": "Set true only after a prior call errored with 'symbol already exists' AND the user said this is a genuinely different asset (e.g. same ticker, different exchange)."
@@ -7023,6 +7027,10 @@
                 "unit": {
                   "type": "string",
                   "description": "Holding unit for physical metal."
+                },
+                "manual_price": {
+                  "type": "number",
+                  "description": "With price_source='manual': price per unit in quote_currency (the price paid, unless the user gives a newer valuation). REQUIRED to create one — else it is worth 0."
                 },
                 "allow_duplicate_symbol": {
                   "type": "boolean",

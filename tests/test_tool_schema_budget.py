@@ -312,7 +312,10 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # paid from cash already in the book debits it, never counts twice), and add_positions /
     # create_asset route a private/crowdfunded stake to a manual-priced holding. 503,933
     # measured after trimming both to one line each. add_positions is CORE.
-    budget = 504_000
+    # 2026-11-22: 504_000 -> 504_500. resolve_instruments takes manual_price (single + batch
+    # item): a new manual instrument is created at its price instead of worth 0 until a
+    # separate update_instruments call. 504,396 measured with a two-line description.
+    budget = 504_500
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

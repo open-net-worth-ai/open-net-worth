@@ -32,6 +32,7 @@ no external id at all (docs/adr/2026-07-15-instrument-identity-canonicalization-
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Optional
 
@@ -395,6 +396,8 @@ def resolve_instrument(
     name: Optional[str] = None,
     allow_duplicate_symbol: bool = False,
     quote_currency: Optional[str] = None,
+    manual_price: Optional[float] = None,
+    require_manual_price: bool = False,
 ) -> tuple[dict | None, bool]:
     """Find-or-create an instrument from a user query. Returns (instrument, created).
 
@@ -410,7 +413,13 @@ def resolve_instrument(
     Raises ValidationError if the candidate's symbol collides with an existing
     DIFFERENT-vendor instrument of the same asset_class (see find_existing) — pass
     allow_duplicate_symbol=True once the caller has confirmed it's a genuinely
-    different asset."""
+    different asset.
+
+    `manual_price` is the mark a NEW manual instrument is created with (it is valued at
+    that and nothing else). With `require_manual_price`, creating a manual instrument
+    without one is REFUSED — it would be valued at 0, as the update path already refuses
+    (`_manual_price`). An existing manual instrument is returned as is; re-mark it with
+    update_instrument."""
     store = InstrumentStore()
     query = (query or "").strip()
     if quote_currency is not None:
@@ -493,6 +502,9 @@ def resolve_instrument(
         existing = find_existing(candidate, store, allow_duplicate_symbol)
         if existing:
             return existing, False
+        mark = _new_manual_mark(manual_price, require_manual_price)
+        if mark is not None:
+            candidate["manual_price"] = mark
         return store.create(candidate), True
 
     if not query:
@@ -610,6 +622,28 @@ _REBIND_FIELDS = (
     "unit",
     "manual_price",
 )
+
+
+def _new_manual_mark(manual_price, required: bool) -> float | None:
+    """The mark a new manual instrument is created with, validated like `_manual_price`."""
+    if manual_price is None:
+        if required:
+            raise ValidationError(
+                "a manual instrument is valued at its manual_price — pass manual_price (the "
+                "price per unit in quote_currency; the price paid if there is no newer "
+                "valuation), or it would be valued at 0",
+                field="manual_price",
+            )
+        return None
+    try:
+        price = float(manual_price)
+    except (TypeError, ValueError):
+        raise ValidationError(
+            f"manual_price {manual_price!r} is not a number", field="manual_price"
+        ) from None
+    if not (math.isfinite(price) and price > 0):
+        raise ValidationError("manual_price must be greater than 0", field="manual_price")
+    return price
 
 
 def _manual_price(

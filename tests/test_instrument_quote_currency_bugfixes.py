@@ -356,7 +356,15 @@ def test_resolve_tool_manual_without_quote_currency_is_refused(isolated):
 def test_resolve_tool_threads_quote_currency(isolated):
     res, _ = call(
         "resolve_instruments",
-        queries=[{"query": "Seed A", "price_source": "manual", "quote_currency": "SGD"}],
+        # manual_price: Lucius's tool refuses a manual create without one (it would be worth 0)
+        queries=[
+            {
+                "query": "Seed A",
+                "price_source": "manual",
+                "quote_currency": "SGD",
+                "manual_price": 1.5,
+            }
+        ],
     )
     entry = res["results"][0]
     assert entry["resolved"] is True
