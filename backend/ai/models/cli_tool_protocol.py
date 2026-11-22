@@ -579,14 +579,7 @@ def parse_tool_calls(text: str) -> list[dict]:
                     payload = candidate
                     break
             if payload is None:
-                # A tool with genuinely no arguments is normal; a tool call carrying a
-                # non-dict payload is a parse failure and must not look like one.
-                if any(k in item for k in ("input", "arguments", "parameters", "args")):
-                    log.warning(
-                        "cli_tools: %s called with an unusable arguments payload — sending {}",
-                        name,
-                    )
-                payload = {}
+                payload = _payload_without_arguments_key(item, name, raw)
             if not _TOOL_NAME_SHAPE.match(name):
                 # Not even shaped like a tool name — the model wrote a placeholder call.
                 # Live: a stray `x` with no arguments, alone or ahead of real calls, on the
@@ -597,6 +590,37 @@ def parse_tool_calls(text: str) -> list[dict]:
                 log.warning("cli_tools: implausible tool name %r in block: %.500s", name, raw)
             calls.append({"name": name, "input": payload})
     return _drop_placeholders(calls, text)
+
+
+_ARGUMENT_KEYS = ("input", "arguments", "parameters", "args")
+_CALL_ENVELOPE_KEYS = frozenset(
+    {"name", "tool_name", "type", "id", *_ARGUMENT_KEYS, "input_schema"}
+)
+
+
+def _payload_without_arguments_key(item: dict, name: str, raw: str) -> dict:
+    """The arguments of a call that has no usable arguments object.
+
+    A call written FLAT — ``{"name": "find_tools", "names": [...]}``, its arguments beside
+    its name — is read as those arguments. Live 2026-11 (Claude CLI, Daily briefing): 31
+    ``find_tools {}`` and 13 ``update_run_task {}`` calls, each repeated correctly on the
+    next round; the parser had silently sent ``{}`` and logged nothing. Every empty result
+    is now logged with the block as written, so the next occurrence shows its cause."""
+    if any(k in item for k in _ARGUMENT_KEYS):
+        log.warning(
+            "cli_tools: %s called with an unusable arguments payload — sending {}: %.500s",
+            name,
+            raw,
+        )
+        return {}
+    flat = {k: v for k, v in item.items() if k not in _CALL_ENVELOPE_KEYS}
+    if flat:
+        log.info(
+            "cli_tools: %s written with flat arguments %s — read as its input", name, sorted(flat)
+        )
+        return flat
+    log.info("cli_tools: %s called with no arguments: %.500s", name, raw)
+    return {}
 
 
 def _loads_call(body: str):

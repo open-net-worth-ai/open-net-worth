@@ -1864,6 +1864,43 @@ def test_a_tool_with_genuinely_no_arguments_still_parses():
     ]
 
 
+def test_a_call_written_with_flat_arguments_keeps_them():
+    """31 `find_tools {}` and 13 `update_run_task {}` on the Claude CLI transport, each
+    repeated correctly on the next round (2026-11). A call whose arguments sit beside its
+    name, with no `input` object, is read as those arguments — never silently `{}`."""
+    from backend.ai.models.cli_tool_protocol import parse_tool_calls
+
+    assert parse_tool_calls(
+        '<tool_call>{"name": "find_tools", "names": ["get_lots", "get_returns"]}</tool_call>'
+    ) == [{"name": "find_tools", "input": {"names": ["get_lots", "get_returns"]}}]
+    assert parse_tool_calls(
+        '<tool_call>{"tool_name": "update_run_task", "type": "tool_use", "id": "t1", '
+        '"task_id": "2", "status": "done"}</tool_call>'
+    ) == [{"name": "update_run_task", "input": {"task_id": "2", "status": "done"}}]
+
+
+def test_an_unusable_arguments_object_is_not_replaced_by_flat_keys():
+    """A present-but-broken `input` is a parse failure, logged — flat keys beside it are
+    not guessed into the call."""
+    from backend.ai.models.cli_tool_protocol import parse_tool_calls
+
+    assert parse_tool_calls(
+        '<tool_call>{"name": "find_tools", "input": "email", "query": "email"}</tool_call>'
+    ) == [{"name": "find_tools", "input": {}}]
+
+
+def test_a_call_with_no_arguments_is_logged_as_written(caplog):
+    from backend.ai.models.cli_tool_protocol import parse_tool_calls
+
+    with caplog.at_level("INFO", logger="backend.ai.models.cli_tool_protocol"):
+        parse_tool_calls('<tool_call>{"name": "find_tools"}</tool_call>')
+    assert any(
+        "find_tools called with no arguments" in r.getMessage()
+        and '{"name": "find_tools"}' in r.getMessage()
+        for r in caplog.records
+    )
+
+
 # ── a poisoned live session heals itself ──────────────────────────────────────
 
 
