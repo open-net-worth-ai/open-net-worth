@@ -59,12 +59,12 @@ export const EMAIL_PRESETS: EmailPreset[] = [
     smtp_port: 587,
     steps: [
       {
-        text: 'Turn on two-step verification for your Microsoft account.',
-        link: { label: 'Open Microsoft security', href: 'https://account.microsoft.com/security' },
-      },
-      {
         text: 'Create an app password and paste it below.',
         link: { label: 'Open App passwords', href: 'https://account.live.com/proofs/AppPassword' },
+      },
+      {
+        text: "Microsoft says you can't create one? Turn on two-step verification first, then try again.",
+        link: { label: 'Open Microsoft security', href: 'https://account.microsoft.com/security' },
       },
     ],
   },

@@ -29,7 +29,7 @@ is on, and you can revoke an app password at any time without changing your real
 | **Gmail** | Open [App passwords](https://myaccount.google.com/apppasswords), name it "Open Net Worth" and copy the 16-letter code. If Google says the setting isn't available, turn on [2-Step Verification](https://myaccount.google.com/signinoptions/twosv) first and try again. You don't need to turn on IMAP — Gmail has it on for every personal account. |
 | **iCloud** | Sign in to your [Apple Account](https://account.apple.com/account/manage) → **Sign-In and Security → App-Specific Passwords** → generate one. |
 | **Fastmail** | [Settings → Privacy & Security](https://app.fastmail.com/settings/security) → **Manage app passwords** → create one with access to *Mail (IMAP/POP/SMTP)*. |
-| **Outlook / Hotmail** | Turn on two-step verification in [Microsoft account security](https://account.microsoft.com/security), then create one under [App passwords](https://account.live.com/proofs/AppPassword). See the note under [Troubleshooting](#troubleshooting). |
+| **Outlook / Hotmail** | Create one under [App passwords](https://account.live.com/proofs/AppPassword). If Microsoft says you can't, turn on two-step verification in [Microsoft account security](https://account.microsoft.com/security) first and try again. See the note under [Troubleshooting](#troubleshooting). |
 | **Other** | Look for "app password", "app-specific password" or "IMAP access" in your provider's security settings. |
 
 Your normal email password will **not** work — this is the step most people miss. When you

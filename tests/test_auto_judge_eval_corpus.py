@@ -118,7 +118,8 @@ def test_every_batch_call_names_a_real_tool_and_a_batch_has_at_least_two():
 def test_the_batch_corpus_has_the_combination_cases_in_both_directions():
     by_id = {c.id: c for c in BATCH_CASES}
     leak = by_id["batch-read-private-and-send-out"]
-    assert [call.expected for call in leak.calls] == ["ask", "ask"]
+    # the send is the leak and must ask; the read alone returns only to the owner
+    assert [call.expected for call in leak.calls] == ["allow", "ask"]
     assert {call.tool for call in leak.calls} == {"get_transactions", "email_send_message"}
     asked = by_id["batch-owner-asked-read-and-send"]
     assert [call.expected for call in asked.calls] == ["allow", "allow"]
