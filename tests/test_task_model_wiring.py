@@ -44,6 +44,17 @@ def test_intel_model_uses_assignment(store):
     assert _intel_model() == "claude-haiku-4-5"
 
 
+def test_intel_model_keeps_the_provider_of_a_non_default_assignment(store):
+    # The default is Anthropic (conftest). A bare id would run on it — with the Claude Code
+    # CLI as default that was `claude --model <id>` and "There's an issue with the selected
+    # model", so every intel scan returned 0 stories. The ref must keep its provider.
+    store.update_provider("openai", {"api_key": "sk-oai"})
+    store.set_task_model("intel", "openai:gpt-4o-mini")
+    from backend.monitoring.intel_agent import _intel_model
+
+    assert _intel_model() == "openai:gpt-4o-mini"
+
+
 def test_suggestions_honors_non_anthropic_assignment(store):
     # Suggestions now route through the provider-agnostic llm_seam, so a non-Anthropic
     # assignment is HONORED (returns the compound ref for the seam to resolve), not
