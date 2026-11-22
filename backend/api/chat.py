@@ -27,7 +27,7 @@ from backend.api import demo_visitor
 from backend.api._deps import _bearer_token
 from backend.core.errors import ConfigurationError, ValidationError
 from backend.models.screen import ScreenSnapshot
-from backend.services import conversation_approval, demo_quota, demo_visitors
+from backend.services import conversation_approval, demo_quota, demo_visitors, onw_ai
 from backend.services.mentions import (
     MAX_MENTIONS,
     format_mention_context,
@@ -200,6 +200,10 @@ def _friendly_error(exc: BaseException) -> tuple[str, bool]:
 
     if isinstance(exc, (ProviderDisabledError, CliNotSignedInError)):
         return str(exc), True
+    # Before the auth / rate-limit checks: a budget refusal can arrive as a 429.
+    out_of_credit = onw_ai.record_out_of_credit(exc)
+    if out_of_credit:
+        return out_of_credit, True
     if isinstance(exc, ProviderTimeoutError):
         # The provider's own words ("Claude Code CLI timed out after 300s (raise
         # ONW_CLAUDE_CLI_TIMEOUT if this is expected)."): the owner wants the real cause shown.

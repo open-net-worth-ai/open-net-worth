@@ -286,8 +286,8 @@ def test_legacy_migration_unknown_url_buckets_to_custom_and_resolves():
 #
 # Locks the catalog to its supported keys: the four originals (anthropic, openai,
 # gemini, ollama) plus the added OpenAI-compatible presets (xai, glm, openrouter,
-# litellm), the generic custom row, and the two local coding-CLI transports
-# (claude_cli, codex_cli) — and nothing else.
+# litellm), the generic custom row, the two local coding-CLI transports
+# (claude_cli, codex_cli) and Open Net Worth AI (onw_ai) — and nothing else.
 
 
 def test_catalog_has_expected_provider_keys():
@@ -304,6 +304,7 @@ def test_catalog_has_expected_provider_keys():
         "glm",
         "litellm",
         "ollama",
+        "onw_ai",
         "openai",
         "openrouter",
         "xai",

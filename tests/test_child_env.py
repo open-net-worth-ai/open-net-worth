@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from backend.ai.models import claude_cli_provider, codex_app_server, codex_cli_provider
+from backend.ai.models import (
+    antigravity_cli_provider,
+    claude_cli_provider,
+    codex_app_server,
+    codex_cli_provider,
+)
 from backend.core.child_env import scrubbed_environ
 
 SECRETS = {
@@ -21,6 +26,12 @@ SECRETS = {
     "GITHUB_TOKEN": "gh",
     "SOME_UNLISTED_THING": "x",
     "AUTHOR": "me",
+    # Private Cloud's Open Net Worth AI settings: the key pays for this agent's AI credit.
+    "ONW_AI_KEY": "sk-test-managed-key",
+    "ONW_AI_BASE_URL": "http://10.99.0.1:4000/v1",
+    "ONW_AI_MODELS": "[]",
+    "ONW_AI_REQUEST_EXTRAS": "{}",
+    "ONW_AI_CREDIT_URL": "http://10.99.0.1:8099/internal/agents/ai-credit",
 }
 KEPT = {
     "PATH": "/usr/bin",
@@ -61,6 +72,7 @@ def test_the_cli_providers_use_the_same_filter(monkeypatch):
         claude_cli_provider._child_env(""),
         codex_cli_provider._child_env(""),
         codex_app_server.child_env(""),
+        antigravity_cli_provider._child_env(),
     ):
         for secret in SECRETS:
             if secret == "CODEX_HOME":  # the Codex providers set their own isolated one

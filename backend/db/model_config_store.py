@@ -66,8 +66,9 @@ import re
 import shutil
 from typing import Optional
 
+from backend.core import onw_ai
 from backend.core.config import get_settings
-from backend.core.errors import ConfigurationError
+from backend.core.errors import ConfigurationError, ValidationError
 from backend.db.payload_store import NamespacedSettingsStore
 from backend.db.tables import secret_config
 from backend.models.model_config import VALID_PROVIDERS
@@ -214,6 +215,18 @@ PROVIDER_HINTS: dict = {
 #                       what marks an entry as a CLI transport — every consumer asks the
 #                       catalog instead of keeping its own list of CLI keys.
 PROVIDER_CATALOG: list = [
+    {
+        # Our own OpenAI-compatible relay. A Private Cloud agent gets endpoint, key and models
+        # from the environment (core/onw_ai.py — managed, not editable); anyone else pastes a
+        # key bought on cloud.opennetworth.ai and keeps the public endpoint below.
+        "key": onw_ai.PROVIDER_KEY,
+        "label": onw_ai.LABEL,
+        "transport": "openai_compatible",
+        "base_url": onw_ai.PUBLIC_BASE_URL,
+        "needs_api_key": True,
+        "editable_base_url": True,
+        "model_hints": [onw_ai.PREFERRED_MODEL],
+    },
     {
         "key": "anthropic",
         "label": "Anthropic",
@@ -447,6 +460,40 @@ def _stored_base_url(entry: dict, creds: dict) -> str:
     return (creds.get("base_url") or "").strip() or entry["base_url"]
 
 
+_MANAGED_REFUSAL = (
+    f"{onw_ai.LABEL} is managed by Private Cloud here; its endpoint and key cannot be changed."
+)
+
+
+def _managed(key: str) -> Optional[onw_ai.Managed]:
+    """The Private Cloud configuration when ``key`` is the Open Net Worth AI provider and the
+    environment provides one — it then wins over anything stored."""
+    return onw_ai.managed() if key == onw_ai.PROVIDER_KEY else None
+
+
+def _guard_onw_ai_write(key: str, *, base_url: str = "", api_key: str = "") -> None:
+    """Every write of Open Net Worth AI credentials passes here. A managed (Private Cloud)
+    provider's endpoint and key are the environment's; a pasted endpoint must be https — the
+    key travels with each request — except to the overlay hub or this machine."""
+    if key != onw_ai.PROVIDER_KEY:
+        return
+    base_url, api_key = (base_url or "").strip(), (api_key or "").strip()
+    if onw_ai.managed() is not None and (base_url or api_key):
+        raise ConfigurationError(_MANAGED_REFUSAL)
+    if base_url and not onw_ai.base_url_allowed(base_url):
+        raise ValidationError(f"{onw_ai.LABEL} needs an https:// address.")
+
+
+def _default_ref(raw: dict) -> str:
+    """The stored instance default, else — on a Private Cloud agent where none was chosen — the
+    managed provider's preferred model. Derived at read time, never written."""
+    ref = (raw.get("default_model") or "").strip()
+    if ref:
+        return ref
+    cfg = onw_ai.managed()
+    return f"{onw_ai.PROVIDER_KEY}:{cfg.default_model()}" if cfg else ""
+
+
 def _drop_key_if_rebound(entry: dict, creds: dict, new_url: str) -> None:
     """A stored api_key belongs to the endpoint it was saved against. Moving the endpoint
     without supplying a key in the same write clears it, so a new URL can never receive the
@@ -610,7 +657,7 @@ class ModelConfigStore(NamespacedSettingsStore):
 
         NOT for the API response — use ``public()`` there.
         """
-        ref = (self._read_raw().get("default_model") or "").strip()
+        ref = _default_ref(self._read_raw())
         if not ref or ":" not in ref:
             raise ConfigurationError(
                 "AI provider is not configured. Choose one in Settings → AI Models."
@@ -646,11 +693,15 @@ class ModelConfigStore(NamespacedSettingsStore):
             if env_var:
                 api_key = (os.getenv(env_var) or "").strip()
 
+        base_url = _stored_base_url(entry, creds)
+        if (cfg := _managed(key)) is not None:
+            base_url, api_key = cfg.base_url, cfg.api_key
+
         return {
             "provider": transport,
             "provider_key": key,
             "model": model,
-            "base_url": _stored_base_url(entry, creds),
+            "base_url": base_url,
             "api_key": api_key,
         }
 
@@ -660,8 +711,7 @@ class ModelConfigStore(NamespacedSettingsStore):
         For callers that only ask "is this the default?" (the disable / remove guards): unlike
         ``resolved()`` it never raises on an unset default, so removing a provider on an
         instance that has no default is a normal request, not a 500."""
-        ref = (self._read_raw().get("default_model") or "").strip()
-        return ref.partition(":")[0]
+        return _default_ref(self._read_raw()).partition(":")[0]
 
     def public(self) -> dict:
         """The non-secret view for the API/UI — never includes the api_key.
@@ -671,7 +721,7 @@ class ModelConfigStore(NamespacedSettingsStore):
         round-trip the default without re-composing it from three fields.
         """
         raw = self._read_raw()
-        ref = (raw.get("default_model") or "").strip()
+        ref = _default_ref(raw)
         key, _, model = ref.partition(":")
         entry = _provider_entry(key) if key else None
         creds = (raw.get("providers") or {}).get(key) or {} if key else {}
@@ -685,6 +735,8 @@ class ModelConfigStore(NamespacedSettingsStore):
                 "openai_compatible": "OPENAI_API_KEY",
             }.get(transport)
             api_key = (os.getenv(env_var) or "").strip() if env_var else ""
+        if (cfg := _managed(key)) is not None:
+            base_url, api_key = cfg.base_url, cfg.api_key
 
         return {
             "default_model": ref,
@@ -753,6 +805,18 @@ class ModelConfigStore(NamespacedSettingsStore):
             label = (creds.get("label") or "").strip()
             if label:
                 result[key]["label"] = label
+        if (cfg := onw_ai.managed()) is not None:
+            stored = result.get(onw_ai.PROVIDER_KEY) or {}
+            result[onw_ai.PROVIDER_KEY] = {
+                "has_api_key": True,
+                "base_url": cfg.base_url,
+                "model": stored.get("model") or cfg.default_model(),
+                "key_status": "valid",
+                "checked_at": None,
+                "enabled": stored.get("enabled", True),
+                # Endpoint, key and models come from Private Cloud; Settings shows, never edits.
+                "managed": True,
+            }
         return result
 
     def display_label(self, provider_key: str) -> str:
@@ -788,6 +852,11 @@ class ModelConfigStore(NamespacedSettingsStore):
         fields are NOT touched here — use ``update()`` for those.
         """
         _refuse_on_demo()
+        _guard_onw_ai_write(
+            provider_key,
+            base_url=str(changes.get("base_url") or ""),
+            api_key=str(changes.get("api_key") or ""),
+        )
         raw = self._read_raw()
         providers: dict = raw.get("providers") or {}
         creds: dict = dict(providers.get(provider_key) or {})
@@ -861,6 +930,8 @@ class ModelConfigStore(NamespacedSettingsStore):
         Returns the public (no-key) providers view. Removing an absent key is a no-op.
         """
         _refuse_on_demo()
+        if _managed(provider_key) is not None:
+            raise ConfigurationError(_MANAGED_REFUSAL)
         raw = self._read_raw()
         providers: dict = raw.get("providers") or {}
         if provider_key in providers:
@@ -878,6 +949,8 @@ class ModelConfigStore(NamespacedSettingsStore):
         entry is pruned entirely when nothing meaningful remains.
         """
         _refuse_on_demo()
+        if _managed(provider_key) is not None:
+            raise ConfigurationError(_MANAGED_REFUSAL)
         raw = self._read_raw()
         providers: dict = raw.get("providers") or {}
         creds: dict = dict(providers.get(provider_key) or {})
@@ -935,6 +1008,8 @@ class ModelConfigStore(NamespacedSettingsStore):
         creds = self._providers_raw().get(provider_key) or {}
         stored_base_url = _stored_base_url(entry, creds)
         stored_api_key = (creds.get("api_key") or "").strip()
+        if (cfg := _managed(provider_key)) is not None:
+            stored_base_url, stored_api_key = cfg.base_url, cfg.api_key
 
         return {
             "transport": transport,
@@ -1080,9 +1155,17 @@ class ModelConfigStore(NamespacedSettingsStore):
                 continue
             if cli_is_installed(key, creds.get("base_url") or ""):
                 keys.append(key)
+        # A Private Cloud agent's provider is configured by its environment.
+        managed = providers.get(onw_ai.PROVIDER_KEY)
+        if (
+            onw_ai.managed() is not None
+            and onw_ai.PROVIDER_KEY not in keys
+            and not (isinstance(managed, dict) and managed.get("enabled") is False)
+        ):
+            keys.append(onw_ai.PROVIDER_KEY)
         # Instance default — always included. Its provider is the ref's own prefix now,
         # so there is no transport+base_url round-trip to get it wrong.
-        default_key, _, _ = (self._read_raw().get("default_model") or "").partition(":")
+        default_key, _, _ = _default_ref(self._read_raw()).partition(":")
         if default_key and default_key not in keys:
             keys.insert(0, default_key)
         return keys
@@ -1241,6 +1324,11 @@ class ModelConfigStore(NamespacedSettingsStore):
             raise ConfigurationError(
                 "AI provider is not configured. Choose one in Settings → AI Models."
             )
+        _guard_onw_ai_write(
+            key,
+            base_url=str(changes.get("base_url") or ""),
+            api_key=str(changes.get("api_key") or ""),
+        )
         # A blank default model is WRITABLE but unusable: resolved() raises on the NEXT
         # turn while Settings still looks fine, so the failure lands far from the action
         # that caused it. "Set as default" on a provider with no remembered model sent
@@ -1294,6 +1382,22 @@ def _custom_key_for(base_url: str, providers: Optional[dict] = None) -> str:
     return "custom"
 
 
+def _is_onw_ai_endpoint(base_url: str, providers: Optional[dict] = None) -> bool:
+    """True for the managed endpoint, or the one a pasted Open Net Worth AI key was saved for."""
+    cfg = onw_ai.managed()
+    if cfg is not None and onw_ai.same_endpoint(cfg.base_url, base_url):
+        return True
+    if not base_url:
+        return False
+    if providers is None:
+        try:
+            providers = ModelConfigStore()._providers_raw()
+        except Exception:  # noqa: BLE001 — attribution must never break a turn
+            providers = {}
+    stored = providers.get(onw_ai.PROVIDER_KEY)
+    return isinstance(stored, dict) and onw_ai.same_endpoint(stored.get("base_url") or "", base_url)
+
+
 def _infer_provider_key(
     transport: str, base_url: str, providers: Optional[dict] = None
 ) -> Optional[str]:
@@ -1316,6 +1420,8 @@ def _infer_provider_key(
     # equals the catalog entry's default URL (e.g. http://localhost:11434/v1 → "ollama").
     # An unknown URL that doesn't match any preset uses "custom" as a storage key — NOT
     # the first editable entry in catalog order (which happens to be "ollama").
+    if transport == "openai_compatible" and _is_onw_ai_endpoint(base_url, providers):
+        return onw_ai.PROVIDER_KEY
     if transport == "openai_compatible":
         for entry in PROVIDER_CATALOG:
             if (
