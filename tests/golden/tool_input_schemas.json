@@ -11716,5 +11716,62 @@
       "transaction_ids"
     ],
     "type": "object"
+  },
+  "get_spending_advice_before_payment": {
+    "additionalProperties": false,
+    "properties": {
+      "amount": {
+        "description": "What the purchase costs, in `currency`. Positive.",
+        "type": "number"
+      },
+      "currency": {
+        "description": "ISO currency of `amount` (e.g. 'USD', 'SGD').",
+        "type": "string"
+      },
+      "merchant": {
+        "type": "string",
+        "description": "Where it is bought, as the user or the receipt names it ('ACME Store')."
+      },
+      "category": {
+        "type": "string",
+        "description": "Budget category id or label. Omit to use the merchant's usual category; an unknown one is an error that lists the closest real labels."
+      },
+      "pay_with": {
+        "type": "string",
+        "description": "Account name or id it would be paid from (a card or a cash account). Omit for cash."
+      },
+      "date": {
+        "type": "string",
+        "description": "When it would be paid, YYYY-MM-DD. Defaults to today."
+      },
+      "essential": {
+        "type": "boolean",
+        "description": "True for a need (medicine, rent, groceries): it never gets a 'wait'."
+      }
+    },
+    "required": [
+      "amount",
+      "currency"
+    ],
+    "type": "object"
+  },
+  "talk_to_lucius": {
+    "additionalProperties": false,
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "What to ask or tell Lucius, in plain words, e.g. 'Should I buy these 289 headphones now or wait?' or 'I just bought them on Card B, log it.' Omit it, with conversation_id, to check how an earlier ask ended (an approval the user gave or not)."
+      },
+      "context": {
+        "type": "string",
+        "description": "What you're doing for the user that Lucius should know: the cart, options, prices, dates, the order. Plain text."
+      },
+      "conversation_id": {
+        "type": "string",
+        "description": "Continue an earlier conversation with Lucius (from a previous answer)."
+      }
+    },
+    "type": "object",
+    "required": []
   }
 }

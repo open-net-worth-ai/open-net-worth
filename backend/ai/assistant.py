@@ -229,6 +229,8 @@ _GATE_NEVER_AUTO_EXECUTE = frozenset(
         # Self-staged: it shows its own card, and wherever no card can be shown it writes a skill
         # and its script file. Never run it on arguments the model guessed.
         "save_code_as_skill",
+        # An outside app's ask: a whole Lucius turn. Never start one on arguments a model guessed.
+        "talk_to_lucius",
     }
 )
 

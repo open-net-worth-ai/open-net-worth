@@ -412,7 +412,9 @@ describe('the header filter', () => {
     )
     // All is "no row cap": slice(0, null) read it as zero rows.
     expect(await screen.findByText('QA Inn')).toBeTruthy()
-    const key = authFetch.mock.calls.map((c) => String(c[0])).find((u) => u.includes('rollup'))
+    const key = authFetch.mock.calls
+      .map((c) => String(c[0]))
+      .find((u) => u.startsWith('/api/reports/rollup'))
     expect(key).toContain('merchant_limit=0')
   })
 })

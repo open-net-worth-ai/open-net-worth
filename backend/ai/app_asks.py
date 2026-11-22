@@ -3,7 +3,7 @@
 Each ask is a real, durable Lucius conversation — the same turn path as a message typed in the app
 (``turns.spawn`` → ``conversation.stream_turn``), so Lucius has his normal tools and every call
 follows the owner's permissions: Blocked is refused, Always allow runs, and Ask is decided by the
-conversation's approval mode, set to Auto when the app's conversation is created. A change the
+conversation's approval mode, which a new conversation starts in as Auto (the session row's default). A change the
 judge sends to the owner becomes an ordinary approval card in that conversation.
 
 The conversation is marked with the app (``channel = "mcp:<caller>"``) so only that app can continue
@@ -20,9 +20,7 @@ import uuid
 from typing import Awaitable, Callable, Optional
 
 from backend.ai import assistant, conversation, live_sessions, turns
-from backend.core.conversation_approval import AUTO
 from backend.core.errors import NotFoundError, ValidationError
-from backend.services import conversation_approval
 
 log = logging.getLogger(__name__)
 
@@ -71,7 +69,7 @@ def message_for(name: str, question: str, context: Optional[str]) -> dict:
 
 
 def open_conversation(caller: str, conversation_id: Optional[str], question: str) -> str:
-    """The app's conversation: a new one (approval mode Auto), or one this app started."""
+    """The app's conversation: a new one (a new row starts in approval mode Auto), or one this app started."""
     channel = channel_for(caller)
     if conversation_id:
         meta = assistant._session_meta_entry(conversation_id) or {}
@@ -81,7 +79,6 @@ def open_conversation(caller: str, conversation_id: Optional[str], question: str
     session_id = str(uuid.uuid4())
     title = f"{app_name(caller)}: {question[:60]}"
     assistant.upsert_session_meta(session_id, title=title, channel=channel)
-    conversation_approval.set_mode(session_id, AUTO)
     return session_id
 
 
