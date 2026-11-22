@@ -217,7 +217,19 @@ async def _handle_tools_call(
     behind the auth gate — the tool runs. ``call_tool`` wraps a mutating call in a checkpoint
     (undoable) and audits it; a ``propose_*`` tool's diff is surfaced to the client.
     """
+    from backend.mcp import apps
+
+    if name == apps.ANSWER_TOOL:
+        from backend.core.audit_context import clear_audit_scope, set_audit_scope
+
+        token = set_audit_scope("ai", f"mcp:{caller.surface}", note=f"mcp tool:{name}")
+        try:
+            return _rpc_result(req_id, await apps.answer(arguments, caller.surface, caller.scopes))
+        finally:
+            clear_audit_scope(token)
     text, proposed = await call_tool(name, arguments, surface=caller.surface, scopes=caller.scopes)
+    if name in apps.UI_TOOLS and proposed is None:
+        return _rpc_result(req_id, apps.shape(text, caller.surface))
     return _rpc_result(req_id, _call_result(text, proposed))
 
 
@@ -226,6 +238,9 @@ async def _handle_method(
 ) -> dict:
     """Route one well-formed JSON-RPC request to its MCP handler → an RPC envelope."""
     if method == "initialize":
+        from backend.mcp import apps
+
+        apps.note_initialize(caller.surface, params)
         return _rpc_result(
             req_id,
             {
@@ -244,7 +259,10 @@ async def _handle_method(
         return _rpc_result(req_id, {})
 
     if method == "tools/list":
-        return _rpc_result(req_id, {"tools": mcp_tool_descriptors(caller.scopes)})
+        from backend.mcp import apps
+
+        tools = apps.decorate(mcp_tool_descriptors(caller.scopes), caller.scopes, caller.surface)
+        return _rpc_result(req_id, {"tools": tools})
 
     if method == "tools/call":
         name = params.get("name")
@@ -256,14 +274,23 @@ async def _handle_method(
         return await _handle_tools_call(name, arguments, req_id, caller)
 
     if method == "resources/list":
-        return _rpc_result(req_id, {"resources": mcp_resource_descriptors(scopes=caller.scopes)})
+        from backend.mcp import apps
+
+        resources = [
+            *mcp_resource_descriptors(scopes=caller.scopes),
+            *apps.resource_descriptors(caller.scopes, caller.surface),
+        ]
+        return _rpc_result(req_id, {"resources": resources})
 
     if method == "resources/read":
         uri = params.get("uri")
         if not isinstance(uri, str) or not uri:
             return _rpc_error(req_id, INVALID_PARAMS, "missing resource uri")
         try:
-            contents = await read_resource(uri, scopes=caller.scopes)
+            from backend.mcp import apps
+
+            ui = apps.read_ui(caller.scopes, caller.surface) if uri == apps.UI_URI else None
+            contents = ui if ui is not None else await read_resource(uri, scopes=caller.scopes)
         except McpResourceNotFound as exc:
             # An unlisted uri — refuse as a proper JSON-RPC error (never a 500 / leak).
             return _rpc_error(req_id, INVALID_PARAMS, str(exc))

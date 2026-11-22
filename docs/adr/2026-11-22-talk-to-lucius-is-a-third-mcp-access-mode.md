@@ -47,9 +47,17 @@ We will add a third MCP OAuth access mode, **Talk to Lucius**, beside Read and R
    exactly as in their own chats: Blocked is refused, Always allow runs, **Ask is decided by the
    conversation's approval mode, Auto (the Auto judge) by default**. Only the owner sets that
    mode, never the app.
-4. **An Ask the judge sends to the owner becomes an approval card**, never a silent run: the
-   surface for these conversations can render cards. The card is shown
-   - **inside the app's chat via MCP Apps** where the client supports it, for ordinary approvals;
+4. **An Ask the judge sends to the owner becomes an approval card**, never a silent run. The app's
+   own words are stored marked `_onw_app_ask`, so the judge never reads them as the owner's
+   intent. The card is shown
+   - **inside the app's chat via MCP Apps** where the client supports it (`backend/mcp/apps.py`):
+     `talk_to_lucius` declares a `ui://` card; its buttons call `answer_lucius_approval`, an
+     app-only tool (`visibility: ["app"]`) that also requires a one-time card token sent only in
+     the result's `_meta` (which reaches the card, not the model) — so the model can't press the
+     buttons even on a host that ignored visibility; it runs exactly what a tap in the app runs.
+     The card, the app-only tool and the tokens are offered only to a caller whose `initialize`
+     declared the extension, and a card gets buttons only for an ordinary change
+     (`app_asks.in_chat_ok`: nothing destructive, deleting, outbound or unknown);
    - **in Open Net Worth** (a signed-in page the in-chat card links to, the app, Telegram, push)
      for anything above the owner's hard limits or a never-rule, and for clients without MCP Apps.
 5. **The call streams.** It stays open while Lucius works, sending MCP progress messages as he

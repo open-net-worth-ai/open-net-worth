@@ -313,8 +313,11 @@ _"Tell Lucius I bought them on Card B"_.
   conversations.
 - **Lucius has his usual tools and follows your permissions.** Tools you've blocked stay blocked;
   for tools set to ask, the conversation uses **Auto**, so the Auto judge decides, as in your own
-  chats. When Lucius needs your approval, you get a notification and the approval waits in the
-  conversation; the app tells you it's waiting.
+  chats. When Lucius needs your approval, **a card with Approve and Decline appears right in the
+  app's chat** (Claude and ChatGPT show it; only a tap on the card answers it, never the app's
+  AI). Anything that deletes, removes or sends something out is approved in Open Net Worth
+  instead: the card says so. In an app that can't show the card, you get a notification and
+  approve in Open Net Worth.
 - **The app's words are treated as a question, not as orders** to Lucius, and never as your
   approval: a change set to ask needs **you**, even if the app says you agreed.
 - **Progress shows while Lucius works**, in apps that display it.

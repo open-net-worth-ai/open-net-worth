@@ -12,7 +12,10 @@ it, and the owner sees it in their Lucius history.
 
 from __future__ import annotations
 
+import hmac
 import logging
+import secrets
+import time
 import uuid
 from typing import Awaitable, Callable, Optional
 
@@ -83,8 +86,8 @@ def open_conversation(caller: str, conversation_id: Optional[str], question: str
 
 
 def waiting_approvals(session_id: str) -> list[dict]:
-    """The approval cards this conversation is waiting on, by what they would do."""
-    from backend.ai.tools.display import describe_tool_call
+    """The approval cards this conversation is waiting on: what each would do, in words with its
+    key values, and whether it may be answered on the in-chat card (``in_chat``)."""
     from backend.core.untrusted import sanitize_untrusted
     from backend.db.pending_plan_store import PendingPlanStore
 
@@ -95,11 +98,60 @@ def waiting_approvals(session_id: str) -> list[dict]:
         if entry.get("session_id") != session_id or card_id not in open_ids:
             continue
         change = entry.get("change") or {}
-        name = str(change.get("grant_tool") or change.get("type") or entry.get("tool") or "")
-        args = (change.get("display") or {}).get("arguments") or {}
-        label = str(describe_tool_call(name, args).get("label") or name.replace("_", " "))
-        waiting.append({"id": card_id, "what": sanitize_untrusted(label, 120)})
+        name = str(change.get("grant_tool") or entry.get("tool") or change.get("type") or "")
+        args = (change.get("display") or {}).get("arguments") or entry.get("args") or {}
+        what = sanitize_untrusted(_summary(name, args), 240)
+        waiting.append({"id": card_id, "what": what, "in_chat": in_chat_ok(name)})
     return waiting
+
+
+def in_chat_ok(tool_name: str) -> bool:
+    """Whether a card may be answered on the in-chat card. Open Net Worth can't prove a tap there
+    was the owner's, so anything destructive, anything that sends something out, and any tool
+    this registry doesn't know is approved in Open Net Worth instead (ADR item 4)."""
+    from backend.ai.tools._write_classification import NO_DOMAIN_WRITE_TOOLS
+    from backend.ai.tools.registry import has_external_effect, is_destructive, is_registered
+
+    return (
+        is_registered(tool_name)
+        and not is_destructive(tool_name)
+        and not has_external_effect(tool_name)
+        and tool_name not in NO_DOMAIN_WRITE_TOOLS
+        and not tool_name.startswith(_ONW_ONLY_PREFIXES)
+    )
+
+
+# Few tools declare ``destructive=``, so the names of everything that takes something away are
+# sent to Open Net Worth too. Over-matching is safe: it only means approving there.
+_ONW_ONLY_PREFIXES = (
+    "delete_",
+    "bulk_delete",
+    "remove_",
+    "forget_",
+    "purge",
+    "reset_",
+    "restore_",
+    "merge_",
+    "archive_",
+    "revoke_",
+    "unlink_",
+)
+
+
+def _summary(tool_name: str, args: dict) -> str:
+    """The card's action with its key values: "Move money — amount: 40, to: Dining"."""
+    from backend.ai.tools.display import describe_tool_call
+
+    label = str(describe_tool_call(tool_name, args).get("label") or tool_name.replace("_", " "))
+    parts = []
+    for key, value in (args or {}).items():
+        if isinstance(value, (str, int, float)) and not isinstance(value, bool) and value != "":
+            parts.append(f"{key.replace('_', ' ')}: {value}")
+        elif isinstance(value, list) and value:
+            parts.append(f"{key.replace('_', ' ')}: {len(value)}")
+        if len(parts) == 5:
+            break
+    return f"{label} — {', '.join(parts)}" if parts else label
 
 
 async def run_ask(session_id: str, message: dict, caller: str, progress: Progress) -> str:
@@ -115,9 +167,89 @@ async def run_ask(session_id: str, message: dict, caller: str, progress: Progres
     handle = turns.spawn(
         session_id, "chat", make_events, error_event=_error_event, cost_surface="web"
     )
+    # The saved transcript, not the live deltas: a slow watcher's queue can drop events.
+    return await _follow(session_id, handle.turn_id, progress)
+
+
+# One-time tokens for the approval card shown inside the app (MCP Apps). A token is handed out
+# only in the tool result's ``_meta`` — which reaches the card, not the model's context — and
+# answering a card requires it, so the model can't press the card's buttons itself even on a host
+# that wrongly let it call the card's app-only tool. In memory: after a restart the card is still
+# answerable in Open Net Worth, just not from the old in-chat card.
+_card_tokens: dict[tuple[str, str], tuple[str, float]] = {}
+CARD_TOKEN_TTL_S = 30 * 60
+
+
+def card_tokens(session_id: str, waiting: list[dict]) -> dict[str, str]:
+    """A fresh token per card that may be answered in the chat (an earlier one stops working)."""
+    _drop_expired()
+    tokens = {}
+    for card in waiting:
+        if not card.get("in_chat"):
+            continue
+        token = secrets.token_urlsafe(24)
+        _card_tokens[(session_id, card["id"])] = (token, time.monotonic())
+        tokens[card["id"]] = token
+    return tokens
+
+
+def card_token_ok(session_id: str, card_id: str, token: str) -> bool:
+    _drop_expired()
+    held = _card_tokens.get((session_id, card_id))
+    return bool(held and token and hmac.compare_digest(held[0], token))
+
+
+def spend_card_token(session_id: str, card_id: str) -> None:
+    _card_tokens.pop((session_id, card_id), None)
+
+
+def _drop_expired() -> None:
+    cutoff = time.monotonic() - CARD_TOKEN_TTL_S
+    for key in [k for k, (_, minted) in _card_tokens.items() if minted < cutoff]:
+        del _card_tokens[key]
+
+
+async def answer_card(
+    session_id: str, card_id: str, decision: str, caller: str, progress: Progress
+) -> str:
+    """Approve or decline a waiting card — exactly what tapping it in Open Net Worth does
+    (``resolve_pending_tool_use``, the stored call and nothing else) — then follow the turn it
+    resumes and return Lucius's answer. Raises if the card isn't waiting here any more."""
+    from backend.ai.permissions import engine as permission_engine
+    from backend.ai.prompts import build_system_prompt
+
+    if decision not in ("approve", "deny"):
+        raise ValidationError("decision must be approve or deny.")
+    from backend.services.automations.runs import automation_run_for_session
+
+    card = next((c for c in waiting_approvals(session_id) if c["id"] == card_id), None)
+    if card is None or automation_run_for_session(session_id) is not None:
+        raise NotFoundError("That approval isn't waiting any more.")
+    if not card["in_chat"]:
+        raise ValidationError("Approve this one in Open Net Worth.")
+    if turns.executing_turn_id(session_id) is not None:
+        raise ValidationError("Lucius is busy in this conversation. Try again shortly.")
+    spend_card_token(session_id, card_id)
+    log.info("an approval was answered on the in-chat card of %s (%s)", caller, decision)
+    permission_engine().record_resolution(session_id, card_id, decision, False)
+    system = build_system_prompt()
+
+    def make_events(turn_id: str):
+        return assistant.resolve_pending_tool_use(
+            session_id, card_id, decision, system, surface=channel_for(caller), turn_id=turn_id
+        )
+
+    handle = turns.spawn(
+        session_id, "resolve", make_events, error_event=_error_event, cost_surface="web"
+    )
+    return await _follow(session_id, handle.turn_id, progress)
+
+
+async def _follow(session_id: str, turn_id: str, progress: Progress) -> str:
+    """Report the turn's steps as progress; return the answer from the saved transcript."""
     failed = ""
     async for event in live_sessions.watch(session_id):
-        if event.get("turn_id") not in (None, handle.turn_id):
+        if event.get("turn_id") not in (None, turn_id):
             continue
         kind = event.get("type")
         if kind == "tool_use_start":
@@ -126,7 +258,6 @@ async def run_ask(session_id: str, message: dict, caller: str, progress: Progres
                 await progress(label)
         elif kind == "error":
             failed = event.get("message") or "Lucius ran into a problem."
-    # The saved transcript, not the live deltas: a slow watcher's queue can drop events.
     answer = last_answer(session_id)
     return f"{answer}\n({failed})".strip() if failed else answer
 

@@ -24,6 +24,8 @@ from backend.core.errors import OpenNetWorthError
 log = logging.getLogger(__name__)
 
 NAME = "talk_to_lucius"
+# The key the MCP server lifts out of this tool's JSON into the result's ``_meta``.
+CARD_META_KEY = "_card_meta"
 
 _NOT_MCP = (
     "talk_to_lucius is for other AI apps connected to Open Net Worth over MCP. You are Lucius: "
@@ -91,7 +93,7 @@ async def talk_to_lucius(input_data: dict):
             if pending:
                 # A new message would cancel the owner's card; the app waits like the owner does.
                 answer = app_asks.last_answer(session_id)
-                return json.dumps(_result(session_id, answer, pending), ensure_ascii=False), None
+                return json.dumps(result_for(session_id, answer, pending), ensure_ascii=False), None
             message = app_asks.message_for(
                 app_asks.app_name(caller), question, input_data.get("context")
             )
@@ -101,17 +103,24 @@ async def talk_to_lucius(input_data: dict):
     waiting = app_asks.waiting_approvals(session_id)
     if waiting and question:
         await _tell_owner(caller, waiting)
-    return json.dumps(_result(session_id, answer, waiting), ensure_ascii=False), None
+    return json.dumps(result_for(session_id, answer, waiting), ensure_ascii=False), None
 
 
-def _result(session_id: str, answer: str, waiting: list[dict]) -> dict:
+def result_for(session_id: str, answer: str, waiting: list[dict]) -> dict:
+    """The answer for the app. ``CARD_META_KEY`` holds the approval card's one-time tokens: the
+    MCP server moves it into the result's ``_meta`` (the in-chat card reads it; the model doesn't)."""
+    from backend.ai import app_asks
+
     result = {"status": "waiting_for_owner" if waiting else "done", "answer": answer}
     if waiting:
-        result["waiting_for"] = [w["what"] for w in waiting]
+        result["waiting"] = [
+            {"id": w["id"], "what": w["what"], "in_chat": w["in_chat"]} for w in waiting
+        ]
         result["note"] = (
-            "The user needs to approve this in Open Net Worth. Call again with this "
-            "conversation_id and no question to see how it ended."
+            "The user approves or declines this on the card shown in this chat, or in Open Net "
+            "Worth. Call again with this conversation_id and no question to see how it ended."
         )
+        result[CARD_META_KEY] = {"card_tokens": app_asks.card_tokens(session_id, waiting)}
     result["conversation_id"] = session_id
     return result
 

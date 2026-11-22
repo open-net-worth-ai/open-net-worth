@@ -92,11 +92,12 @@ def test_a_pending_approval_is_reported_and_the_owner_told(lucius, monkeypatch):
     import backend.services.notify as notify_mod
 
     monkeypatch.setattr(notify_mod, "notify", fake_notify)
-    checks = iter([[], [{"id": "t1", "what": "Move money"}]])  # none before the turn, one after
+    checks = iter([[], [{"id": "t1", "what": "Move money", "in_chat": True}]])  # none, then one
     monkeypatch.setattr(app_asks, "waiting_approvals", lambda sid: next(checks))
     result, _ = _ask({"question": "cover dinner from Ready to Assign"})
     assert result["status"] == "waiting_for_owner"
-    assert result["waiting_for"] == ["Move money"]
+    assert result["waiting"] == [{"id": "t1", "what": "Move money", "in_chat": True}]
+    assert result["_card_meta"]["card_tokens"]["t1"]
     assert told and "Move money" in told[0]
 
 
@@ -143,7 +144,9 @@ def test_the_judge_never_reads_the_apps_words_as_the_owners():
 def test_a_waiting_card_is_not_cancelled_by_a_new_ask(lucius, monkeypatch):
     first, _ = _ask({"question": "hi"})
     monkeypatch.setattr(
-        app_asks, "waiting_approvals", lambda sid: [{"id": "t1", "what": "Move money"}]
+        app_asks,
+        "waiting_approvals",
+        lambda sid: [{"id": "t1", "what": "Move money", "in_chat": True}],
     )
     calls_before = len(lucius)
     again, _ = _ask({"question": "never mind", "conversation_id": first["conversation_id"]})
