@@ -5,8 +5,8 @@ category: getting-started
 order: 40
 audience: [user]
 status: stable
-related: [getting-started/first-run, lucius/models-and-cost, operations/terminal, getting-started/what-is-open-net-worth]
-keywords: [ai provider, model, api key, claude code, codex, subscription, anthropic, openai, openrouter, gemini, ollama, lm studio, cost, setup]
+related: [getting-started/first-run, getting-started/open-net-worth-ai, lucius/models-and-cost, operations/terminal, getting-started/what-is-open-net-worth]
+keywords: [ai provider, open net worth ai, ai credit, model, api key, claude code, codex, subscription, anthropic, openai, openrouter, gemini, ollama, lm studio, cost, setup]
 ---
 
 # Connecting an AI provider
@@ -22,6 +22,7 @@ There are three kinds of connection:
 | **[A subscription you already pay for](#use-a-claude-or-chatgpt-subscription)** — Claude Code or Codex | A Claude or ChatGPT plan that includes it | Included in your plan; plan limits apply |
 | **[An API key](#use-an-api-key)** — OpenRouter, Anthropic, OpenAI, Gemini, xAI, Zhipu | An account with that provider | Pay per use, billed by the provider |
 | **[A local model](#use-a-local-model)** — Ollama, LM Studio, LiteLLM | A model running on your own computer | Free, but needs a capable machine |
+| **[Open Net Worth AI](#use-open-net-worth-ai)** — our own AI service | Private Cloud, or credit bought on cloud.opennetworth.ai | Included with Private Cloud; otherwise prepaid credit |
 
 Lucius works through long chains of tool calls, so a strong model matters. If you're unsure,
 start with a subscription you already have, or OpenRouter (one key, many models, including
@@ -151,6 +152,14 @@ file](../operations/upgrading.md#docker), or mount your own volumes at `/home/on
 
 The key is stored on the machine running Open Net Worth only. It's never sent to Lucius, never
 included in an export, and the field hides it (you can reveal it in Settings to check it).
+
+## Use Open Net Worth AI
+
+On Private Cloud it is already connected, with a monthly credit included; the row reads
+**Managed by Private Cloud** and shows the credit left. On the desktop app or your own server,
+buy credit on [cloud.opennetworth.ai](https://cloud.opennetworth.ai), then **＋ Add provider** →
+**Open Net Worth AI**, keep the **Base URL** `https://inference.opennetworth.ai/v1` and paste the key.
+Details, and what happens when the credit runs out: [Open Net Worth AI](open-net-worth-ai.md).
 
 ## Use a local model
 

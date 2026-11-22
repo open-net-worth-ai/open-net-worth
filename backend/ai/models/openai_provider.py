@@ -64,6 +64,9 @@ import json
 import logging
 from typing import AsyncGenerator, List, Optional
 
+from backend.core import onw_ai
+from backend.services import onw_ai as onw_ai_credit
+
 from .base import AIProvider, log_text_cap
 from .pricing import cost_usd_openai
 
@@ -88,6 +91,9 @@ class OpenAIProvider(AIProvider):
         self._is_openrouter = "openrouter.ai" in self.base_url.lower()
         self._is_openai = "api.openai.com" in self.base_url.lower()
         self._is_xai = "api.x.ai" in self.base_url.lower()
+        # Whatever Private Cloud asks every call to its own endpoint to carry; never interpreted.
+        self._request_extras = onw_ai.request_extras_for(self.base_url)
+        self._onw_ai = onw_ai.endpoint_kind(self.base_url) is not None
 
     def _get_client(self):
         if self._client is None:
@@ -548,6 +554,7 @@ class OpenAIProvider(AIProvider):
         extra_body.update(self._reasoning_body_fields(model, effort))
         extra_body.update(self._cache_body_fields(model))
         extra_body.update(self._cache_routing_fields(system, tools))
+        extra_body = onw_ai.deep_merge(extra_body, self._request_extras)
         if extra_body:
             kwargs["extra_body"] = extra_body
 
@@ -614,6 +621,9 @@ class OpenAIProvider(AIProvider):
 
                 raise UnsupportedModalityError(self._vision_ref(model), "image") from exc
 
+            if self._onw_ai:
+                # Accepted: there is credit again, so held Automations may run.
+                onw_ai_credit.call_succeeded(self.base_url)
             delivered = False
             served_by: Optional[str] = None
             a_input = a_output = a_cached = 0
@@ -847,6 +857,7 @@ class OpenAIProvider(AIProvider):
         kwargs: dict = dict(model=model, messages=oai_messages, max_tokens=max_tokens)
         if response_format is not None:
             kwargs["response_format"] = response_format
+        extra_body = onw_ai.deep_merge(extra_body, self._request_extras)
         if extra_body:
             kwargs["extra_body"] = extra_body
 
@@ -975,6 +986,7 @@ class OpenAIProvider(AIProvider):
             stream=True,
             stream_options={"include_usage": True},
         )
+        extra_body = onw_ai.deep_merge(extra_body, self._request_extras)
         if extra_body:
             kwargs["extra_body"] = extra_body
 

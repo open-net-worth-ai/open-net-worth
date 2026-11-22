@@ -25,18 +25,16 @@ class GetSpendingBreakdownInput(ToolInput):
     period: Optional[Literal["week", "month"]] = Field(
         default=None,
         description=(
-            "How the window is compared. Omit to infer: a window of exactly one calendar "
-            "month is 'month', a 7-day window is 'week', anything else is a generic "
-            "N-day window compared against N-day periods. 'month' also accepts month-to-date "
-            "(the 1st through a day of that month), compared with the same days of earlier "
-            "months."
+            "How the window is compared. Omitted: one calendar month is 'month', 7 days is "
+            "'week', else N-day periods. Pass 'month' for month-to-date (the 1st to a day of "
+            "that month) to compare it with the same days of earlier months."
         ),
     )
     baseline_periods: Optional[int] = Field(
         default=None,
         description=(
-            "How many periods before the window make up 'usual' (1-26). Default 8 for "
-            "weeks and generic windows, 6 for months."
+            "How many periods before the window make up 'usual' (1-26). Default 6 for "
+            "months, else 8."
         ),
     )
     include_year_ago: Optional[bool] = Field(
@@ -72,12 +70,12 @@ class GetSpendingBreakdownInput(ToolInput):
         "`description` and `memo` — say what was bought. Use it for "
         "any weekly/monthly spending report or 'am I spending more than usual': a fixed bill "
         "landing in the window dominates every comparison. Figures are base-currency, "
-        "computed server-side with the same rules as get_transactions' "
+        "computed server-side by get_transactions' rules for "
         "summary.total_expenses_base (= `spending.gross`; transfers and adjustments excluded) "
         "— quote them verbatim, never re-add. `change` carries the percentages (null when the "
         "base is 0), `bills_due_not_seen` lists bills expected in the window that never "
         "showed, and `notes` states any caveat (short history, bills older than "
-        "detection reaches) — pass those on rather than overstate certainty."
+        "detection reaches) — pass those on, never overstate certainty."
     ),
     input_schema=schema_of(GetSpendingBreakdownInput, tool_name="get_spending_breakdown"),
 )

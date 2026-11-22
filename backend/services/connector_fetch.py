@@ -298,6 +298,23 @@ def _balance_fields(account: dict) -> dict:
     return {k: shown.get(k) for k in ("balance", "cleared_balance", "available_to_spend")}
 
 
+def _card_fields(account: dict, linked_id: Optional[str]) -> dict:
+    """A card's ``credit_limit`` (the bank's, else the linked account's) and ``in_credit``:
+    whether its balance is money the card HOLDS (``balance_kinds.holds_credit``, the rule the
+    balance check reads) — so the list never calls a card in credit "owed"."""
+    if account.get("account_type") != "credit":
+        return {"credit_limit": None, "in_credit": False}
+    limit = account.get("credit_limit")
+    if not limit and linked_id:
+        limit = (ledger_service.accounts.find_by_id(linked_id) or {}).get("credit_limit")
+    shown = _balance_fields(account)
+    amount = shown["cleared_balance"] if shown["cleared_balance"] is not None else shown["balance"]
+    held = amount is not None and balance_kinds.holds_credit(
+        amount, shown["available_to_spend"], limit
+    )
+    return {"credit_limit": limit or None, "in_credit": held}
+
+
 def _linked_only_accounts(linked: dict[str, dict]) -> list[dict]:
     """The LINKED-only account view (``currency``/``balance`` always ``None`` — no live
     provider call backs them) — what ``provider_accounts()`` returns when the provider call
@@ -671,7 +688,9 @@ def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
     """The account list ONLY, no transaction fetch — ``GET /api/connectors/{id}/accounts``
     (``api/connectors_api.py``, L1) calls this directly. Returns ``{status, provider_label,
     accounts: [{provider_account_id, name, mask, currency, balance, cleared_balance,
-    available_to_spend, account_type, linked_account_id}]}`` (balances: ``_balance_fields``) — ``account_type`` is the provider's suggested app type, or None.
+    available_to_spend, account_type, linked_account_id, credit_limit, in_credit}]}`` (balances:
+    ``_balance_fields``; a card's limit and whether it is in credit: ``_card_fields``) —
+    ``account_type`` is the provider's suggested app type, or None.
 
     A pure READ (C-B2/S-F7): unlike ``fetch()``, this NEVER calls ``store.record_status``
     or publishes a sync event — opening the Connectors tab's link picker must not look like
@@ -732,6 +751,8 @@ def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
         clean = _sanitize_account(a)
         pid = clean.get("provider_account_id")
         seen.add(pid)
+        kind = _known_account_type(clean.get("account_type"))
+        linked_id = (linked.get(pid) or {}).get("linked_account_id")
         accounts.append(
             {
                 "provider_account_id": pid,
@@ -739,9 +760,10 @@ def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
                 "mask": clean.get("mask"),
                 "currency": clean.get("currency"),
                 **_balance_fields(clean),
-                "account_type": _known_account_type(clean.get("account_type")),
+                "account_type": kind,
                 "institution": clean.get("institution"),
-                "linked_account_id": (linked.get(pid) or {}).get("linked_account_id"),
+                "linked_account_id": linked_id,
+                **_card_fields({**clean, "account_type": kind}, linked_id),
             }
         )
     # Linked here, but missing from the list. With every bank answering, the bank no longer

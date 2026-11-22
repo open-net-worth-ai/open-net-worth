@@ -55,8 +55,9 @@ from backend.ai.models.codex_cli_catalog import catalog_readable as _codex_catal
 from backend.ai.models.codex_cli_catalog import missing_catalog_message as _codex_missing_catalog
 from backend.ai.models.codex_cli_catalog import model_ids as _codex_model_ids
 from backend.ai.models.codex_cli_catalog import refresh as _codex_refresh_catalog
+from backend.core import onw_ai
 from backend.core.config import get_settings
-from backend.core.errors import ConfigurationError, ProviderDisabledError
+from backend.core.errors import ConfigurationError, ProviderDisabledError, ValidationError
 from backend.core.io import atomic_write_text
 from backend.core.net_guard import UnresolvableHostError, UnsafeUrlError
 from backend.db import app_config_store
@@ -69,6 +70,7 @@ from backend.db.model_config_store import (
 )
 from backend.models.model_config import VALID_PROVIDERS, ModelConfigUpdate
 from backend.paths import MODELS_CACHE_JSON
+from backend.services import onw_ai as onw_ai_service
 
 logger = logging.getLogger(__name__)
 
@@ -563,7 +565,7 @@ def put_model_config(body: ModelConfigUpdate):
         changes["provider"] = provider
     try:
         return ModelConfigStore().update(changes)
-    except ConfigurationError as exc:
+    except (ConfigurationError, ValidationError) as exc:
         # e.g. defaulting to a provider with no model picked — a 422, not a 500.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -646,7 +648,23 @@ def put_provider_credentials(provider_key: str, body: ProviderCredentialsUpdate)
         # Re-enabling: also bust the cache.
         _bust_models_cache()
 
-    store.update_provider(provider_key, changes)
+    try:
+        store.update_provider(provider_key, changes)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    managed = _managed_models(provider_key)
+    if managed is not None:
+        # The environment is the configuration; there is nothing of the owner's to check.
+        public = store.providers_public()
+        return {
+            "configured_providers": public,
+            "key_status": "valid",
+            "checked_at": None,
+            "models": [m["id"] for m in managed],
+        }
 
     # Skip validation when disabling — no credentials to check.
     if changes.get("enabled") is False:
@@ -716,7 +734,10 @@ def delete_provider_key(provider_key: str):
             ),
         )
 
-    public = store.remove_provider_key(provider_key)
+    try:
+        public = store.remove_provider_key(provider_key)
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     _bust_models_cache()
     return {"configured_providers": public}
 
@@ -750,7 +771,10 @@ def delete_provider(provider_key: str):
             ),
         )
 
-    public = store.remove_provider(provider_key)
+    try:
+        public = store.remove_provider(provider_key)
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     _bust_models_cache()
     return {"configured_providers": public}
 
@@ -885,6 +909,10 @@ def validate_provider_credentials(provider_key: str):
     if entry is None:
         raise HTTPException(status_code=404, detail=f"unknown provider key: {provider_key!r}")
 
+    managed = _managed_models(provider_key)
+    if managed is not None:
+        return {"key_status": "valid", "checked_at": None, "models": [m["id"] for m in managed]}
+
     store = ModelConfigStore()
     # require_enabled=False: testing a key is not using the provider. Going through the gate
     # RAISED for a switched-off provider, and unguarded that 500'd — the UI, seeing no
@@ -937,6 +965,27 @@ def _report_cli_sign_in(
             f"{entry.get('label') or provider_key} is installed but not signed in. "
             "Expand Sign in to see how."
         )
+
+
+# ── Open Net Worth AI ─────────────────────────────────────────────────────────
+
+
+def _managed_models(provider_key: str) -> list[dict] | None:
+    """The models Private Cloud hands this agent — exactly those, labelled — when
+    ``provider_key`` is the managed Open Net Worth AI provider; None otherwise."""
+    cfg = onw_ai.managed() if provider_key == onw_ai.PROVIDER_KEY else None
+    if cfg is None:
+        return None
+    labels = {m["id"]: m["label"] for m in cfg.models}
+    rows = _annotate_ids(cfg.model_ids, "openai_compatible", cfg.base_url)
+    return [{**row, "label": labels[row["id"]]} for row in rows]
+
+
+@router.get("/api/model-config/onw-ai")
+def get_onw_ai_status():
+    """Whether Open Net Worth AI is managed by Private Cloud here, and the credit left when
+    known (``{remaining_usd, limit_usd, resets_at}``, else null). Never carries the key."""
+    return onw_ai_service.status()
 
 
 # ── Reveal stored API key ─────────────────────────────────────────────────────
@@ -1247,6 +1296,8 @@ def _model_row(model: dict, **extra) -> dict:
     # that may well accept it — the one failure mode this whole feature exists to avoid.
     if isinstance(model.get("vision"), bool):
         row["vision"] = model["vision"]
+    if model.get("label"):
+        row["label"] = model["label"]
     row.update(extra)
     return row
 
@@ -1453,6 +1504,9 @@ def _fetch_models_for_provider(
     entry = _provider_entry(provider_key)
     if entry is None:
         return [], "fallback"
+    managed = _managed_models(provider_key)
+    if managed is not None:
+        return managed, "live"
     transport: str = entry["transport"]
     creds = store.resolve_for_provider(provider_key) or {}
     api_key = (creds.get("api_key") or "").strip()
@@ -1582,6 +1636,9 @@ def get_models(all: bool = Query(default=False, alias="all")):  # noqa: A002
         from backend.db.model_config_store import _infer_provider_key
 
         provider_key_single = _infer_provider_key(provider, base_url) or provider
+        managed = _managed_models(provider_key_single)
+        if managed is not None:
+            return _resp([_model_row(m) for m in managed], "live")
         key = _cache_key(provider_key_single, base_url)
         cached = _read_cache(key)
         if cached is not None:

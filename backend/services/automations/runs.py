@@ -23,6 +23,7 @@ from backend.db.automation_run_store import AutomationRunStore, TransitionConfli
 from backend.db.automation_runtime_store import AutomationRuntimeStore
 from backend.db.automation_store import DELETING_STATUS, AutomationStore
 from backend.db.session_store import SessionStore
+from backend.services import onw_ai
 
 from .run_context import configured_trigger, last_completed_run, last_run_record, run_before_last
 from .schedules import compute_next_run, ran_slot_floor
@@ -819,11 +820,18 @@ async def run_due_automations(now: datetime | None = None) -> dict:
     ran = 0
     errors = 0
     waiting = 0
+    held = 0
     for automation in due:
         claim = runtime_store.get_for_automation(automation["id"]) or {}
         if claim.get("running_run_id"):
             waiting += 1
             results.append({"id": automation["id"], "waiting": True})
+            continue
+        # Out of Open Net Worth AI credit: the slot waits (still due) instead of calling a
+        # model only to be refused; it runs once the hold is lifted.
+        if onw_ai.automation_held(automation, now):
+            held += 1
+            results.append({"id": automation["id"], "held": True})
             continue
         ran += 1
         try:
@@ -837,4 +845,4 @@ async def run_due_automations(now: datetime | None = None) -> dict:
         except Exception as exc:
             errors += 1
             results.append({"id": automation.get("id"), "error": str(exc)})
-    return {"ran": ran, "errors": errors, "waiting": waiting, "results": results}
+    return {"ran": ran, "errors": errors, "waiting": waiting, "held": held, "results": results}

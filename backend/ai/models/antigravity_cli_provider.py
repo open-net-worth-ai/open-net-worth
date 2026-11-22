@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -42,6 +41,12 @@ _NO_RESULT = "Antigravity CLI output ended without a result event (the turn was 
 def cost_basis_for(api_key: str) -> str:
     """Attributes cost basis: "api_billed" when an API key is present, else "plan_included"."""
     return "api_billed" if (api_key or "").strip() else "plan_included"
+
+
+def _child_env() -> dict[str, str]:
+    """The same allowlisted environment as the other CLI providers: no app settings or keys
+    (Private Cloud's ONW_AI_KEY included) reach the CLI. It signs in from its own home."""
+    return scrubbed_environ()
 
 
 @dataclass(frozen=True)
@@ -228,7 +233,7 @@ class AntigravityCliProvider(AIProvider):
         result: Optional[dict] = None
         usage: dict[str, int] = {}
         async with self._semaphore:
-            session = await antigravity_live_session.spawn(argv, scrubbed_environ())
+            session = await antigravity_live_session.spawn(argv, _child_env())
             try:
                 await session.send(antigravity_live_session.with_system(system, prompt))
                 async for ev in session.events():
@@ -340,7 +345,7 @@ class AntigravityCliProvider(AIProvider):
         fresh: bool,
     ) -> AsyncGenerator[str, None]:
         """One model round on a live (pooled) or one-shot process; yields visible text."""
-        env = dict(os.environ)
+        env = _child_env()
         async with self._semaphore:
             if pooled:
                 session, text, _images, rnd.reused = await antigravity_live_session.acquire(

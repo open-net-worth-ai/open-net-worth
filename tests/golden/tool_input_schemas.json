@@ -3883,11 +3883,11 @@
           "month"
         ],
         "type": "string",
-        "description": "How the window is compared. Omit to infer: a window of exactly one calendar month is 'month', a 7-day window is 'week', anything else is a generic N-day window compared against N-day periods."
+        "description": "How the window is compared. Omitted: one calendar month is 'month', 7 days is 'week', else N-day periods. Pass 'month' for month-to-date (the 1st to a day of that month) to compare it with the same days of earlier months."
       },
       "baseline_periods": {
         "type": "integer",
-        "description": "How many periods before the window make up 'usual' (1-26). Default 8 for weeks and generic windows, 6 for months."
+        "description": "How many periods before the window make up 'usual' (1-26). Default 6 for months, else 8."
       },
       "include_year_ago": {
         "type": "boolean",
