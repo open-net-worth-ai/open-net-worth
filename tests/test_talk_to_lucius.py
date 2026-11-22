@@ -1,4 +1,4 @@
-"""ask_lucius — an app connected over MCP talks to Lucius in a real conversation (ADR
+"""talk_to_lucius — an app connected over MCP talks to Lucius in a real conversation (ADR
 2026-11-22-talk-to-lucius-is-a-third-mcp-access-mode). The model turn is stubbed: these pin the
 conversation, the approval mode, ownership, progress and the result shape."""
 
@@ -49,7 +49,7 @@ def _ask(args: dict, surface: str = "oauth:grant1"):
 
         token = mcp_progress.bind(report)
         try:
-            text, _ = await call_tool("ask_lucius", args, surface=surface)
+            text, _ = await call_tool("talk_to_lucius", args, surface=surface)
         finally:
             mcp_progress.reset(token)
         return json.loads(text), progress
@@ -112,7 +112,7 @@ def test_checking_back_returns_the_latest_answer(lucius, monkeypatch):
 
 
 def test_lucius_own_chat_cannot_call_it(lucius):
-    text, _ = asyncio.run(registry.dispatch("ask_lucius", {"question": "hi"}))
+    text, _ = asyncio.run(registry.dispatch("talk_to_lucius", {"question": "hi"}))
     assert "for other AI apps" in json.loads(text)["error"]
     assert lucius == []
 
@@ -152,4 +152,4 @@ def test_a_waiting_card_is_not_cancelled_by_a_new_ask(lucius, monkeypatch):
 
 
 def test_refused_on_the_public_demo():
-    assert "ask_lucius" in registry._DEMO_REFUSED_TOOLS
+    assert "talk_to_lucius" in registry._DEMO_REFUSED_TOOLS

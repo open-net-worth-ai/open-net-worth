@@ -37,7 +37,7 @@ deciders: orchestrating agent (Claude) + repo owner
 
 We will add a third MCP OAuth access mode, **Talk to Lucius**, beside Read and Read and change:
 
-1. **The app can call one tool, `ask_lucius(question, context?, conversation_id?)`.** No other
+1. **The app can call one tool, `talk_to_lucius(question, context?, conversation_id?)`.** No other
    tool, resource or prompt is reachable with this grant (`tool_allowed`, and the resources path
    takes the caller's scopes).
 2. **Each ask is a real, durable Lucius conversation**, marked as coming from the app ("from
@@ -55,7 +55,7 @@ We will add a third MCP OAuth access mode, **Talk to Lucius**, beside Read and R
 5. **The call streams.** It stays open while Lucius works, sending MCP progress messages as he
    goes, and ends with his answer — or, if an approval is pending, with his answer so far and
    what is waiting, plus `conversation_id`; calling again with it returns the outcome.
-6. **Read and change** grants and the API token may also call `ask_lucius`; **Read** grants may not
+6. **Read and change** grants and the API token may also call `talk_to_lucius`; **Read** grants may not
    (an ask can lead to changes).
 7. Kept regardless of mode: callable only over inbound MCP (no Lucius-to-Lucius loop), the app's
    text fenced as data, refused on the public demo, every change checkpointed and undoable.
@@ -79,7 +79,7 @@ We will add a third MCP OAuth access mode, **Talk to Lucius**, beside Read and R
 - More moving parts than a tool: a conversation surface, card relay, streaming.
 
 ### Follow-ups
-- Build: the `talk` grant scope and consent choice; `ask_lucius` on a durable conversation with the
+- Build: the `talk` grant scope and consent choice; `talk_to_lucius` on a durable conversation with the
   approval mode bound (Auto default); the card-capable surface; MCP Apps card + signed-in
   approval page; Telegram/push relay; streaming progress on `/mcp` (today it answers with one
   plain reply); Settings → MCP shows the mode.
@@ -91,7 +91,7 @@ We will add a third MCP OAuth access mode, **Talk to Lucius**, beside Read and R
   line in `CLAUDE.md`.
 
 ## Alternatives considered
-- **A headless `ask_lucius` with a read-only, no-internet tool ceiling** — built uncommitted and
+- **A headless `talk_to_lucius` with a read-only, no-internet tool ceiling** — built uncommitted and
   security-reviewed; rejected by the owner: Lucius should keep his tools.
 - **Headless with no ceiling** — rejected: no approval mode is bound and no card can render, so
   Ask-level tools would run with neither the Auto judge nor the owner.
@@ -109,7 +109,7 @@ We will add a third MCP OAuth access mode, **Talk to Lucius**, beside Read and R
   channels only.
 - **Driving artifacts:** `docs/design/spend-advisor/PRD.md`, `docs/design/spend-advisor/EXPERIENCE.md`,
   ADR `2026-11-16-hosted-ai-apps-connect-to-mcp-through-the-apps-own-oauth-server`, the two
-  security reviews of the spending-advice and headless `ask_lucius` work (2026-11-20/21).
+  security reviews of the spending-advice and headless `talk_to_lucius` work (2026-11-20/21).
 - **Why this way (one line):** an agent should talk to the owner's money manager, not hold the
   owner's books — and Lucius acting under the owner's own permissions is the only version where
   "no ceiling" is safe.

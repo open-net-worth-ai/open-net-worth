@@ -1,4 +1,4 @@
-"""ask_lucius — an AI app connected over MCP talks to Lucius (ADR
+"""talk_to_lucius — an AI app connected over MCP talks to Lucius (ADR
 2026-11-22-talk-to-lucius-is-a-third-mcp-access-mode).
 
 Each ask is a real Lucius conversation (``ai.app_asks``): Lucius has his normal tools, and every
@@ -23,10 +23,10 @@ from backend.core.errors import OpenNetWorthError
 
 log = logging.getLogger(__name__)
 
-NAME = "ask_lucius"
+NAME = "talk_to_lucius"
 
 _NOT_MCP = (
-    "ask_lucius is for other AI apps connected to Open Net Worth over MCP. You are Lucius: "
+    "talk_to_lucius is for other AI apps connected to Open Net Worth over MCP. You are Lucius: "
     "answer the user yourself."
 )
 
@@ -71,7 +71,7 @@ def _caller() -> Optional[str]:
     ),
     input_schema=schema_of(AskLuciusInput, tool_name=NAME),
 )
-async def ask_lucius(input_data: dict):
+async def talk_to_lucius(input_data: dict):
     from backend.ai import app_asks  # imports assistant, which imports this package
 
     caller = _caller()
@@ -128,4 +128,4 @@ async def _tell_owner(caller: str, waiting: list[dict]) -> None:
             title="Approval needed",
         )
     except Exception:  # noqa: BLE001 — the card waits in the conversation either way
-        log.warning("ask_lucius: could not send the approval notice", exc_info=True)
+        log.warning("talk_to_lucius: could not send the approval notice", exc_info=True)

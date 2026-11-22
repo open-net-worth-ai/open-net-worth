@@ -44,7 +44,7 @@ READ_ONLY_REFUSAL = (
 
 # What a "Talk to Lucius" grant may call — and the one tool a Read grant may not: an ask can
 # lead to changes (each under the owner's own permissions).
-TALK_TOOLS = frozenset({"ask_lucius"})
+TALK_TOOLS = frozenset({"talk_to_lucius"})
 
 
 def tool_allowed(name: str, scopes: tuple[str, ...]) -> bool:
@@ -109,7 +109,7 @@ _SIDE_EFFECT_NO_DOMAIN: frozenset[str] = frozenset(
         "add_run_tasks",
         "update_run_task",
         # Starts or continues a Lucius conversation; Lucius may change what the owner allows.
-        "ask_lucius",
+        "talk_to_lucius",
     }
 )
 

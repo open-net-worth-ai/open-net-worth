@@ -130,7 +130,7 @@ class ConsentBody(BaseModel):
     request: str
     decision: str  # "allow" | "deny"
     allow_write: bool = False
-    talk_only: bool = False  # "Talk to Lucius": the app may only call ask_lucius
+    talk_only: bool = False  # "Talk to Lucius": the app may only call talk_to_lucius
 
 
 def _cross_site(request: Request) -> bool:

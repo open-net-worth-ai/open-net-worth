@@ -321,7 +321,7 @@ READ_ONLY_TOOLS = frozenset(
 NO_DOMAIN_WRITE_TOOLS: dict[str, str] = {
     # Another app talks to Lucius (ai.app_asks): it writes a conversation, and each tool Lucius
     # calls in it carries its own domains and goes through the owner's permissions.
-    "ask_lucius": "starts or continues a Lucius conversation for a connected app",
+    "talk_to_lucius": "starts or continues a Lucius conversation for a connected app",
     # Outbound SMTP only. Irreversible externally; nothing local changes.
     "email_send_message": "sends mail via the connector's SMTP; writes no local store",
     # Loads tool groups/names into the turn's scope. The stickiness lands in chat session

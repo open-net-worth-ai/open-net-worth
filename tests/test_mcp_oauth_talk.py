@@ -1,5 +1,5 @@
 """The "Talk to Lucius" grant (ADR 2026-11-22-talk-to-lucius-is-a-third-mcp-access-mode): the owner
-picks it on the consent page; the app reaches ask_lucius and nothing else — no other tool and no
+picks it on the consent page; the app reaches talk_to_lucius and nothing else — no other tool and no
 resource. Plus MCP progress streaming for a tools/call that asks for it."""
 
 from __future__ import annotations
@@ -74,11 +74,11 @@ def _names(client, token) -> set[str]:
     return {t["name"] for t in rpc(client, token, "tools/list").json()["result"]["tools"]}
 
 
-def test_talk_reaches_ask_lucius_and_nothing_else(client):
+def test_talk_reaches_talk_to_lucius_and_nothing_else(client):
     body = _connect(client, talk_only=True)
     assert body["scope"] == "talk"
     token = body["access_token"]
-    assert _names(client, token) == {"ask_lucius"}
+    assert _names(client, token) == {"talk_to_lucius"}
     assert rpc(client, token, "resources/list").json()["result"]["resources"] == []
     res = rpc(client, token, "resources/read", {"uri": "accounts://list"}).json()
     assert "error" in res
@@ -102,8 +102,8 @@ def test_talk_cannot_call_a_book_tool(client, monkeypatch):
 
 
 def test_read_cannot_talk_but_read_and_change_can(client):
-    assert "ask_lucius" not in _names(client, _connect(client)["access_token"])
-    assert "ask_lucius" in _names(client, _connect(client, allow_write=True)["access_token"])
+    assert "talk_to_lucius" not in _names(client, _connect(client)["access_token"])
+    assert "talk_to_lucius" in _names(client, _connect(client, allow_write=True)["access_token"])
 
 
 def test_talk_cannot_be_refreshed_into_read(client):
@@ -137,7 +137,7 @@ def test_a_tool_call_that_asks_for_progress_is_streamed(client, monkeypatch):
         "id": 7,
         "method": "tools/call",
         "params": {
-            "name": "ask_lucius",
+            "name": "talk_to_lucius",
             "arguments": {"question": "hi"},
             "_meta": {"progressToken": "p1"},
         },
@@ -169,5 +169,7 @@ def test_a_call_without_a_progress_token_is_plain_json(client, monkeypatch):
 
     monkeypatch.setattr(adapter, "execute_tool", fake_execute)
     token = _connect(client, talk_only=True)["access_token"]
-    res = rpc(client, token, "tools/call", {"name": "ask_lucius", "arguments": {"question": "hi"}})
+    res = rpc(
+        client, token, "tools/call", {"name": "talk_to_lucius", "arguments": {"question": "hi"}}
+    )
     assert res.headers["content-type"].startswith("application/json")

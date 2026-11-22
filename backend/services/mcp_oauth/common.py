@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 SCOPES = ("read", "write")
 # Grant-only: the OWNER picks "Talk to Lucius" on the consent page; a client never requests it
-# (parse_scopes still knows only read/write). Such a grant reaches ask_lucius and nothing else.
+# (parse_scopes still knows only read/write). Such a grant reaches talk_to_lucius and nothing else.
 TALK = "talk"
 GRANT_SCOPES = (*SCOPES, TALK)
 
