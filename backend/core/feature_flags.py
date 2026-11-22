@@ -290,6 +290,37 @@ FLAGS: tuple[Flag, ...] = (
         added=date(2026, 11, 15),
         remove_by=date(2027, 5, 15),
     ),
+    Flag(
+        name="dashboard_server_panels",
+        title="Dashboard figures worked out on the server",
+        description=(
+            "Next 30 days, Currencies, Spending by category, Savings rate, Crossover and "
+            "Spending pace show figures the server works out (the 30-day window on your "
+            "profile's time zone, cross rates, shares, the overspend, the crossover year, the "
+            "pace warning) instead of working them out in the browser. They read the same "
+            "numbers as every other screen. Off: those widgets work them out in the browser, "
+            "as before."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 22),
+        remove_by=date(2027, 2, 28),
+    ),
+    Flag(
+        name="screen_query_batch",
+        title="Load a screen's figures in one request",
+        description=(
+            "The Dashboard asks for its heavy figures (net worth, analytics, commitments, "
+            "budget, reports, cash flow, dividends) in one request that the server answers "
+            "from one read of your book, instead of one request each. On by default. Off: "
+            "every figure is fetched on its own, as before."
+        ),
+        default=True,
+        owner="owner",
+        added=date(2026, 11, 22),
+        remove_by=date(2027, 2, 28),
+        kind="kill_switch",
+    ),
 )
 
 

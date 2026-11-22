@@ -268,6 +268,16 @@ yet, it shows the latest month that does and says so (*"September. Nothing yet i
   categories. The **Savings rate** 3-month average and the **Income & expense table** averages
   use complete months only, and Goals lists your savings goals.
 
+- **Figures worked out on the server (experimental).** In Settings → Developer → Experimental,
+  **Dashboard figures worked out on the server** makes **Next 30 days**, **Currencies**,
+  **Spending by category**, **Savings rate**, **Crossover**, **Spending pace** and **FIRE
+  projection** show figures the server works out: the 30 days count from today in your
+  profile's time zone (not your computer's clock), and the overspend, category shares, cross
+  rates, crossover year and pace warnings come from the same read as the rest of the app. With
+  it on, a FIRE projection needs a net worth above zero and says so. Off (the default), these
+  widgets work as before. **Load a screen's figures in one request** (on by default) can be
+  switched off if the Dashboard ever loads worse; every figure is then fetched on its own.
+
 ## What Lucius can do here
 
 - Answer "what's my net worth?" or "how am I doing?" with the same figures, over 1M, 3M, 6M, 1Y

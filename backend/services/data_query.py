@@ -65,6 +65,29 @@ def _float(v: Any) -> float:
     return float(v)
 
 
+def _bool(v: Any) -> bool:
+    if isinstance(v, bool):
+        return v
+    if v in ("true", "1", 1):
+        return True
+    if v in ("false", "0", 0):
+        return False
+    raise ValueError("expected true or false")
+
+
+def _str(v: Any) -> str:
+    if not isinstance(v, str) or len(v) > 200:
+        raise ValueError("expected a short string")
+    return v
+
+
+def _str_list(v: Any) -> list[str]:
+    """A list of short strings (tags, category ids, currency pairs) — a JSON array."""
+    if not isinstance(v, list) or len(v) > 100:
+        raise ValueError("expected a list of at most 100 strings")
+    return [_str(x) for x in v]
+
+
 def _month(v: Any) -> str:
     if not isinstance(v, str) or len(v) != 7 or v[4] != "-":
         raise ValueError("expected YYYY-MM")
@@ -119,6 +142,93 @@ def _investments_brief(p: dict) -> Any:
     return portfolio_brief.compute_brief()
 
 
+def _reports_rollup(p: dict) -> Any:
+    from backend.services import reports_rollup
+
+    return reports_rollup.reports_aggregates(**_report_kwargs(p))
+
+
+def _report_kwargs(p: dict) -> dict:
+    out = {k: p[k] for k in ("months", "merchant_limit", "period") if k in p}
+    if "tag" in p:
+        out["tags"] = p["tag"]
+    if "category" in p:
+        out["categories"] = p["category"]
+    return out
+
+
+def _cashflow_flow(p: dict) -> Any:
+    from backend.services import cash_flow_graph
+
+    return cash_flow_graph.cash_flow_graph(
+        p.get("month"),
+        compact=p.get("compact", False),
+        period=p.get("period"),
+        tags=p.get("tag"),
+        categories=p.get("category"),
+    )
+
+
+def _cashflow_projections(p: dict) -> Any:
+    from backend.services import cashflow_projections
+
+    return cashflow_projections.projections()
+
+
+def _dividends(p: dict) -> Any:
+    from backend.services import dividend_summary
+
+    return dividend_summary.income_aggregates()
+
+
+# ── Panels: a Dashboard widget's figures, computed here (services/dashboard_panels.py) ──
+
+
+def _panel_upcoming(p: dict) -> Any:
+    from backend.services import dashboard_panels
+
+    return dashboard_panels.upcoming()
+
+
+def _panel_fx(p: dict) -> Any:
+    from backend.services import dashboard_panels
+
+    return dashboard_panels.fx(p.get("pairs"), p.get("flipped"))
+
+
+def _panel_report(p: dict) -> Any:
+    from backend.services import dashboard_panels
+
+    return dashboard_panels.report(**_report_kwargs(p))
+
+
+def _panel_crossover(p: dict) -> Any:
+    from backend.services import dashboard_panels
+
+    return dashboard_panels.crossover()
+
+
+def _panel_fire(p: dict) -> Any:
+    from backend.services import dashboard_panels
+
+    return dashboard_panels.fire()
+
+
+def _panel_spending_pace(p: dict) -> Any:
+    from backend.services import dashboard_panels
+
+    return dashboard_panels.spending_pace(p.get("categories"))
+
+
+_REPORT_PARAMS: dict[str, Callable[[Any], Any]] = {
+    "months": _int_in(1, 120),
+    "merchant_limit": _int_in(0, 10_000),
+    "period": _str,
+    "tag": _str_list,
+    "category": _str_list,
+}
+
+
 SOURCES: dict[str, Source] = {
     # GET /api/net-worth
     "net_worth": Source(_net_worth, {}),
@@ -139,6 +249,31 @@ SOURCES: dict[str, Source] = {
     "planning_summary": Source(_planning_summary, {"ym": _month}),
     # GET /api/investments/brief
     "investments_brief": Source(_investments_brief, {}),
+    # GET /api/reports/rollup?months=&merchant_limit=&period=&tag=&category=
+    "reports_rollup": Source(_reports_rollup, _REPORT_PARAMS),
+    # GET /api/cashflow/flow?month=&compact=&period=&tag=&category=
+    "cashflow_flow": Source(
+        _cashflow_flow,
+        {
+            "month": _month,
+            "compact": _bool,
+            "period": _str,
+            "tag": _str_list,
+            "category": _str_list,
+        },
+    ),
+    # GET /api/cashflow/projections
+    "cashflow_projections": Source(_cashflow_projections, {}),
+    # GET /api/income/dividends
+    "dividends": Source(_dividends, {}),
+    # Panels — no GET route of their own; only the flagged Dashboard widgets ask for them.
+    "panel_upcoming": Source(_panel_upcoming, {}),
+    # Waits on live FX quotes: the client sends it in a request of its own.
+    "panel_fx": Source(_panel_fx, {"pairs": _str_list, "flipped": _str_list}),
+    "panel_report": Source(_panel_report, _REPORT_PARAMS),
+    "panel_crossover": Source(_panel_crossover, {}),
+    "panel_fire": Source(_panel_fire, {}),
+    "panel_spending_pace": Source(_panel_spending_pace, {"categories": _str_list}),
 }
 
 

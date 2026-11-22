@@ -380,6 +380,9 @@ A heavy server read (one that rebuilds the book) is a SOURCE of `GET /api/query`
 (`services/data_query.SOURCES`, the same service call as its route) fetched with `querySource` —
 never a new standalone GET a screen fires beside the others (ADR
 `2026-11-21-a-screens-heavy-reads-are-one-query-from-one-read-of-the-book`).
+A Dashboard widget's figures and verdicts are a `panel_*` source (`services/dashboard_panels.py`);
+its view only draws — `panels/noBrowserMath.test.ts` fails on browser math (ADR
+`2026-11-22-a-dashboard-widget-is-a-server-query-and-a-view`, flag `dashboard_server_panels`).
 Screen data: read through `useQueryCache` — it revalidates on every tool write, from any surface
 (`dispatch` → `GET /api/events`, ADR `2026-09-29-every-write-refreshes-every-open-screen`); a
 screen holding fetched data in local state must add `useDataVersion('*')` to its fetch deps.

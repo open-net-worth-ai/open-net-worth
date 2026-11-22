@@ -146,6 +146,16 @@ function scopeQuery({ period, tags, categories }: ReportScope = {}): string {
   return parts.length ? `&${parts.join('&')}` : ''
 }
 
+/** The same scope as `/api/query` params — lists sorted like the key, so one scope is one
+ *  query identity. */
+export function scopeParams({ period, tags, categories }: ReportScope = {}) {
+  return {
+    period: period || undefined,
+    tag: tags?.length ? [...tags].sort() : undefined,
+    category: categories?.length ? [...categories].sort() : undefined,
+  }
+}
+
 export function useReportsRollup(
   months = 6,
   merchantLimit = 10,
@@ -153,7 +163,16 @@ export function useReportsRollup(
 ): QueryCacheResult<ReportsRollup> {
   const version = useDataVersion([...PLANNING_SIGNALS])
   const key = `/api/reports/rollup?months=${months}&merchant_limit=${merchantLimit}${scopeQuery(scope)}`
-  return useQueryCache<ReportsRollup>(key, () => fetchJson<ReportsRollup>(key), { version })
+  return useQueryCache<ReportsRollup>(
+    key,
+    () =>
+      querySource<ReportsRollup>(
+        'reports_rollup',
+        { months, merchant_limit: merchantLimit, ...scopeParams(scope) },
+        key,
+      ),
+    { version },
+  )
 }
 
 /** One month's money-flow (Sankey) graph — or a whole period's, given `scope.period`. `month` is
@@ -165,7 +184,12 @@ export function useCashFlowGraph(
 ): QueryCacheResult<CashFlowGraph> {
   const version = useDataVersion([...PLANNING_SIGNALS])
   const key = `/api/cashflow/flow?month=${month}&compact=${compact}${scopeQuery(scope)}`
-  return useQueryCache<CashFlowGraph>(key, () => fetchJson<CashFlowGraph>(key), { version })
+  return useQueryCache<CashFlowGraph>(
+    key,
+    () =>
+      querySource<CashFlowGraph>('cashflow_flow', { month, compact, ...scopeParams(scope) }, key),
+    { version },
+  )
 }
 
 /** Dividends received YTD, the next 90 days of payments, and the 12-month forecast. */
@@ -173,7 +197,7 @@ export function useDividendSummary(): QueryCacheResult<DividendSummary> {
   const version = useDataVersion(['portfolio', 'ledger'])
   return useQueryCache<DividendSummary>(
     DIVIDEND_SUMMARY_KEY,
-    () => fetchJson<DividendSummary>(DIVIDEND_SUMMARY_KEY),
+    () => querySource<DividendSummary>('dividends', {}, DIVIDEND_SUMMARY_KEY),
     { version },
   )
 }
@@ -183,7 +207,7 @@ export function useCashflowProjections(): QueryCacheResult<CashflowProjections> 
   const version = useDataVersion([...PORTFOLIO_SIGNALS])
   return useQueryCache<CashflowProjections>(
     CASHFLOW_PROJECTIONS_KEY,
-    () => fetchJson<CashflowProjections>(CASHFLOW_PROJECTIONS_KEY),
+    () => querySource<CashflowProjections>('cashflow_projections', {}, CASHFLOW_PROJECTIONS_KEY),
     { version },
   )
 }

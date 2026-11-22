@@ -133,11 +133,11 @@ function monthShortLabel(ym: string): string {
 }
 
 /** Attach a fallback colour to a server series/row that has none. Presentation only. */
-function withColor<T extends { color: string }>(rows: T[]): T[] {
+export function withColor<T extends { color: string }>(rows: T[]): T[] {
   return rows.map((r, i) => (r.color ? r : { ...r, color: paletteColor(i) }))
 }
 
-const REPORT_MONTHS = 6
+export const REPORT_MONTHS = 6
 
 /** The month the spending widgets show. A new month has no spending for its first days, and
  *  "No spending recorded this month yet" over a full September read as a broken import.
@@ -198,7 +198,7 @@ function useReports(instance: WidgetInstance, def: WidgetDefinition, merchantLim
 }
 
 /** The header filter, when the widget can be edited (a preview has no `onPatch`). */
-function filterPill(
+export function filterPill(
   instance: WidgetInstance,
   def: WidgetDefinition,
   onPatch: WidgetContentProps['onPatch'] | undefined,
@@ -210,11 +210,11 @@ function filterPill(
 }
 
 /** "No spending recorded…", naming the period and tags a widget is narrowed to. */
-function emptyFor(what: string, meta: string, fallback: string): string {
+export function emptyFor(what: string, meta: string, fallback: string): string {
   return meta ? `No ${what} in ${meta}.` : fallback
 }
 
-function MonthNote({ children }: { children: string }) {
+export function MonthNote({ children }: { children: string }) {
   return (
     <Text as="p" size="xs" tone="muted" className="ov-rep-note">
       {children}
@@ -719,7 +719,7 @@ const IncExpTable: ComponentType<WidgetContentProps> = ({ instance, def, onPatch
 // hand-drawn arc plugin) since charts.tsx doesn't export it — self-contained
 // via OvChart's own `config.plugins`, no change to the shared wrapper.
 
-function gaugeConfig(value: number, total: number, color: string) {
+export function gaugeConfig(value: number, total: number, color: string) {
   return {
     type: 'doughnut',
     data: {

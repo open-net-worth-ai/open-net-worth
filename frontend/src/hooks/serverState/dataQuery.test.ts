@@ -4,6 +4,8 @@ const authFetch = vi.fn()
 vi.mock('../../api/client', () => ({ authFetch: (...a: unknown[]) => authFetch(...a) }))
 
 import { querySource } from './dataQuery'
+import { clearQueryCache, setCachedQueryData } from '../../state/queryCache'
+import { FEATURE_FLAGS_KEY } from '../useFlag'
 
 function ndjson(lines: object[], status = 200): Response {
   return new Response(lines.map((l) => JSON.stringify(l)).join('\n') + '\n', {
@@ -89,5 +91,44 @@ describe('querySource', () => {
     ])
     expect(a).toBe(1)
     expect(b).toEqual({ via: 'get' })
+  })
+
+  it('sends a source that waits on live quotes in a request of its own', async () => {
+    authFetch.mockImplementation(async (url: string) => {
+      const { queries } = JSON.parse(new URL(url, 'http://x').searchParams.get('q') ?? '{}')
+      return ndjson(
+        queries.map((q: { refId: string }) => ({ refId: q.refId, status: 200, data: 1 })),
+      )
+    })
+    await Promise.all([
+      querySource('panel_fx', { pairs: [] }),
+      querySource('net_worth', {}, '/api/net-worth'),
+    ])
+    expect(authFetch).toHaveBeenCalledTimes(2)
+    expect(sentQueries(0).map((q) => q.source)).toEqual(['panel_fx'])
+    expect(sentQueries(1).map((q) => q.source)).toEqual(['net_worth'])
+  })
+
+  it('rejects a panel the stream never answered: it has no GET to fall back to', async () => {
+    authFetch.mockResolvedValue(ndjson([]))
+    await expect(querySource('panel_upcoming', {})).rejects.toThrow(/panel_upcoming/)
+    expect(authFetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('screen_query_batch off', () => {
+  beforeEach(() => {
+    authFetch.mockReset()
+    clearQueryCache()
+    setCachedQueryData(FEATURE_FLAGS_KEY, {
+      locked: false,
+      flags: [{ name: 'screen_query_batch', enabled: false }],
+    })
+  })
+
+  it('fetches each query from its own GET, as before the batch', async () => {
+    authFetch.mockResolvedValue(new Response(JSON.stringify({ net_worth: 1 }), { status: 200 }))
+    await expect(querySource('net_worth', {}, '/api/net-worth')).resolves.toEqual({ net_worth: 1 })
+    expect(String(authFetch.mock.calls[0]![0])).toBe('/api/net-worth')
   })
 })

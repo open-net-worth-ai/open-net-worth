@@ -108,6 +108,18 @@ _PARITY = [
     ("commitments_coverage", {"months": 12}, "/api/commitments/coverage?months=12"),
     ("planning_summary", {"ym": "2026-11"}, "/api/planning/summary?ym=2026-11"),
     ("investments_brief", {}, "/api/investments/brief"),
+    (
+        "reports_rollup",
+        {"months": 6, "merchant_limit": 10},
+        "/api/reports/rollup?months=6&merchant_limit=10",
+    ),
+    (
+        "cashflow_flow",
+        {"month": "2026-10", "compact": True},
+        "/api/cashflow/flow?month=2026-10&compact=true",
+    ),
+    ("cashflow_projections", {}, "/api/cashflow/projections"),
+    ("dividends", {}, "/api/income/dividends"),
 ]
 
 

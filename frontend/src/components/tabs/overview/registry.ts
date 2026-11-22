@@ -16,8 +16,10 @@ import { contentWidgetComponents } from './widgets/content'
 import { luxCoffeeWidgetComponents } from './widgets/luxCoffee'
 import { spendingPaceWidgetComponents } from './widgets/spendingPace'
 import { transactionsWidgetComponents } from './widgets/transactions'
+import { withServerPanels } from './panels/panel'
+import { PANEL_COMPONENTS } from './panels'
 
-export const WIDGET_COMPONENTS: Record<string, ComponentType<WidgetContentProps>> = {
+const BASE_COMPONENTS: Record<string, ComponentType<WidgetContentProps>> = {
   ...netWorthWidgetComponents,
   ...overviewCashflowCoreWidgetComponents,
   ...cashflowPlanningWidgetComponents,
@@ -29,3 +31,6 @@ export const WIDGET_COMPONENTS: Record<string, ComponentType<WidgetContentProps>
   ...spendingPaceWidgetComponents,
   ...transactionsWidgetComponents,
 }
+
+// `dashboard_server_panels` picks, per widget, the server panel or the old component.
+export const WIDGET_COMPONENTS = withServerPanels(BASE_COMPONENTS, PANEL_COMPONENTS)

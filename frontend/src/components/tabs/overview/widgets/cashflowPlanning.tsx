@@ -67,7 +67,7 @@ function ChevronIcon({ dir }: { dir: -1 | 1 }) {
   )
 }
 
-function FooterLink({
+export function FooterLink({
   label,
   tab,
   onNavigate,
