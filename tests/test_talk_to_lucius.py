@@ -15,6 +15,9 @@ from backend.ai.tools import registry
 
 @pytest.fixture
 def lucius(monkeypatch, db_isolated):
+    from backend.core.chat_session import clear_session_id
+
+    clear_session_id()  # a test elsewhere on this worker may have left a turn's id bound
     seen: list[dict] = []
 
     async def fake_stream_turn(session_id, new_messages, **kw):
@@ -61,7 +64,7 @@ def test_an_app_gets_lucius_answer_in_a_new_conversation(lucius):
     from backend.services import conversation_approval
 
     result, progress = _ask({"question": "Can I buy 289 headphones?", "context": "cart: B"})
-    assert result["status"] == "done"
+    assert result["status"] == "done", result
     assert result["answer"] == "It fits: Electronics has 340."
     session_id = result["conversation_id"]
     assert conversation_approval.get_mode(session_id) == "auto"
