@@ -53,6 +53,8 @@
     { "glob": "frontend/src/components/tabs/imports/Review*", "docs": ["docs/product/features/actual-budget-import.md", "docs/product/features/imports-and-sync.md"] },
     { "glob": "backend/services/ynab_sync/**", "docs": ["docs/product/connectors/bank-brokerage.md", "docs/product/features/imports-and-sync.md"] },
     { "glob": "backend/services/ynab_migration/**", "docs": ["docs/product/connectors/bank-brokerage.md"] },
+    { "glob": "backend/*/onw_ai.py", "docs": ["docs/product/getting-started/open-net-worth-ai.md", "docs/product/getting-started/connecting-an-ai-provider.md"] },
+    { "glob": "frontend/src/components/tabs/settings/sections/[Oo]nwAi*", "docs": ["docs/product/getting-started/open-net-worth-ai.md"] },
     { "glob": "frontend/src/components/tabs/settings/sections/[Mm]cp*", "docs": ["docs/product/operations/connect-ai-apps.md", "docs/product/features/settings.md"] },
     { "glob": "frontend/src/components/tabs/settings/sections/Shortcuts*", "docs": ["docs/product/features/phone-shortcuts.md", "docs/product/features/settings.md"] },
     { "glob": "backend/services/shortcuts/**", "docs": ["docs/product/features/phone-shortcuts.md"] },

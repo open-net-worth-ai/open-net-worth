@@ -44,8 +44,12 @@ from backend.core.run_steps import settle_in_flight_steps
 from backend.core.turn_cancel import peek_cancel_reason
 from backend.core.unattended import reset_unattended, set_unattended
 from backend.core.user_time import user_now
+from backend.services import onw_ai
 
 logger = logging.getLogger(__name__)
+
+# A run refused for lack of Open Net Worth AI credit is held, not failed for a reason to debug.
+HELD_SUMMARY = "Held: AI credit is used up"
 
 
 # The tool that lets a run declare its own plan. Loaded before round 1 rather than
@@ -161,6 +165,7 @@ async def automation_runner(
     steps_by_tool_id: dict[str, dict] = {}
     usage: dict[str, Any] | None = None
     failure: str | None = None
+    held: str | None = None
     last_progress_chars = 0
 
     def _record_failure(exc: BaseException) -> dict:
@@ -169,9 +174,16 @@ async def automation_runner(
         ``_drive`` maps an exception to an event and does NOT re-raise, so without reading
         it here a run whose turn blew up would still report ``completed``.
         """
-        nonlocal failure
-        failure = str(exc) or type(exc).__name__
-        logger.exception("automation Lucius run failed: %s", request.run_id, exc_info=exc)
+        nonlocal failure, held
+        # Out of Open Net Worth AI credit: the run is HELD, with the plain reason, and nothing
+        # retries it — every retry would be refused the same way until the credit is back.
+        held = onw_ai.out_of_credit_message(exc)
+        if held:
+            failure = held
+            logger.warning("automation run %s held: AI credit is used up", request.run_id)
+        else:
+            failure = str(exc) or type(exc).__name__
+            logger.exception("automation Lucius run failed: %s", request.run_id, exc_info=exc)
         return {"type": "error", "message": failure, "run_id": request.run_id}
 
     async def _events(turn_id: str) -> AsyncGenerator[dict, None]:
@@ -357,10 +369,13 @@ async def automation_runner(
     if failure is not None:
         _mark_running_steps(steps, "failed")
         plan = _mark_running_steps(declared_plan, "failed")
+        fields = _usage_fields(usage)
+        if held:
+            fields["stats"] = {**fields.get("stats", {}), "held": "ai_credit"}
         return AutomationRunnerResult(
             status="failed",
             session_id=request.session_id,
-            summary=summary or "Execution failed",
+            summary=HELD_SUMMARY if held else (summary or "Execution failed"),
             error=failure[:2000],
             steps=steps,
             plan=plan,
@@ -369,7 +384,7 @@ async def automation_runner(
             context=context,
             files=files,
             working_dir=_working_dir(request.execution),
-            **_usage_fields(usage),
+            **fields,
         )
 
     if pending_tool_ids:

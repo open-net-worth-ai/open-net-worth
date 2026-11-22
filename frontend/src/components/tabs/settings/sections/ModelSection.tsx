@@ -40,6 +40,8 @@ import {
 } from '../ds'
 import type { SectionProps } from '../ds'
 import { TurnTimeLimitPanel } from './TurnTimeLimitPanel'
+import { OnwAiCredit } from './OnwAiCredit'
+import { ONW_AI_KEY } from './onwAiStatus'
 
 // ── shapes ───────────────────────────────────────────────────────────────────
 interface CatalogEntry {
@@ -63,6 +65,8 @@ interface ConfiguredProvider {
   key_status?: 'valid' | 'invalid' | 'unreachable' | 'unchecked'
   checked_at?: string | null
   label?: string
+  /** Open Net Worth AI on Private Cloud: endpoint, key and models come from the environment. */
+  managed?: boolean
 }
 
 // "Custom" is one catalog row, but the owner may keep several OpenAI-compatible endpoints:
@@ -313,7 +317,9 @@ function ProviderRow({
             {/* display_base_url covers the pinned-transport case: Anthropic stores base_url:""
                 because its transport owns the host, so the row said nothing about where it
                 talks to while every other provider showed its endpoint. */}
-            {isCli ? (
+            {cfg.managed ? (
+              <span>Managed by Private Cloud</span>
+            ) : isCli ? (
               /* The resolved binary path, shown exactly where a URL provider shows its
                  endpoint — both answer "where does this actually run from". Falls back to
                  the binary name when it is not on this machine (no path to show). */
@@ -330,6 +336,9 @@ function ProviderRow({
             ) : null}
             {cfg.model ? <span>{cfg.model}</span> : null}
           </div>
+          {entry.key === ONW_AI_KEY && (cfg.managed || cfg.has_api_key) && enabled ? (
+            <OnwAiCredit />
+          ) : null}
           {subscription && (
             <div className="rd-help">
               Use your {entry.key === 'claude_cli' ? 'Claude' : 'ChatGPT'} subscription; no API key
@@ -352,9 +361,11 @@ function ProviderRow({
                 onToggle(entry.key, v)
               }}
             />
-            <Btn size="xs" variant="ghost" onClick={() => onEdit(entry.key)}>
-              Edit
-            </Btn>
+            {cfg.managed ? null : (
+              <Btn size="xs" variant="ghost" onClick={() => onEdit(entry.key)}>
+                Edit
+              </Btn>
+            )}
           </>
         )}
       </div>
@@ -637,7 +648,9 @@ function ProviderModal({
             help={
               cfg?.has_api_key
                 ? 'A key is saved — leave blank to keep it'
-                : 'Stored server-side, never shown again'
+                : entry.key === ONW_AI_KEY
+                  ? 'Buy credit and get a key at cloud.opennetworth.ai. Stored server-side.'
+                  : 'Stored server-side, never shown again'
             }
           >
             <div className="rd-keyfield">
