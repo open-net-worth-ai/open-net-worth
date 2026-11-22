@@ -27,7 +27,7 @@ await writeFile(path.join(root, 'entry.cjs'), `const {app}=require('electron');a
 let app;
 const menu = label => app.evaluate(({ Menu }, label) => Menu.getApplicationMenu().items.flatMap(item => item.submenu?.items ?? []).find(item => item.label === label).click(), label);
 try {
-  app = await electron.launch({ args: [root], env: { ...process.env, ONW_DESKTOP_ROOT: '', ONW_QA_MODE: '1', ONW_DESKTOP_REPO: repo, ONW_DESKTOP_PYTHON: path.join(repo, 'desktop/runtime/python/bin/python3') } });
+  app = await electron.launch({ args: [root], env: { ...process.env, ONW_DESKTOP_PRIVATE_CLOUD: '0', ONW_DESKTOP_ROOT: '', ONW_QA_MODE: '1', ONW_DESKTOP_REPO: repo, ONW_DESKTOP_PYTHON: path.join(repo, 'desktop/runtime/python/bin/python3') } });
   await keepOffscreen(app);
   const page = await app.firstWindow();
   await page.waitForURL(`${origin}/`);
@@ -40,7 +40,7 @@ try {
   assert.equal(await modal.getByText('Private Cloud').count(), 0);
   assert.equal(await modal.locator('#hosted, #move').count(), 0);
   assert.equal(await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.flatMap(item => item.submenu?.items ?? []).filter(item => /Private Cloud/.test(item.label)).length), 0);
-  console.log('PASS a stale saved cloud session is ignored; no Private Cloud row, link or menu item');
+  console.log('PASS with the kill switch (ONW_DESKTOP_PRIVATE_CLOUD=0) a saved cloud session is ignored; no Private Cloud row, link or menu item');
   const contentHeight = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.getTitle().startsWith('Connection')).getContentSize()[1]);
   const documentHeight = () => modal.evaluate(() => Math.ceil(document.documentElement.getBoundingClientRect().height));
   const shot = async name => { if (process.env.ONW_QA_SHOTS) await modal.screenshot({ path: path.join(process.env.ONW_QA_SHOTS, `${name}.png`) }); };

@@ -219,7 +219,8 @@ try {
   await nativeChoice(null, true);
   await page.getByRole("button", { name: "Change" }).click();
   await page.getByRole("heading", { name: "Where should we keep your book?" }).waitFor();
-  assert.equal(await page.getByText("Private Cloud").count(), 0);
+  assert.equal(await page.locator("#hosted").count(), 1);
+  assert.ok(await page.getByText("Open Net Worth Private Cloud", { exact: true }).isVisible());
   assert.equal(await page.getByRole("button", { name: "On your own server", exact: true }).count(), 1);
   if (process.env.ONW_QA_SHOTS) for (const scheme of ["dark", "light"]) {
     await app.evaluate(({nativeTheme},scheme)=>{nativeTheme.themeSource=scheme;},scheme);
