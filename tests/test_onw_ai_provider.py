@@ -78,7 +78,7 @@ def test_not_managed_without_the_environment(env):
     # Still offered for a pasted key, with the public endpoint as its default.
     entry = next(e for e in body["catalog"] if e["key"] == "onw_ai")
     assert entry["label"] == "Open Net Worth AI"
-    assert entry["base_url"] == "https://ai.opennetworth.ai/v1"
+    assert entry["base_url"] == "https://inference.opennetworth.ai/v1"
 
 
 @pytest.mark.parametrize("missing", ["ONW_AI_BASE_URL", "ONW_AI_KEY", "ONW_AI_MODELS"])

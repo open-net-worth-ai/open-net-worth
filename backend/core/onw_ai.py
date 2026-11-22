@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 PROVIDER_KEY = "onw_ai"
 LABEL = "Open Net Worth AI"
-PUBLIC_BASE_URL = "https://ai.opennetworth.ai/v1"
+PUBLIC_BASE_URL = "https://inference.opennetworth.ai/v1"
 # The Private Cloud overlay's hub: the relay answers there over the tunnel, in plain http.
 OVERLAY_HOST = "10.99.0.1"
 # What a fresh Private Cloud agent runs when nothing else is chosen.

@@ -32,7 +32,7 @@ You can still add any other provider beside it.
 
 1. Buy credit on [cloud.opennetworth.ai](https://cloud.opennetworth.ai) and create a key.
 2. In **Settings → AI**, click **＋ Add provider** and pick **Open Net Worth AI**.
-3. Leave **Base URL** as `https://ai.opennetworth.ai/v1`, paste the key into **API key**,
+3. Leave **Base URL** as `https://inference.opennetworth.ai/v1`, paste the key into **API key**,
    choose a **Default model**, and click **Add provider**.
 
 The app checks the key and loads the models it can use. The key is stored like every other

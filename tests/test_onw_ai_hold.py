@@ -60,7 +60,9 @@ def test_a_managed_hold_lasts_until_the_cached_reset(env):
 
 
 def test_a_pasted_key_hold_is_an_hour(env):
-    assert credit_service.record_out_of_credit(_err("https://ai.opennetworth.ai/v1"), now=NOW)
+    assert credit_service.record_out_of_credit(
+        _err("https://inference.opennetworth.ai/v1"), now=NOW
+    )
     assert credit_service.held_until() == NOW + timedelta(hours=1)
     assert not credit_service.hold_active(NOW + timedelta(hours=1, seconds=1))
 
@@ -84,8 +86,8 @@ def test_credit_seen_again_lifts_the_hold(env):
 
 
 def test_a_successful_call_lifts_the_hold(env):
-    credit_service.record_out_of_credit(_err("https://ai.opennetworth.ai/v1"), now=NOW)
-    credit_service.call_succeeded("https://ai.opennetworth.ai/v1")
+    credit_service.record_out_of_credit(_err("https://inference.opennetworth.ai/v1"), now=NOW)
+    credit_service.call_succeeded("https://inference.opennetworth.ai/v1")
     assert credit_service.held_until() is None
 
 

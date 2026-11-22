@@ -158,7 +158,7 @@ included in an export, and the field hides it (you can reveal it in Settings to 
 On Private Cloud it is already connected, with a monthly credit included; the row reads
 **Managed by Private Cloud** and shows the credit left. On the desktop app or your own server,
 buy credit on [cloud.opennetworth.ai](https://cloud.opennetworth.ai), then **＋ Add provider** →
-**Open Net Worth AI**, keep the **Base URL** `https://ai.opennetworth.ai/v1` and paste the key.
+**Open Net Worth AI**, keep the **Base URL** `https://inference.opennetworth.ai/v1` and paste the key.
 Details, and what happens when the credit runs out: [Open Net Worth AI](open-net-worth-ai.md).
 
 ## Use a local model

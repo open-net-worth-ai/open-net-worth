@@ -20,7 +20,7 @@ const CATALOG = [
     key: 'onw_ai',
     label: 'Open Net Worth AI',
     transport: 'openai_compatible',
-    base_url: 'https://ai.opennetworth.ai/v1',
+    base_url: 'https://inference.opennetworth.ai/v1',
     needs_api_key: true,
     editable_base_url: true,
     model_hints: ['acme-flash'],
@@ -118,7 +118,7 @@ it('shows no credit figure when none is known', async () => {
   configured = {
     onw_ai: {
       has_api_key: true,
-      base_url: 'https://ai.opennetworth.ai/v1',
+      base_url: 'https://inference.opennetworth.ai/v1',
       model: 'acme-flash',
       enabled: true,
       key_status: 'valid',
@@ -138,7 +138,7 @@ it('adding it asks for a key with the public endpoint filled in', async () => {
   render(<ModelSection toast={vi.fn()} />)
   fireEvent.click(await screen.findByRole('button', { name: /add provider/i }))
   expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('onw_ai')
-  expect(screen.getByDisplayValue('https://ai.opennetworth.ai/v1')).toBeTruthy()
+  expect(screen.getByDisplayValue('https://inference.opennetworth.ai/v1')).toBeTruthy()
   expect(screen.getByText(/get a key at cloud\.opennetworth\.ai/i)).toBeTruthy()
 })
 

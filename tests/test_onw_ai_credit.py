@@ -135,7 +135,7 @@ def test_mapping_an_error_does_no_network_or_database_io(env, monkeypatch):
     assert refreshes == [CREDIT_URL]
     for name in ("ONW_AI_BASE_URL", "ONW_AI_KEY", "ONW_AI_MODELS", "ONW_AI_CREDIT_URL"):
         monkeypatch.delenv(name)
-    pasted = _err(422, _BUDGET, "https://ai.opennetworth.ai/v1/chat/completions")
+    pasted = _err(422, _BUDGET, "https://inference.opennetworth.ai/v1/chat/completions")
     assert credit_service.out_of_credit_message(pasted) == credit_service.PASTED_KEY_OUT_OF_CREDIT
 
 
@@ -155,7 +155,7 @@ def test_free_text_alone_is_not_out_of_credit_on_400_or_422(env, status, body):
 @pytest.mark.parametrize(("status", "body"), _VARIANTS)
 def test_a_pasted_key_gets_its_own_message(env, status, body):
     ModelConfigStore().update_provider("onw_ai", {"api_key": PASTED_KEY})
-    url = "https://ai.opennetworth.ai/v1/chat/completions"
+    url = "https://inference.opennetworth.ai/v1/chat/completions"
     message, _ = _friendly_error(_err(status, body, url))
     assert message == credit_service.PASTED_KEY_OUT_OF_CREDIT
     assert PASTED_KEY not in message

@@ -23,7 +23,7 @@ from backend.core.sensitive import SECRET_TABLES
 from backend.db.model_config_store import ModelConfigStore
 
 KEY = "sk-test-pasted-key"
-PUBLIC = "https://ai.opennetworth.ai/v1"
+PUBLIC = "https://inference.opennetworth.ai/v1"
 RELAY_MODELS = {"object": "list", "data": [{"id": "claude-haiku-5.5"}, {"id": "acme-flash"}]}
 
 
@@ -139,7 +139,7 @@ def test_the_model_cannot_read_the_key(env):
         ("http://127.0.0.1:4000/v1", True),
         ("http://relay.example.test/v1", False),
         ("http://10.99.0.2:4000/v1", False),
-        ("ftp://ai.opennetworth.ai/v1", False),
+        ("ftp://inference.opennetworth.ai/v1", False),
     ],
 )
 def test_the_endpoint_must_be_https_except_overlay_or_local(env, url, ok):
@@ -170,7 +170,11 @@ def test_the_environment_wins_over_a_pasted_key(env):
 
 @pytest.mark.parametrize(
     "url",
-    ["http://relay.example.test/v1", "http://10.99.0.2:4000/v1", "ftp://ai.opennetworth.ai/v1"],
+    [
+        "http://relay.example.test/v1",
+        "http://10.99.0.2:4000/v1",
+        "ftp://inference.opennetworth.ai/v1",
+    ],
 )
 def test_the_store_itself_refuses_an_unsafe_endpoint(env, url):
     from backend.core.errors import ValidationError
