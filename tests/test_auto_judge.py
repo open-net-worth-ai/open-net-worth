@@ -295,6 +295,22 @@ def test_the_rules_say_a_run_found_item_of_an_asked_kind_counts_as_asked_for():
     assert "no reason to ask" in SYSTEM
     # …and the asks that bound it stay in the same paragraph
     assert "a delete or a rewrite when they only say to log" in SYSTEM
+    # the kinds are read by the money movement, not the sender (a merchant's card refund)
+    assert "not by who sent the message" in SYSTEM
+
+
+@pytest.mark.parametrize("system", [SYSTEM, auto_judge.BATCH_SYSTEM])
+def test_the_judge_writes_its_reason_before_its_verdict(system):
+    """Verdict-first, haiku asked and then gave a reason saying the call fit (2026-11-22)."""
+    reply = system[system.rindex("Reply with ONLY") :]
+    assert reply.index('"reason"') < reply.index('"verdict"')
+
+
+def test_a_reason_first_reply_still_parses():
+    assert auto_judge.parse_reply('{"reason": "Fits the instructions.", "verdict": "allow"}') == (
+        "allow",
+        "Fits the instructions.",
+    )
 
 
 # ── which model ─────────────────────────────────────────────────────────────────────────

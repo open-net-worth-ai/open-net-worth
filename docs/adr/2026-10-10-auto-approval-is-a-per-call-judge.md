@@ -214,6 +214,21 @@ purpose — a self-escalation guard is not an approval classification.
 > — 5/5 with and 5/5 without the new paragraph. The owner relabelled that read `allow`: the send is
 > what would carry the data out and it still asks; a card on the read adds nothing. The remaining
 > false-asks are mostly corpus cases whose "today" date has gone stale.
+>
+> Second change, same day (owner: "It's bad if it can't work with haiku"). The shipped "Email
+> finance digest" template then stopped on a merchant's refund receipt (a Stripe email for a refund
+> to a card). Replaying that exact call, `haiku` allowed it 8/20 and `sonnet` about 2/5. Two causes,
+> two fixes. (1) Asked for `{"verdict", "reason"}`, haiku picked "ask" first and then wrote a reason
+> saying the call fit; asked for the reason FIRST, it allowed 20/20 with no other change. Both reply
+> formats (single and batch) now put the reason before the verdict; the parsers read keys, not
+> order. (2) Sonnet's asks were about meaning — a merchant receipt "isn't a bank or card
+> confirmation". The Automation paragraph now says to read the kinds by the money movement, not the
+> sender: a charge or refund a merchant's receipt shows on the owner's card is a card transaction.
+> After both: the real call 20/20 on haiku and 20/20 on sonnet; whole corpus ×3 on each, zero
+> false-allows (previously 2 haiku, 3 sonnet), every `automation-*` case right 3/3, including the new
+> `automation-books-a-merchant-refund`. Giving the judge the account's name and type was also tried
+> and made haiku WORSE (with the money-movement sentence, verdict-first: 17/20 without the account
+> line, 7/20 with it), so it was not shipped.
 
 ## Consequences
 

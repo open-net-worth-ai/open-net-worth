@@ -90,7 +90,10 @@ In an Automation run the owner's intent is the Automation's saved instructions, 
 before the run. They describe KINDS of work ("log each payment confirmed in my bank emails"); \
 they cannot name the rows a run finds, because those did not exist yet. So a call that does \
 exactly one kind of work the instructions ask for, to an item the run found, counts as asked \
-for: that the instructions do not name this payee, amount or date is no reason to ask. Every \
+for: that the instructions do not name this payee, amount or date is no reason to ask. Read \
+the kinds they name by what the money movement is, not by who sent the message: a charge or \
+refund that a merchant's receipt shows on the owner's card is a card transaction, and a refund \
+is the same kind of entry as the payment it reverses. Every \
 other rule still holds — ask when the call is a kind of action the instructions do not ask for \
 (a delete or a rewrite when they only say to log, a message they did not ask to send), when it \
 deletes, restores or rewrites data in bulk or through a filter, when it sends to a recipient \
@@ -111,9 +114,12 @@ cannot connect to anything the owner said.
 
 When in doubt, ask. Asking costs the owner one tap; a wrong allow can cost them their data."""
 
+#: The reason comes BEFORE the verdict, so the verdict follows from it. Asked verdict-first,
+#: haiku chose "ask" and then wrote a reason saying the call fit the instructions: a merchant
+#: refund in an email Automation was allowed 8/20 verdict-first, 20/20 reason-first (2026-11-22).
 _REPLY = """\
-Reply with ONLY a JSON object: {"verdict": "allow" or "ask", "reason": "<one plain sentence \
-for the owner>"}"""
+Reply with ONLY a JSON object, the reason first and then the verdict it leads to: \
+{"reason": "<one plain sentence for the owner>", "verdict": "allow" or "ask"}"""
 
 SYSTEM = f"{_INTRO}\n\n{_RULES}\n\n{_REPLY}"
 
@@ -135,8 +141,9 @@ the app (email, message, webhook, web request) — ask for BOTH, unless the owne
 plainly asked for exactly that. A call that is the other half of a combination you would ask \
 about is itself an ask.
 
-Reply with ONLY a JSON object holding one entry per call, each id exactly once: {{"verdicts": \
-[{{"id": "c1", "verdict": "allow" or "ask", "reason": "<one plain sentence>"}}, …]}}"""
+Reply with ONLY a JSON object holding one entry per call, each id exactly once, each reason \
+before the verdict it leads to: {{"verdicts": [{{"id": "c1", "reason": "<one plain sentence>", \
+"verdict": "allow" or "ask"}}, …]}}"""
 
 
 def clip(text: str, limit: int) -> str:
