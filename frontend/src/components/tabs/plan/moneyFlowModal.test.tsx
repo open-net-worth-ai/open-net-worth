@@ -77,7 +77,10 @@ describe('MoneyFlowModal', () => {
     expect(document.querySelector('.mf-kpi.pos')).toBeNull()
     expect(screen.queryByText(/^Saved/)).toBeNull()
     expect(document.querySelectorAll('.mf-lnk')).toHaveLength(4)
-    expect(authFetch.mock.calls[0]![0]).toContain('/api/cashflow/flow?month=2026-08')
+    // The batch (/api/query) fails against this stub, so the read falls back to its own GET.
+    expect(authFetch.mock.calls.map(([u]) => String(u))).toContainEqual(
+      expect.stringContaining('/api/cashflow/flow?month=2026-08'),
+    )
   })
 
   it('opens the register filtered to a clicked spending category and month', async () => {
