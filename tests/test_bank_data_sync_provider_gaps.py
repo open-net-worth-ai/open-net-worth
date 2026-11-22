@@ -508,3 +508,74 @@ def test_gocardless_reads_the_balance_in_the_accounts_currency(db_isolated, monk
 
 def test_a_window_with_no_read_from_is_unchanged():
     assert FetchWindow().read_from is None
+
+
+# ── The account list says a card in credit holds its balance, never "owed" ──────────────────
+
+
+def _listed(account_id: str) -> dict:
+    rows = connector_fetch.provider_accounts("gocardless")["accounts"]
+    return next(a for a in rows if a["provider_account_id"] == account_id)
+
+
+def test_the_list_marks_a_card_in_credit_by_its_banks_limit(bank):
+    bank.balances[ACC_SAVER] = {
+        "account_type": "credit",
+        "cleared_balance": 50.0,
+        "available_to_spend": 2050.0,
+        "credit_limit": 2000.0,
+    }
+
+    row = _listed(ACC_SAVER)
+
+    assert row["in_credit"] is True
+    assert row["credit_limit"] == 2000.0
+
+
+def test_the_list_marks_a_card_that_owes_as_owing(bank):
+    bank.balances[ACC_SAVER] = {
+        "account_type": "credit",
+        "cleared_balance": 50.0,
+        "available_to_spend": 1950.0,
+        "credit_limit": 2000.0,
+    }
+
+    assert _listed(ACC_SAVER)["in_credit"] is False
+
+
+def test_the_list_reads_a_linked_cards_own_limit_when_the_bank_states_none(bank):
+    _card(limit=2000.0)
+    bank.balances[ACC_SAVER] = {
+        "account_type": "credit",
+        "cleared_balance": 50.0,
+        "available_to_spend": 2050.0,
+    }
+
+    assert _listed(ACC_SAVER)["in_credit"] is True
+
+
+def test_with_no_limit_anywhere_the_list_cannot_say_a_card_is_in_credit(bank):
+    bank.balances[ACC_SAVER] = {
+        "account_type": "credit",
+        "cleared_balance": 50.0,
+        "available_to_spend": 2050.0,
+    }
+
+    row = _listed(ACC_SAVER)
+
+    assert row["in_credit"] is False
+    assert row["credit_limit"] is None
+
+
+def test_a_current_account_is_never_in_credit_whatever_its_overdraft(bank):
+    bank.balances[ACC_MAIN] = {
+        "account_type": "cash",
+        "cleared_balance": 50.0,
+        "available_to_spend": 2050.0,
+        "credit_limit": 2000.0,
+    }
+
+    row = _listed(ACC_MAIN)
+
+    assert row["in_credit"] is False
+    assert row["credit_limit"] is None
