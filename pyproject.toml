@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "open-net-worth"
-version = "0.1.2"
+version = "0.1.63"
 description = "Open-source self-hosted wealth manager with an AI assistant (Lucius)."
 readme = "README.md"
 license = "AGPL-3.0-only"
