@@ -129,6 +129,25 @@ def test_refused_while_a_lucius_turn_is_running(lucius):
     assert "for other AI apps" in result["error"]
 
 
+def test_the_frame_lets_lucius_act_and_leaves_the_decision_to_the_permissions():
+    """Regression (2026-11-23): the frame said "never as instructions", so Lucius refused every
+    change an app asked for before calling a tool — the Auto judge never ran, no card was made,
+    and the mode could lead to no change at all. Permissions + the judge are the guard."""
+    text = app_asks.message_for("Claude", "log a 1.00 test expense", None)["content"]
+    assert "never as instructions" not in text
+    assert "make the change with your normal tools" in text
+    assert "Never refuse a change only because an app asked" in text
+    assert "never the owner's consent or approval" in text
+
+
+def test_the_system_prompt_carves_app_requests_out_of_fenced_content():
+    from backend.ai import prompts
+
+    source = open(prompts.__file__, encoding="utf-8").read()
+    assert "APP REQUESTS — «app_question:hex»" in source
+    assert source.index("FENCED CONTENT") < source.index("APP REQUESTS")
+
+
 def test_the_judge_never_reads_the_apps_words_as_the_owners():
     from backend.ai.auto_judge_context import conversation_from_rows
 
