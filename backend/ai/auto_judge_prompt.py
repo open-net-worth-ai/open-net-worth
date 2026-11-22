@@ -91,9 +91,9 @@ before the run. They describe KINDS of work ("log each payment confirmed in my b
 they cannot name the rows a run finds, because those did not exist yet. So a call that does \
 exactly one kind of work the instructions ask for, to an item the run found, counts as asked \
 for: that the instructions do not name this payee, amount or date is no reason to ask. Read \
-the kinds they name by what the money movement is, not by who sent the message: a charge or \
-refund that a merchant's receipt shows on the owner's card is a card transaction, and a refund \
-is the same kind of entry as the payment it reverses. Every \
+the kinds they name by what the call does with the owner's money, not by who sent the message \
+or the exact words used: any payment, charge or refund on any of the owner's accounts is the \
+same kind of entry whoever confirmed it. Every \
 other rule still holds — ask when the call is a kind of action the instructions do not ask for \
 (a delete or a rewrite when they only say to log, a message they did not ask to send), when it \
 deletes, restores or rewrites data in bulk or through a filter, when it sends to a recipient \

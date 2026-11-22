@@ -425,7 +425,7 @@ CASES: list[Case] = [
             "import_description": "Refund from ACME receipt 1234-5678",
         },
         "allow",
-        "a card refund a merchant's receipt shows is a card confirmation the template logs",
+        "a refund a merchant's receipt shows is a money movement the template logs",
     ),
     Case(
         "automation-deletes-when-told-to-log",

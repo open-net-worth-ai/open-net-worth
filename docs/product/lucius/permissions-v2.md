@@ -154,8 +154,9 @@ unsure, it stops.
 - **In an Automation, your instructions cover what the run finds.** Saved instructions describe
   kinds of work ("log each payment my bank emails confirm"), and can't name the payments a run will
   find. So a call that does exactly what the instructions ask, to something the run found, runs
-  without a card. What counts is the money movement, not who emailed it: "log my card
-  confirmations" covers a refund a shop's receipt shows on your card. A different kind of action (deleting when the instructions only say to log), a
+  without a card. What counts is the money movement, not who emailed it or the exact
+  words: a payment, charge or refund on any of your accounts counts, whether your bank or a shop
+  confirmed it. A different kind of action (deleting when the instructions only say to log), a
   bulk change, or a message to someone the instructions don't name still gets the card.
 - **Which model judges.** The **Auto-approval judge** under **Settings → AI**; unset, it uses the
   model this conversation is running on — a Claude Code or Codex model included. Each judgement

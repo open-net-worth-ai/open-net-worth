@@ -295,8 +295,9 @@ def test_the_rules_say_a_run_found_item_of_an_asked_kind_counts_as_asked_for():
     assert "no reason to ask" in SYSTEM
     # …and the asks that bound it stay in the same paragraph
     assert "a delete or a rewrite when they only say to log" in SYSTEM
-    # the kinds are read by the money movement, not the sender (a merchant's card refund)
+    # the kinds are read by the money movement, not the sender, for any account
     assert "not by who sent the message" in SYSTEM
+    assert "card" not in SYSTEM[SYSTEM.index("In an Automation run") :].split("\n\n")[0]
 
 
 @pytest.mark.parametrize("system", [SYSTEM, auto_judge.BATCH_SYSTEM])
