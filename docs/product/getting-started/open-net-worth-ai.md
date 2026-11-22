@@ -52,8 +52,10 @@ Lucius stops and says so once:
 - **With a key:** "Your Open Net Worth AI credit is used up. Add credit at
   cloud.opennetworth.ai."
 
-An Automation that runs out is marked **Held: AI credit is used up**. It is not tried again
-straight away. Its next scheduled run goes ahead as usual and works once there is credit again.
+An Automation that runs out is marked **Held: AI credit is used up**. Until there is credit
+again, the scheduled runs of Automations that use Open Net Worth AI wait instead of running:
+on Private Cloud until the credit resets (or sooner, once credit is added), with a key for an
+hour at a time. The first scheduled run after that goes ahead.
 
 ## Privacy
 
