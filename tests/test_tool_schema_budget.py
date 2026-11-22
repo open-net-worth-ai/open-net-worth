@@ -308,7 +308,11 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # apply_rule_to_transactions backfills history, and the txn trigger gains amount is /
     # between / approx and match any. 503,075 measured after trimming the Rule shape to one
     # copy (update_automations points at create's). Not CORE.
-    budget = 503_200
+    # 2026-11-22: 503_200 -> 504_000. add_positions takes funding_account_id (a new holding
+    # paid from cash already in the book debits it, never counts twice), and add_positions /
+    # create_asset route a private/crowdfunded stake to a manual-priced holding. 503,933
+    # measured after trimming both to one line each. add_positions is CORE.
+    budget = 504_000
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

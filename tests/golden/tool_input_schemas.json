@@ -7271,6 +7271,10 @@
               "type": "number",
               "description": "Acquisition commission in cost_currency, amortized into the auto-created lot's basis."
             },
+            "funding_account_id": {
+              "type": "string",
+              "description": "Cash account it was paid from — debited qty × cost_basis + fees in the same write, so the money isn't counted twice. Omit if that debit is already in the ledger. Needs cost_basis."
+            },
             "idempotency_key": {
               "type": "string",
               "description": "Per-item dedupe key (e.g. the broker order id) — never one key for the whole batch."

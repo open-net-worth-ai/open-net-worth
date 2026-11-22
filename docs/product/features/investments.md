@@ -6,7 +6,7 @@ order: 90
 audience: [user]
 status: stable
 related: [features/equity-compensation, features/accounts, concepts/net-worth, concepts/base-currency-and-fx, concepts/positions-lots-and-cost-basis]
-keywords: [investments, holdings, add holding, buy, sell, dividends, options, portfolio, performance, twr, mwr, rebalance, lots]
+keywords: [investments, holdings, add holding, buy, sell, dividends, options, portfolio, performance, twr, mwr, rebalance, lots, private equity, crowdfunding, crowdcube, seedrs, startup shares, angel investment]
 ---
 
 # Investments
@@ -44,6 +44,25 @@ sell. Adding more of something you already own adds another lot.
 **Cost in a different currency.** Enter the cost in the currency you actually paid, even if the
 stock is quoted in another (a USD stock bought with SGD keeps its SGD cost). Historical cost is
 never converted at today's rate. If you don't know the cost, leave it out rather than guessing.
+
+## Private and crowdfunded investments
+
+Shares in a private company — bought on a crowdfunding platform such as Crowdcube or Seedrs, as
+an angel investment, or in a startup — are a **holding**, not an asset. Track them like this:
+
+1. Create an **Investment** account for the platform (e.g. *Crowdcube*) and move the money you
+   invest into it, the same way you'd fund a brokerage account.
+2. Ask Lucius to add each company as a holding in that account, paid from its cash. These
+   companies have no ticker, so the **Add holding** form can't find them; Lucius records each
+   one with a price you set yourself and takes the cost out of the account's cash, so the money
+   is counted once — as the holding. For example: *"I invested £500 in Acme Robotics on
+   Crowdcube, 50 shares at £10 — add it to my Crowdcube account, paid from its cash."*
+3. When the company raises again or the platform shows a new share price, ask Lucius to update
+   the price.
+
+Don't add these on the **Assets** screen as well as (or instead of) the account: the cash you
+moved into the platform account would still count, and your net worth would include the money
+twice.
 
 ## Record a sale
 

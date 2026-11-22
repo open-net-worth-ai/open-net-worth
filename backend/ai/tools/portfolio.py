@@ -1088,6 +1088,7 @@ def _build_position_add_change(input_data: dict) -> tuple[Optional[dict], Option
         "acquired_at": input_data.get("acquired_at") or None,
         "fees": input_data.get("fees") or 0,
         "idempotency_key": input_data.get("idempotency_key") or None,
+        "funding_account_id": input_data.get("funding_account_id") or None,
         "reason": input_data.get("reason", ""),
         "display": {
             "symbol": inst.get("symbol", ""),
@@ -1100,6 +1101,7 @@ def _build_position_add_change(input_data: dict) -> tuple[Optional[dict], Option
             "cost_currency": cost_currency,
             "fees": input_data.get("fees") or 0,
             "acquired_at": input_data.get("acquired_at") or None,
+            "funding_account_id": input_data.get("funding_account_id") or None,
         },
     }
     return change, None
@@ -1272,6 +1274,10 @@ _ADD_ACQUIRED_AT_DESC = "Acquisition date, ISO YYYY-MM-DD. Supplying it also rec
 _ADD_FEES_DESC = (
     "Acquisition commission in cost_currency, amortized into the auto-created lot's basis."
 )
+_ADD_FUNDING_DESC = (
+    "Cash account it was paid from — debited qty × cost_basis + fees in the same write, so the "
+    "money isn't counted twice. Omit if that debit is already in the ledger. Needs cost_basis."
+)
 
 
 class ApplyPositionAddItem(ToolInput):
@@ -1288,6 +1294,7 @@ class ApplyPositionAddItem(ToolInput):
     vesting_state: Optional[str] = Field(default=None, description=_ADD_VESTING_DESC)
     acquired_at: Optional[str] = Field(default=None, description=_ADD_ACQUIRED_AT_DESC)
     fees: Optional[float] = Field(default=None, description=_ADD_FEES_DESC)
+    funding_account_id: Optional[str] = Field(default=None, description=_ADD_FUNDING_DESC)
     idempotency_key: Optional[str] = Field(
         default=None,
         description="Per-item dedupe key (e.g. the broker order id) — never one key for the whole batch.",
@@ -1317,6 +1324,7 @@ class ApplyPositionAddInput(ToolInput):
     fees: Optional[float] = Field(
         default=None, description="Acquisition fee — copy from the proposed change"
     )
+    funding_account_id: Optional[str] = Field(default=None, description=_ADD_FUNDING_DESC)
     idempotency_key: Optional[str] = Field(
         default=None, description="Copy from the proposed change"
     )
@@ -1332,7 +1340,7 @@ class ApplyPositionAddInput(ToolInput):
 @tool(
     "add_positions",
     description=(
-        "Add a NEW holding — an instrument NOT already held in that account. Buying MORE of an existing holding is a lot acquisition: use acquire_lots with its position_id from get_portfolio (a duplicate add is refused). ALWAYS call resolve_instruments first to get an instrument_id (this pins a live price source — essential for crypto). Identify the venue with account_id (from list_accounts) when it already exists, otherwise pass account_name and account_type and it will be created. Account = the custodian's securities account (e.g. 'IBKR'), never a currency wallet. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. REFUSED when an active position for the same instrument+account already exists. Every add records the holding's lot (lot_id in the result): with acquired_at a buy lot, without it an opening-balance lot dated today — NEVER also call acquire_lots for the same trade. If the user doesn't know when they bought it, leave acquired_at out — never invent a placeholder date. Automated flows: pass idempotency_key so a retry/reprocess is a no-op. Adding a whole portfolio's worth of new holdings? Pass `adds` (a list) instead — one call."
+        "Add a NEW holding — an instrument NOT already held in that account. Buying MORE of an existing holding is a lot acquisition: use acquire_lots with its position_id from get_portfolio (a duplicate add is refused). ALWAYS call resolve_instruments first to get an instrument_id (this pins a live price source — essential for crypto). Identify the venue with account_id (from list_accounts) when it already exists, otherwise pass account_name and account_type and it will be created. Account = the custodian's securities account (e.g. 'IBKR'), never a currency wallet. If the call asks the user first, their answer runs it server-side with exactly the values shown — never call it again and never restate the values. REFUSED when an active position for the same instrument+account already exists. Every add records the holding's lot (lot_id in the result): with acquired_at a buy lot, without it an opening-balance lot dated today — NEVER also call acquire_lots for the same trade. Paid from cash still in the book (e.g. moved into the platform account first)? Pass funding_account_id. A private/crowdfunded stake (Crowdcube, Seedrs, startup) is a holding too: resolve_instruments price_source='manual' — never create_asset. If the user doesn't know when they bought it, leave acquired_at out — never invent a placeholder date. Automated flows: pass idempotency_key so a retry/reprocess is a no-op. Adding a whole portfolio's worth of new holdings? Pass `adds` (a list) instead — one call."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -1379,6 +1387,7 @@ async def add_positions(input_data: dict):
                         "cost_basis": i.get("cost_basis"),
                         "cost_currency": i.get("cost_currency"),
                         "account_id": i.get("account_id"),
+                        "funding_account_id": i.get("funding_account_id"),
                     }
                     for i in raw_adds
                 ],

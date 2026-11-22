@@ -478,6 +478,13 @@ def _validate_add_cost(change: dict, cost_currency: str) -> None:
     from backend.core.errors import MissingFxRateError, ValidationError
     from backend.core.fx import known_rate
 
+    if change.get("funding_account_id") and coerce_cost(change.get("cost_basis")) is None:
+        # Without a cost there is nothing to debit: the cash would stay and the holding would
+        # count beside it — the double count funding exists to prevent.
+        raise ValidationError(
+            "funding_account_id needs cost_basis — without a cost nothing is debited",
+            field="cost_basis",
+        )
     try:
         quantity = float(change.get("quantity") or 0)
         cost = change.get("cost_basis")
@@ -703,6 +710,10 @@ def _book_add_lot(
             "acquired_at": acquired_at,
             "kind": "buy" if dated else "opening",
             "idempotency_key": change.get("idempotency_key"),
+            # A new holding bought with cash already in the book (the platform account's own
+            # cash, a current account) takes it out in the SAME write — otherwise the cash and
+            # the holding both count (a crowdfunding platform, 2026-11-22).
+            "funding_account_id": change.get("funding_account_id"),
             "source": "position_add",
         }
     )

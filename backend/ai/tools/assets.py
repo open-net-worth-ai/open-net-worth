@@ -233,7 +233,9 @@ _CREATE_FIELDS = (
         "cash-value policy, or a user-created category. Only name, category and value are "
         "required; `value` (BOOK'S BASE CURRENCY) becomes its first valuation — do NOT follow "
         "this with record_asset_value, which is only for a LATER re-appraisal. It immediately counts toward net worth. Unknown category raises; use "
-        "create_asset_category first for a genuinely new kind of thing."
+        "create_asset_category first for a genuinely new kind of thing. NOT for shares: a "
+        "private/crowdfunded stake is a holding (add_positions, manual-priced) in the account "
+        "it was bought through."
     ),
     input_schema=schema_of(CreateAssetInput, tool_name="create_asset"),
     mutates=("assets",),
