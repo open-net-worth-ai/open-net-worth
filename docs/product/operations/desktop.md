@@ -28,7 +28,8 @@ To download it, see [Installing Open Net Worth](../getting-started/installation.
      that already holds other files gets a new **Open Net Worth** subfolder for the book, so it
      never mixes with your files (the app asks first).
    - Or, under **Or keep your book elsewhere**, choose **On your own server** — see
-     [Connect to a server](#connect-to-a-server).
+     [Connect to a server](#connect-to-a-server) — or **Open Net Worth Private Cloud** — see
+     [Private Cloud](#private-cloud).
 3. The app then walks you through [your first run](../getting-started/first-run.md). To bring
    back a book you exported earlier, click **I have a backup to restore** on the first step — see
    [Export and portability](export-and-portability.md).
@@ -77,6 +78,28 @@ reached, you see **Can't reach your server.** with **Try again** and **Change co
 also offers **On this computer**, to use a local book instead). The app keeps checking in the background on that screen — it
 shows **Trying again in 8s…** counting down to the next check, waiting a little longer each time up
 to 15 seconds — and opens the server by itself as soon as it answers.
+
+## Private Cloud
+
+Open Net Worth Private Cloud is your own private instance, run for you at
+`<name>.opennetworth.cloud` and always on. Private Cloud is invitation-only for now.
+
+- **Sign in.** Choose **Open Net Worth Private Cloud** on first launch or in **File → Connection…**,
+  or use **File → Sign in to Private Cloud…**. The app opens your browser to sign in and shows
+  **Continue in your browser.** while it waits. If your browser asks to open Open Net Worth,
+  allow it; if it can't, click **Enter code** and type the code the sign-in page shows. This
+  window then opens your Private Cloud on its own, and reopens it at every launch until you sign
+  out.
+- **On the waitlist.** If your account hasn't been admitted yet, the sign-in page in your browser
+  says **You're on the waitlist**. There's nothing to do in the app: click **Cancel** and your
+  book stays on this computer. After you're admitted, sign in again.
+- **Move your book.** With a book on this computer, **File → Move my book to Private Cloud…** (or
+  the link on the first-launch and **Connection** screens) signs you in and moves the book,
+  its settings and your Automations. **File → Move my book back to this computer…** reverses it.
+- **Account.** **File** shows who is signed in. **Switch Private Cloud account…** and **Sign out of
+  Private Cloud** end the session on every device.
+- **Not ready.** If your Private Cloud is starting, updating, paused or can't be reached, the
+  window says so and what to do; the app keeps checking and opens it when it answers.
 
 ## Keep it running in the background
 

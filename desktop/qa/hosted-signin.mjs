@@ -24,7 +24,6 @@ const env = {
   ...Object.fromEntries(["USER", "PATH", "TMPDIR", "LANG", "TZ", "DISPLAY"].flatMap((key) => (process.env[key] ? [[key, process.env[key]]] : []))),
   HOME: home,
   ONW_QA_MODE: "1",
-  ONW_DESKTOP_PRIVATE_CLOUD: "1",
   ONW_DESKTOP_REPO: repo,
   ONW_DESKTOP_PYTHON: python,
   ONW_HOSTED_PORTAL_URL: PORTAL,

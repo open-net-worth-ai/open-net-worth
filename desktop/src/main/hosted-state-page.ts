@@ -3,7 +3,7 @@ import type { AgentCheck } from './hosted-state';
 
 interface Message { title: string; body: string; primary?: 'retry' | 'portal' | 'update'; portalLabel?: string; auto?: boolean }
 
-const WAITING = 'This usually takes about a minute. This screen refreshes on its own.';
+const WAITING = 'This usually takes a few minutes. This screen refreshes on its own.';
 
 function message(check: Exclude<AgentCheck, { kind: 'open' }>): Message {
   if (check.kind === 'update') return { title: 'Update the desktop app.', body: `Your Private Cloud now needs Open Net Worth ${escapeHtml(check.required)} or newer. Download the update, install it, and open the app again.`, primary: 'update' };

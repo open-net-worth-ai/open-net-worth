@@ -10,8 +10,8 @@ import { welcomePage } from '../src/main/welcome-page';
 
 const CLOUD = /Private Cloud|id="hosted"|id="move"|onwHosted|onwNativeConnection\.hosted|bridge\.hosted|bridge\.move/;
 
-test('the Private Cloud switch is off unless ONW_DESKTOP_PRIVATE_CLOUD=1', () => {
-  assert.equal(PRIVATE_CLOUD_ENABLED, process.env.ONW_DESKTOP_PRIVATE_CLOUD === '1');
+test('the Private Cloud switch is on unless ONW_DESKTOP_PRIVATE_CLOUD=0', () => {
+  assert.equal(PRIVATE_CLOUD_ENABLED, process.env.ONW_DESKTOP_PRIVATE_CLOUD !== '0');
 });
 
 test('the first-launch chooser shows the cloud row only when the switch is on', () => {
@@ -69,7 +69,7 @@ test('the first-launch pages carry the sign-in and move entries only when the sw
 });
 
 test('the sign-in guard refuses while the switch is off and passes when it is on', () => {
-  assert.throws(() => assertPrivateCloudEnabled(false), /not available yet/);
+  assert.throws(() => assertPrivateCloudEnabled(false), /turned off in this build/);
   assert.doesNotThrow(() => assertPrivateCloudEnabled(true));
 });
 
@@ -128,6 +128,15 @@ test('the connection dialog and the flow dialog refuse their cloud IPC while the
     const handler = handlers.get(channel);
     assert.ok(handler, `${channel} is registered`);
     if (PRIVATE_CLOUD_ENABLED) continue;
-    await assert.rejects(async () => handler({}), /not available yet/, channel);
+    await assert.rejects(async () => handler({}), /turned off in this build/, channel);
+  }
+});
+
+test('the waiting screen tells a waitlisted account to cancel and keep its local book, with every way out on screen', async () => {
+  const { waitingPage } = await import('../src/main/flow-pages');
+  for (const moving of [false, true]) {
+    const page = waitingPage('dark', moving);
+    assert.match(page, /on the waitlist/);
+    assert.ok(page.includes('id="cancel"') && page.includes("flow.action('cancel')") && page.includes('id="again"') && page.includes('id="code"'));
   }
 });
