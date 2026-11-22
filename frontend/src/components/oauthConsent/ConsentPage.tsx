@@ -8,9 +8,9 @@
 // are the other choices.
 // The app's name is the server's label for a known host, never what the app calls itself.
 import { useCallback, useEffect, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { FormEvent } from 'react'
 import { useBrand } from '../../brand-context'
-import { Check, LockKeyhole, X } from '../../ui/icons'
+import { LockKeyhole } from '../../ui/icons'
 import { Button, ErrorState, Loading, PasswordField, RadioGroup } from '../ui'
 import { decideConsent, loadConsent, signIn } from './consentApi'
 import type { ConsentDetails } from './consentApi'
@@ -195,31 +195,19 @@ function SignInStep({
 type Access = 'read' | 'write' | 'talk'
 
 function accessOptions(canWrite: boolean) {
-  const options = [
-    { value: 'read', label: 'Read', description: 'See your whole book, without changing it.' },
-  ]
+  const options = [{ value: 'read', label: 'Read', description: 'See everything, change nothing.' }]
   if (canWrite)
     options.push({
       value: 'write',
       label: 'Read and change',
-      description: 'Also add, edit and delete records. Every change is recorded and can be undone.',
+      description: 'See and change everything. Changes can be undone.',
     })
   options.push({
     value: 'talk',
     label: 'Talk to Lucius',
-    description:
-      'It talks to Lucius instead of opening your book. Lucius may share anything he can see in his answers, and makes changes under your own permissions, asking you when they say so.',
+    description: 'Only talk to Lucius. He follows your permissions.',
   })
   return options
-}
-
-function Ability({ allowed, children }: { allowed: boolean; children: ReactNode }) {
-  return (
-    <li className={allowed ? 'consent-can' : 'consent-cannot'}>
-      {allowed ? <Check size={15} strokeWidth={2.25} /> : <X size={15} strokeWidth={2.25} />}
-      <span>{children}</span>
-    </li>
-  )
 }
 
 function Decide({
@@ -274,22 +262,7 @@ function Decide({
       </header>
 
       <section className="consent-scope" aria-label={`What ${app} can do`}>
-        <p className="consent-scope__title">{app} will be able to</p>
-        <ul>
-          <Ability allowed>
-            {talk
-              ? "See your book through Lucius's answers"
-              : 'See your accounts, transactions, budget and investments'}
-          </Ability>
-          <Ability allowed={talk || changes}>
-            Talk to Lucius, who acts under your permissions
-          </Ability>
-          <Ability allowed={changes}>Add, edit and delete records</Ability>
-          <Ability allowed={changes}>Run automations and send messages for you</Ability>
-          <Ability allowed={false}>
-            Use tools from MCP servers you've connected to {brand.app_name}
-          </Ability>
-        </ul>
+        <p className="consent-scope__title">What can {app} do?</p>
         <RadioGroup
           name="consent-access"
           ariaLabel={`What ${app} can do`}
