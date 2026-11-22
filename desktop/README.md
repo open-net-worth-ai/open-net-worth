@@ -149,11 +149,13 @@ forwarded to a hosted server. Ordinary browser Settings has no native connection
 
 ## Private Cloud sign-in and moves
 
-**Hidden for now.** Private Cloud is not offered yet: one switch, `PRIVATE_CLOUD_ENABLED`
-(`main/feature-flags.ts`, off unless `ONW_DESKTOP_PRIVATE_CLOUD=1`), gates the first-launch and
-Connection rows, the File menu items, the `onwHosted.signIn` and connection-dialog IPC (they
-refuse), `onw://` deep links and a saved `selectedHostedUrl` (ignored, never cleared). The code
-below is unchanged and returns when the switch is on.
+Private Cloud is on in every build. One switch, `PRIVATE_CLOUD_ENABLED` (`main/feature-flags.ts`,
+on unless `ONW_DESKTOP_PRIVATE_CLOUD=0`), remains as a kill switch: set to `0` it hides the
+first-launch and Connection rows and the File menu items, makes the `onwHosted.signIn` and
+connection-dialog IPC refuse, ignores `onw://` deep links and a saved `selectedHostedUrl` (never
+cleared). The service is invitation-only; the sign-in happens in the system browser, so an account
+that is not admitted yet sees the portal's waitlist page there and this app keeps showing the
+waiting screen, which says so and offers Cancel (the book stays local).
 
 **File → Sign in to Private Cloud…** (and the same button in the connection dialog or after a
 sign-out) runs a PKCE flow through the system browser (`main/hosted.ts`, `hosted-auth.ts`,

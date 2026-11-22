@@ -71,7 +71,7 @@ test('the missing-folder page names the path and offers the first-run choices', 
   assert.match(html, /changeConnection\(\)/);
 });
 
-test('the first-launch folder page leads with the suggested folder and offers the server option beneath', () => {
+test('the first-launch folder page leads with the suggested folder and offers the server and Private Cloud options beneath', () => {
   const home = process.env.HOME || process.env.USERPROFILE || '';
   const html = welcomePage(`${home}/Books/<Mine>`, 'folder', 'light');
   assert.match(html, /<h1>Where should we keep your book\?<\/h1>/);
@@ -82,7 +82,7 @@ test('the first-launch folder page leads with the suggested folder and offers th
   assert.ok(html.includes('<span class="title">On your own server</span>'));
   assert.match(html, /getElementById\('server'\)\?\.addEventListener\('click',\(\)=>run\(\(\)=>window\.onwDesktop\.initialBookAction\('server'\)\)\)/);
   assert.doesNotMatch(html, /changeConnection\(true\)/);
-  assert.doesNotMatch(html, /Private Cloud|id="hosted"|onwHosted/);
+  assert.ok(html.includes('<span class="title">Open Net Worth Private Cloud</span>') && html.includes('id="hosted"') && html.includes('onwHosted.signIn()'));
   assert.doesNotMatch(html, /data-action="back"|Use this folder|Connect to server|Current|Move this book/);
 });
 
