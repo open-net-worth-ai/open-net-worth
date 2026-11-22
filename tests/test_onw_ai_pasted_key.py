@@ -166,3 +166,25 @@ def test_the_environment_wins_over_a_pasted_key(env):
     assert creds["api_key"] == "sk-test-managed-key"
     row = _client().get("/api/model-config/providers").json()["configured_providers"]["onw_ai"]
     assert row["managed"] is True
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http://relay.example.test/v1", "http://10.99.0.2:4000/v1", "ftp://ai.opennetworth.ai/v1"],
+)
+def test_the_store_itself_refuses_an_unsafe_endpoint(env, url):
+    from backend.core.errors import ValidationError
+
+    store = ModelConfigStore()
+    with pytest.raises(ValidationError):
+        store.update_provider("onw_ai", {"base_url": url, "api_key": KEY})
+    with pytest.raises(ValidationError):
+        store.update({"default_model": "onw_ai:acme-flash", "base_url": url})
+    assert store.read_stored_api_key("onw_ai") is None
+
+
+def test_the_store_accepts_the_allowed_endpoints(env):
+    store = ModelConfigStore()
+    for url in (PUBLIC, "http://10.99.0.1:4000/v1", "http://localhost:4000/v1"):
+        store.update_provider("onw_ai", {"base_url": url, "api_key": KEY})
+        assert store.resolve_for_provider("onw_ai")["base_url"] == url

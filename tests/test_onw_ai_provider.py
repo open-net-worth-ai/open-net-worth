@@ -213,3 +213,22 @@ def test_no_upstream_vendor_is_named_in_the_new_code():
     for rel in _NEW_CODE:
         text = (root / rel).read_text(encoding="utf-8").lower()
         assert not re.search(r"open\s*router", text), rel
+
+
+def test_the_store_itself_refuses_to_edit_a_managed_provider(env):
+    from backend.core.errors import ConfigurationError
+
+    _manage(env)
+    store = ModelConfigStore()
+    for write in (
+        lambda: store.update_provider("onw_ai", {"api_key": "sk-test-other"}),
+        lambda: store.update_provider("onw_ai", {"base_url": "https://relay.example.test/v1"}),
+        lambda: store.update({"default_model": "onw_ai:acme-flash", "api_key": "sk-test-other"}),
+        lambda: store.remove_provider("onw_ai"),
+        lambda: store.remove_provider_key("onw_ai"),
+    ):
+        with pytest.raises(ConfigurationError):
+            write()
+    # Choosing one of its models is not editing it.
+    store.update({"default_model": "onw_ai:acme-flash"})
+    assert store.resolved()["api_key"] == KEY

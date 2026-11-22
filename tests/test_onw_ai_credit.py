@@ -87,8 +87,9 @@ def _portal(monkeypatch, status: int = 200, body: dict | None = None) -> list[st
 
 _VARIANTS = [
     (422, _BUDGET),
-    (400, {"error": {"message": "ExceededBudget: Key over budget. Spend=10.2"}}),
+    (400, {"error": {"message": "Key over budget.", "type": "budget_exceeded", "code": "400"}}),
     (429, {"error": {"message": "Budget has been exceeded!", "type": "budget_exceeded"}}),
+    (429, {"error": {"message": "Budget has been exceeded! Current cost: 3"}}),
     (402, "Payment Required"),
 ]
 
@@ -105,13 +106,50 @@ def test_every_budget_variant_maps_to_the_managed_message_once(env, status, body
     assert setup_hint is True
 
 
-def test_the_reset_date_comes_from_the_portal(env):
+def test_the_reset_date_comes_from_the_cached_portal_answer(env):
     _manage(env, CREDIT_URL)
     _portal(
         env, body={"remaining_usd": 0, "limit_usd": 10, "resets_at": "2026-12-01T00:00:00+00:00"}
     )
+    _client().get("/api/model-config/onw-ai")  # the Settings read fills the cache
     message, _ = _friendly_error(_err(422, _BUDGET))
     assert "It resets on December 1, or add credit" in message
+
+
+def test_mapping_an_error_does_no_network_or_database_io(env, monkeypatch):
+    """It runs on the event loop: a cold cache means "next month" and a refresh elsewhere."""
+    _manage(env, CREDIT_URL)
+
+    def no_network(*_a, **_k):
+        raise AssertionError("network I/O while mapping an error")
+
+    def no_database(*_a, **_k):
+        raise AssertionError("database read while mapping an error")
+
+    refreshes: list[str] = []
+    monkeypatch.setattr(credit_service.httpx, "get", no_network)
+    monkeypatch.setattr(credit_service, "ModelConfigStore", no_database)
+    monkeypatch.setattr(credit_service, "_refresh_credit_soon", refreshes.append)
+    message = credit_service.out_of_credit_message(_err(422, _BUDGET))
+    assert message and "It resets next month" in message
+    assert refreshes == [CREDIT_URL]
+    for name in ("ONW_AI_BASE_URL", "ONW_AI_KEY", "ONW_AI_MODELS", "ONW_AI_CREDIT_URL"):
+        monkeypatch.delenv(name)
+    pasted = _err(422, _BUDGET, "https://ai.opennetworth.ai/v1/chat/completions")
+    assert credit_service.out_of_credit_message(pasted) == credit_service.PASTED_KEY_OUT_OF_CREDIT
+
+
+@pytest.mark.parametrize(
+    ("status", "body"),
+    [
+        (400, {"error": {"message": "Budget has been exceeded! (quoted by a user)"}}),
+        (422, {"error": {"message": "ExceededBudget budget_exceeded", "type": "invalid_request"}}),
+        (400, "Budget has been exceeded!"),
+    ],
+)
+def test_free_text_alone_is_not_out_of_credit_on_400_or_422(env, status, body):
+    _manage(env)
+    assert credit_service.out_of_credit_message(_err(status, body)) is None
 
 
 @pytest.mark.parametrize(("status", "body"), _VARIANTS)

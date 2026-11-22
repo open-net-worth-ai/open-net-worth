@@ -201,7 +201,7 @@ def _friendly_error(exc: BaseException) -> tuple[str, bool]:
     if isinstance(exc, (ProviderDisabledError, CliNotSignedInError)):
         return str(exc), True
     # Before the auth / rate-limit checks: a budget refusal can arrive as a 429.
-    out_of_credit = onw_ai.out_of_credit_message(exc)
+    out_of_credit = onw_ai.record_out_of_credit(exc)
     if out_of_credit:
         return out_of_credit, True
     if isinstance(exc, ProviderTimeoutError):

@@ -68,7 +68,7 @@ from typing import Optional
 
 from backend.core import onw_ai
 from backend.core.config import get_settings
-from backend.core.errors import ConfigurationError
+from backend.core.errors import ConfigurationError, ValidationError
 from backend.db.payload_store import NamespacedSettingsStore
 from backend.db.tables import secret_config
 from backend.models.model_config import VALID_PROVIDERS
@@ -471,6 +471,19 @@ def _managed(key: str) -> Optional[onw_ai.Managed]:
     return onw_ai.managed() if key == onw_ai.PROVIDER_KEY else None
 
 
+def _guard_onw_ai_write(key: str, *, base_url: str = "", api_key: str = "") -> None:
+    """Every write of Open Net Worth AI credentials passes here. A managed (Private Cloud)
+    provider's endpoint and key are the environment's; a pasted endpoint must be https — the
+    key travels with each request — except to the overlay hub or this machine."""
+    if key != onw_ai.PROVIDER_KEY:
+        return
+    base_url, api_key = (base_url or "").strip(), (api_key or "").strip()
+    if onw_ai.managed() is not None and (base_url or api_key):
+        raise ConfigurationError(_MANAGED_REFUSAL)
+    if base_url and not onw_ai.base_url_allowed(base_url):
+        raise ValidationError(f"{onw_ai.LABEL} needs an https:// address.")
+
+
 def _default_ref(raw: dict) -> str:
     """The stored instance default, else — on a Private Cloud agent where none was chosen — the
     managed provider's preferred model. Derived at read time, never written."""
@@ -839,10 +852,11 @@ class ModelConfigStore(NamespacedSettingsStore):
         fields are NOT touched here — use ``update()`` for those.
         """
         _refuse_on_demo()
-        if _managed(provider_key) is not None and any(
-            str(changes.get(field) or "").strip() for field in ("api_key", "base_url")
-        ):
-            raise ConfigurationError(_MANAGED_REFUSAL)
+        _guard_onw_ai_write(
+            provider_key,
+            base_url=str(changes.get("base_url") or ""),
+            api_key=str(changes.get("api_key") or ""),
+        )
         raw = self._read_raw()
         providers: dict = raw.get("providers") or {}
         creds: dict = dict(providers.get(provider_key) or {})
@@ -1310,6 +1324,11 @@ class ModelConfigStore(NamespacedSettingsStore):
             raise ConfigurationError(
                 "AI provider is not configured. Choose one in Settings → AI Models."
             )
+        _guard_onw_ai_write(
+            key,
+            base_url=str(changes.get("base_url") or ""),
+            api_key=str(changes.get("api_key") or ""),
+        )
         # A blank default model is WRITABLE but unusable: resolved() raises on the NEXT
         # turn while Settings still looks fine, so the failure lands far from the action
         # that caused it. "Set as default" on a provider with no remembered model sent

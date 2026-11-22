@@ -57,7 +57,7 @@ from backend.ai.models.codex_cli_catalog import model_ids as _codex_model_ids
 from backend.ai.models.codex_cli_catalog import refresh as _codex_refresh_catalog
 from backend.core import onw_ai
 from backend.core.config import get_settings
-from backend.core.errors import ConfigurationError, ProviderDisabledError
+from backend.core.errors import ConfigurationError, ProviderDisabledError, ValidationError
 from backend.core.io import atomic_write_text
 from backend.core.net_guard import UnresolvableHostError, UnsafeUrlError
 from backend.db import app_config_store
@@ -565,7 +565,7 @@ def put_model_config(body: ModelConfigUpdate):
         changes["provider"] = provider
     try:
         return ModelConfigStore().update(changes)
-    except ConfigurationError as exc:
+    except (ConfigurationError, ValidationError) as exc:
         # e.g. defaulting to a provider with no model picked — a 422, not a 500.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -630,7 +630,6 @@ def put_provider_credentials(provider_key: str, body: ProviderCredentialsUpdate)
 
     changes = body.model_dump(exclude_none=True)
     store = ModelConfigStore()
-    _check_onw_ai_base_url(provider_key, changes.get("base_url"))
 
     # Guard: refuse to disable the active instance default.
     if changes.get("enabled") is False:
@@ -651,6 +650,8 @@ def put_provider_credentials(provider_key: str, body: ProviderCredentialsUpdate)
 
     try:
         store.update_provider(provider_key, changes)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ConfigurationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -978,18 +979,6 @@ def _managed_models(provider_key: str) -> list[dict] | None:
     labels = {m["id"]: m["label"] for m in cfg.models}
     rows = _annotate_ids(cfg.model_ids, "openai_compatible", cfg.base_url)
     return [{**row, "label": labels[row["id"]]} for row in rows]
-
-
-def _check_onw_ai_base_url(provider_key: str, base_url: Optional[str]) -> None:
-    """A pasted Open Net Worth AI endpoint must be https (plain http only to the Private Cloud
-    overlay hub or this machine) — the key travels with every request to it."""
-    if provider_key != onw_ai.PROVIDER_KEY or not (base_url or "").strip():
-        return
-    if not onw_ai.base_url_allowed(base_url or ""):
-        raise HTTPException(
-            status_code=422,
-            detail=f"{onw_ai.LABEL} needs an https:// address.",
-        )
 
 
 @router.get("/api/model-config/onw-ai")

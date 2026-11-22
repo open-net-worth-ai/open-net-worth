@@ -136,23 +136,31 @@ def base_url_allowed(url: str) -> bool:
         return False
 
 
-# LiteLLM's budget refusal (1.110.2: BudgetExceededError → HTTP 422, type "budget_exceeded",
-# message "Budget has been exceeded! …"; older releases answered 400 "ExceededBudget"; the code
-# is configurable, 429 restoring the old one). A 402 from our relay always means no credit.
-_OUT_OF_CREDIT_MARKERS = (
-    "budget has been exceeded",
-    "exceededbudget",
-    "budget_exceeded",
-    "insufficient credit",
-    "insufficient_credit",
-)
-_OUT_OF_CREDIT_STATUSES = frozenset({400, 402, 422, 429})
+def _under(url: str, base: str) -> bool:
+    base = (base or "").strip().rstrip("/")
+    return bool(base) and (url == base or url.startswith(base + "/"))
 
 
-def is_out_of_credit(status: Optional[int], text: str) -> bool:
+def endpoint_kind(url: str) -> Optional[str]:
+    """``"managed"`` / ``"pasted"`` when a request to ``url`` went to Open Net Worth AI, else
+    None. No I/O: the managed endpoint is the environment's, a pasted key's is the public one.
+    (A pasted key moved to another endpoint is not recognised here.)"""
+    cfg = managed()
+    if cfg is not None:
+        return "managed" if _under(url, cfg.base_url) else None
+    return "pasted" if _under(url, PUBLIC_BASE_URL) else None
+
+
+# LiteLLM's budget refusal is STRUCTURED: BudgetExceededError → ProxyException with
+# type "budget_exceeded" (1.110.2 answers HTTP 422; 400 before; 429 when configured so). Only
+# that type counts on 400/422 — a message that merely quotes the words is someone's text. The
+# 429 variant may come without the type, so there the message is accepted too. 402 always.
+BUDGET_ERROR_TYPE = "budget_exceeded"
+
+
+def is_out_of_credit(status: Optional[int], error_type: str, message: str) -> bool:
     if status == 402:
         return True
-    if status is not None and status not in _OUT_OF_CREDIT_STATUSES:
-        return False
-    lowered = (text or "").lower()
-    return any(marker in lowered for marker in _OUT_OF_CREDIT_MARKERS)
+    if status in (400, 422, 429) and error_type == BUDGET_ERROR_TYPE:
+        return True
+    return status == 429 and "budget has been exceeded" in (message or "").lower()

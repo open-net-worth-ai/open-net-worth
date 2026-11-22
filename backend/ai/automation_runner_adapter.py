@@ -175,9 +175,9 @@ async def automation_runner(
         it here a run whose turn blew up would still report ``completed``.
         """
         nonlocal failure, held
-        # Out of Open Net Worth AI credit: the run is HELD, with the plain reason, and nothing
-        # retries it — every retry would be refused the same way until the credit is back.
-        held = onw_ai.out_of_credit_message(exc)
+        # Out of Open Net Worth AI credit: the run is HELD, with the plain reason, and the
+        # scheduler skips this provider's Automations until the credit is back.
+        held = onw_ai.record_out_of_credit(exc)
         if held:
             failure = held
             logger.warning("automation run %s held: AI credit is used up", request.run_id)
