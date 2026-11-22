@@ -796,6 +796,27 @@ async def lifespan(app: FastAPI):
     except Exception:
         _log.exception("price backfill startup hook failed (non-fatal)")
 
+    # Price history stored in pence for a GBp listing (before the feed converted it) is
+    # re-stored in pounds. Self-checking, so it runs every boot; a daemon thread, no-op in QA.
+    try:
+        import threading as _threading
+
+        def _run_minor_unit_repair() -> None:
+            try:
+                from backend.services.minor_unit_repair import repair_minor_unit_history
+
+                repaired = repair_minor_unit_history()
+                if repaired:
+                    _log.info("minor-unit price repair: %d series re-stored", len(repaired))
+            except Exception:
+                _log.exception("minor-unit price repair failed (non-fatal)")
+
+        _threading.Thread(
+            target=_run_minor_unit_repair, daemon=True, name="minor-unit-repair"
+        ).start()
+    except Exception:
+        _log.exception("minor-unit price repair hook failed (non-fatal)")
+
     # Seed benchmark-roster instruments (SPY/VWRA/QQQ/ACWI/BTC) so the returns/risk engine
     # can resolve them.  The instrument records are created synchronously (fast — just a
     # find_or_create per entry); price history is backfilled in a daemon thread so startup

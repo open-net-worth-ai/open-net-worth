@@ -27,6 +27,7 @@ from backend.core.config import get_settings
 from backend.core.errors import ValidationError
 from backend.core.fx import base_currency as _base_currency
 from backend.core.instrument_display import display_name
+from backend.core.quote_units import major_currency, to_major_factor
 from backend.core.user_time import user_today
 from backend.models.price import PriceQuote
 from backend.paths import (
@@ -38,6 +39,12 @@ from backend.paths import (
 from backend.services import coingecko_client
 from backend.services import market_data_observability as observability
 from backend.services.fx_cache import load_fx_cache, save_fx_cache
+from backend.services.yahoo_units import (
+    chart_to_major,
+    frame_to_major,
+    quote_to_major,
+    series_to_major,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -108,7 +115,7 @@ def _fetch_name(symbol: str) -> tuple[str, str, str]:
         name = info.get("longName") or info.get("shortName") or ""
         exchange = info.get("fullExchangeName") or ""
         sector = info.get("sector") or ""
-        currency = (info.get("currency") or "").upper()
+        currency = major_currency(info.get("currency"))
         div_rate = info.get("dividendRate") or info.get("trailingAnnualDividendRate") or 0
         if name:
             _NAMES_CACHE[symbol] = name
@@ -311,7 +318,9 @@ def _fetch_dividend_meta(symbol: str) -> dict:
     if pay and pay >= today_iso:
         out["next_pay_date"] = pay
     try:
-        hist = tk.dividends
+        # Dividend EVENTS arrive in the quote unit (pence for a GBp listing), unlike
+        # dividendRate / lastDividendValue above, which Yahoo already gives in pounds.
+        hist = series_to_major(tk.dividends, info.get("currency"))
     except Exception:
         hist = None
     last_ex, freq, last_amt = _summarize_dividend_history(_dividend_history_points(hist))
@@ -403,9 +412,23 @@ def _finite(x) -> float | None:
     return v if math.isfinite(v) else None
 
 
+def _yf_frame(symbol: str, **kwargs):
+    """``yf.Ticker(symbol).history(**kwargs)`` with its prices in the MAJOR currency — the one
+    way this module reads Yahoo bars, so a pence-quoted listing never leaks pence downstream.
+    The currency comes from the same Ticker's ``history_metadata`` (filled by that call)."""
+    ticker = yf.Ticker(symbol)
+    frame = ticker.history(**kwargs)
+    try:
+        raw_currency = (ticker.history_metadata or {}).get("currency")
+    except Exception:
+        raw_currency = None
+    return frame_to_major(frame, raw_currency)
+
+
 def _fetch_one(symbol):
     try:
         fi = yf.Ticker(symbol).fast_info
+        factor = to_major_factor(fi.get("currency"))
         price = _finite(fi.get("lastPrice")) or _finite(fi.get("regularMarketPrice"))
         prev = _finite(fi.get("previousClose"))
         if prev is None:
@@ -422,12 +445,14 @@ def _fetch_one(symbol):
             if fallback_prev is not None and (price is None or fallback_prev != price):
                 prev = fallback_prev
         if price:
+            price = price * factor
+            prev = prev * factor if prev is not None else None
             prev = _plausible_prev_close(price, prev)
             return (symbol, _round_price(price), _round_price(prev) if prev else None)
     except Exception:
         pass
     try:
-        h = yf.Ticker(symbol).history(period="2d")
+        h = _yf_frame(symbol, period="2d")
         if len(h) >= 2:
             last, prior = _finite(h["Close"].iloc[-1]), _finite(h["Close"].iloc[-2])
             prior = _plausible_prev_close(last, prior)
@@ -774,7 +799,7 @@ def _yf_batch_quote(symbols: list[str]) -> dict[str, dict]:
             for q in data.get("quoteResponse", {}).get("result", []):
                 sym = q.get("symbol")
                 if sym:
-                    out[sym] = q
+                    out[sym] = quote_to_major(q)
         return out
     except Exception as exc:
         # Log the error CLASS only, never the exception text: on a network error it embeds the
@@ -1095,7 +1120,7 @@ def _fetch_chart(symbol: str, now_epoch: float | None = None) -> dict | None:
             + urllib.parse.quote(symbol)
             + "?interval=1h&range=1d&includePrePost=true"
         )
-        payload = _response_json(_ydata.YfData().get(url, timeout=10))
+        payload = chart_to_major(_response_json(_ydata.YfData().get(url, timeout=10)))
     except Exception as exc:
         _log.info("prices: chart unavailable (%s)", type(exc).__name__)
     _chart_cache[symbol] = (now, payload)
@@ -1165,7 +1190,9 @@ def fetch_corporate_actions(symbol: str, range_: str = "3mo") -> dict:
             + urllib.parse.quote(range_)
             + "&events=div%2Csplits"
         )
-        parsed = _parse_actions(_response_json(_ydata.YfData().get(url, timeout=10)))
+        parsed = _parse_actions(
+            chart_to_major(_response_json(_ydata.YfData().get(url, timeout=10)))
+        )
     except Exception as exc:
         _log.info("prices: corporate actions unavailable (%s)", type(exc).__name__)
         return empty
@@ -1577,13 +1604,13 @@ def _yf_history(symbol: str, timeframe: str, *, ohlcv: bool = True) -> list[dict
     _assert_yahoo_symbol(symbol)
     if not ohlcv:
         if timeframe == "1D":
-            h = yf.Ticker(symbol).history(period="1d", interval="5m")
+            h = _yf_frame(symbol, period="1d", interval="5m")
             intraday = True
         elif timeframe == "5D":
-            h = yf.Ticker(symbol).history(period="5d", interval="30m")
+            h = _yf_frame(symbol, period="5d", interval="30m")
             intraday = True
         else:
-            h = yf.Ticker(symbol).history(period=_HISTORY_PERIOD.get(timeframe, "1y"))
+            h = _yf_frame(symbol, period=_HISTORY_PERIOD.get(timeframe, "1y"))
             intraday = False
         out: list[dict] = []
         for idx, row in h.iterrows():
@@ -1614,11 +1641,9 @@ def _yf_history(symbol: str, timeframe: str, *, ohlcv: bool = True) -> list[dict
     # 2026-08-31: the 1D chart otherwise replays the LAST completed regular session's bars
     # while pre/post is active — e.g. Friday's tape shown as if it were "today" — instead of
     # the real, live pre/post-market ticks Yahoo already has).
-    h = yf.Ticker(symbol).history(period=period, interval=interval, prepost=intraday)
+    h = _yf_frame(symbol, period=period, interval=interval, prepost=intraday)
     if h.empty and gran["fallback_interval"]:
-        h = yf.Ticker(symbol).history(
-            period=period, interval=gran["fallback_interval"], prepost=intraday
-        )
+        h = _yf_frame(symbol, period=period, interval=gran["fallback_interval"], prepost=intraday)
     return _ohlcv_points_from_rows(h, intraday)
 
 
@@ -1664,7 +1689,7 @@ def _yf_previous_session_bars(symbol: str) -> tuple[list[dict], str | None]:
     for interval in (gran["interval"], gran["fallback_interval"]):
         if not interval:
             continue
-        h = yf.Ticker(symbol).history(period="5d", interval=interval, prepost=True)
+        h = _yf_frame(symbol, period="5d", interval=interval, prepost=True)
         if h.empty:
             continue
         tz = h.index.tz
@@ -2508,7 +2533,7 @@ def fetch_quote_stats(symbol: str) -> dict:
         return hit[1]
     stats: dict = {}
     try:
-        info = yf.Ticker(symbol).info
+        info = quote_to_major(yf.Ticker(symbol).info or {})
         raw = {
             "prev_close": _plausible_prev_close(
                 _first_positive(info, "regularMarketPrice", "currentPrice"),
@@ -2595,7 +2620,7 @@ def fetch_analyst(symbol: str) -> dict:
     out: dict = {}
     try:
         tk = yf.Ticker(symbol)
-        info = tk.info
+        info = quote_to_major(tk.info or {})
         mean = info.get("targetMeanPrice")
         count = info.get("numberOfAnalystOpinions")
         key = info.get("recommendationKey")

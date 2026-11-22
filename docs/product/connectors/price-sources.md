@@ -71,6 +71,14 @@ and saved charts don't change either way.
   when nobody is looking. Change that under **Settings → Intelligence → Monitoring → Price
   check**.
 
+## Shares quoted in pence
+
+Yahoo quotes most London-listed shares in **pence** (and Johannesburg in cents, Tel Aviv in
+agorot). The app converts those quotes to pounds (rand, shekels) as they arrive, so a share
+trading at 26.5p is valued at £0.265, never £26.50. Listings Yahoo already quotes in pounds,
+such as many London ETFs, are left as they are. Price history saved in pence by an older
+version is corrected automatically the next time the app starts.
+
 ## What leaves your machine
 
 Only the **ticker symbols** (and, for crypto, coin names) being priced — never balances, holdings,
@@ -88,6 +96,9 @@ updating](../troubleshooting/prices-arent-updating.md).
 
 **A coin has no price** — it may not be listed on Yahoo, and CoinGecko's free allowance may be used
 up for the moment. Add a CoinGecko Demo key (above), or wait a minute and refresh.
+
+**A London share is valued 100× too high** — update the app and restart it; the pence
+conversion and the history repair run on their own.
 
 **CoinGecko shows Cooling down** — too many requests in a short time. The app backs off and retries
 by itself; a Demo key makes this much rarer.

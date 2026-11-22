@@ -37,6 +37,7 @@ from typing import Optional
 
 from backend.core import units
 from backend.core.errors import ValidationError
+from backend.core.quote_units import major_currency
 from backend.db.instrument_store import InstrumentStore
 from backend.services import coingecko_client
 
@@ -173,7 +174,10 @@ def _resolve_yahoo(query: str) -> dict | None:
 
         fi = yf.Ticker(query).fast_info
         price = fi.get("lastPrice") or fi.get("regularMarketPrice")
-        currency = (fi.get("currency") or "").upper()
+        # major_currency, not .upper(): Yahoo quotes a London listing in GBp (pence) and Tel
+        # Aviv in ILA (agorot) — the instrument is denominated in GBP / ILS, and the price
+        # feed converts every quote to that (core/quote_units.py).
+        currency = major_currency(fi.get("currency"))
         if not price or not currency:
             # No price OR no quote currency = the source did not confirm this
             # ticker's facts. The old `or "USD"` fabricated a currency (KSTL.DE
