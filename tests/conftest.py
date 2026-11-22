@@ -27,6 +27,18 @@ os.environ["LOGS_DIR"] = str(_TEST_ROOT / "logs")
 # Guard: never run the suite pointed at a real instance dir.
 assert "/.open-net-worth/" not in os.environ["DATA_DIR"], "test DATA_DIR must be a throwaway"
 
+# ── NEVER STARVE THE OWNER'S LIVE SERVER ─────────────────────────────────────
+# The suite runs on the same machine as the owner's live :8080, often from several agent
+# sessions at once. A full `-n auto` run at normal priority took every core and pushed the
+# box into swap (load 95): the live server's event loop was STARVED for up to 180s and looked
+# down (2026-11-23). Every test process — the controller and each xdist worker, since each
+# imports this file — drops to low CPU priority, so the server always runs first. POSIX only.
+if hasattr(os, "nice"):
+    try:
+        os.nice(15)
+    except OSError:
+        pass
+
 # Model-backed tests need an instance default model, the way a real install has one saved in
 # Settings → AI Model. Production never seeds it from the environment (2026-10-10); the suite
 # supplies it (`_test_default_model`, below), only while nothing is stored. Set BEFORE the
@@ -126,6 +138,16 @@ def pytest_configure(config):
     from tests.flags import TEST_FLAGS
 
     _ff.REGISTRY.update(_ff.build_registry(_ff.FLAGS + TEST_FLAGS))
+
+
+def pytest_xdist_auto_num_workers(config):
+    """``-n auto`` on a developer machine uses HALF the cores, leaving the rest for the live
+    server and the other sessions sharing it (see NEVER STARVE above). CI owns its runner and
+    keeps one worker per core."""
+    cores = os.cpu_count() or 2
+    if os.environ.get("CI"):
+        return cores
+    return max(2, cores // 2)
 
 
 def pytest_generate_tests(metafunc):
