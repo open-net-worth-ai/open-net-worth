@@ -217,9 +217,8 @@ password, and choose whether it may only read or may also make changes.
 5. A page from your own address opens. Check the address bar and type your Open Net Worth
    password. It confirms this one connection only: it doesn't sign that browser in to Open Net
    Worth.
-6. The next page shows which app is asking and what it will be able to do. Choose **Allow read
-   access**, or turn on **Also let it make changes** first and choose **Allow read and write
-   access**.
+6. The next page shows which app is asking and what it will be able to do. Choose **Read**,
+   **Read and change**, or **Talk to Lucius**, then **Allow**.
 
 Only approve a request you started yourself, a moment ago, from your own account. If someone
 sends you a link to this page, choose **Deny**: approving it would connect _their_ account to your
@@ -227,6 +226,9 @@ book.
 
 **What happens after you approve**
 
+- **Talk to Lucius** apps can only talk to Lucius (see [Talk to Lucius from another
+  app](#talk-to-lucius-from-another-app)). They don't open your book themselves, but Lucius may
+  share anything he can see in his answers.
 - **Read-only** apps see only the tools that read. They can't add, edit or delete anything, send
   anything or run code. They can read everything a read tool reads, including past conversations
   and the database through the SQL tool, but never a document marked Private.
@@ -298,6 +300,30 @@ requests (HAProxy: `timeout tunnel 3600s`).
 To check from a terminal, `curl -I https://wealth.example.com/mcp` should answer `401` with a
 `WWW-Authenticate` header naming `resource_metadata`. A `302` means the gateway is still in the
 way.
+
+## Talk to Lucius from another app
+
+An app connected with **Talk to Lucius** or **Read and change** (or your API token) can talk to
+**Lucius** instead of reading your book itself. In that app, say for example: _"Ask Lucius
+whether I can afford these headphones"_, _"Ask Lucius which of these flights fits my plans"_, or
+_"Tell Lucius I bought them on Card B"_.
+
+- **Each one is a real conversation with Lucius.** It appears in your Lucius history under the
+  app's name, so you can read it, continue it or stop it. The app can continue only its own
+  conversations.
+- **Lucius has his usual tools and follows your permissions.** Tools you've blocked stay blocked;
+  for tools set to ask, the conversation uses **Auto**, so the Auto judge decides, as in your own
+  chats. When Lucius needs your approval, you get a notification and the approval waits in the
+  conversation; the app tells you it's waiting.
+- **The app's words are treated as a question, not as orders** to Lucius, and never as your
+  approval: a change set to ask needs **you**, even if the app says you agreed.
+- **Progress shows while Lucius works**, in apps that display it.
+- It uses your instance's AI model, like a message to Lucius. It isn't available on the public
+  demo.
+
+For a quick check right before paying, an app with Read access can also use **Ask Lucius before
+you buy** (see [Skills](../lucius/skills.md#ask-lucius-before-you-buy)), which answers instantly
+from your budget.
 
 ## What a connected app can do
 

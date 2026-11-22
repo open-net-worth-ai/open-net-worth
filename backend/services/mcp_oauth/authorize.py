@@ -25,6 +25,7 @@ from backend.services.mcp_oauth.common import (
     CODE_TTL,
     GRANT_TTL,
     REQUEST_TTL,
+    TALK,
     OAuthError,
     digest,
     new_secret,
@@ -176,7 +177,9 @@ class Decision:
     scopes: tuple[str, ...] = ()
 
 
-def decide(request_id: str, approve: bool, allow_write: bool) -> Decision:
+def decide(
+    request_id: str, approve: bool, allow_write: bool, *, talk_only: bool = False
+) -> Decision:
     """Spend the staged request. The caller has ALREADY verified the owner's password when
     ``approve`` is true. Returns where to send the browser."""
     store = McpOAuthStore()
@@ -187,7 +190,12 @@ def decide(request_id: str, approve: bool, allow_write: bool) -> Decision:
         if not approve:
             return Decision(_deny_url(row), False)
         requested = row["requested_scopes"].split()
-        scopes = ("read", "write") if allow_write and "write" in requested else ("read",)
+        if talk_only:
+            scopes: tuple[str, ...] = (TALK,)
+        elif allow_write and "write" in requested:
+            scopes = ("read", "write")
+        else:
+            scopes = ("read",)
         grant_id = uuid.uuid4().hex
         store.insert_grant(
             {

@@ -26,7 +26,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence, Union
 
-from backend.ai.auto_judge_context import Said, Standing, conversation_from_rows
+from backend.ai.auto_judge_context import APP_ASK_MARKER, Said, Standing, conversation_from_rows
 from backend.core.chat_context_markers import ATTACHMENT_NOTE
 from backend.core.untrusted import fence_untrusted_block, make_fence_nonce, sanitize_untrusted
 
@@ -221,7 +221,7 @@ def recent_owner_messages(session_id: str) -> list[str]:
     out: list[str] = []
     for row in rows:
         # A skill invocation (possibly activated by the MODEL) is stored as a user-role row.
-        if row.get("role") != "user" or row.get("_onw_skill"):
+        if row.get("role") != "user" or row.get("_onw_skill") or row.get(APP_ASK_MARKER):
             continue
         text = typed_text(row.get("content")).strip()
         if text and not is_harness_note(text):

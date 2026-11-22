@@ -318,7 +318,9 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # 2026-11-20: 504_500 -> 506_600. get_spending_advice_before_payment
     # (ai/tools/spending_advice.py): ~2.0K chars. Outside assistants call it too, so its
     # description has to say on its own when to call it. Not CORE.
-    budget = 506_600
+    # 2026-11-22: 506_600 -> 507_800. ask_lucius (ai/tools/ask_lucius.py): ~1.1K chars — another
+    # AI app asks Lucius over MCP; its description says on its own when to use it. Not CORE.
+    budget = 507_800
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

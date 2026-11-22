@@ -1096,6 +1096,8 @@ _DEMO_REFUSED_TOOLS = frozenset(
     {
         # Its request reaches every open app, and on the demo those are other visitors'.
         "read_screen",
+        # A whole Lucius turn per call from an outside app: model cost no visitor quota covers.
+        "ask_lucius",
         # Paper trading writes: every visitor shares one book, so the demo reads paper only.
         "create_paper_portfolio",
         "update_paper_portfolios",

@@ -208,7 +208,11 @@ export function ConnectedApps({
               <>
                 {app.name}{' '}
                 <Badge tone={app.scopes.includes('write') ? 'warn' : ''}>
-                  {app.scopes.includes('write') ? 'Read and write' : 'Read'}
+                  {app.scopes.includes('write')
+                    ? 'Read and write'
+                    : app.scopes.includes('talk')
+                      ? 'Talk to Lucius'
+                      : 'Read'}
                 </Badge>
               </>,
               `${app.host} · connected ${when(app.connected_at)} · last used ${when(app.last_used_at)}`,

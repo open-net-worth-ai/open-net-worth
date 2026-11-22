@@ -42,6 +42,11 @@ READ_ONLY_REFUSAL = (
 )
 
 
+# What a "Talk to Lucius" grant may call — and the one tool a Read grant may not: an ask can
+# lead to changes (each under the owner's own permissions).
+TALK_TOOLS = frozenset({"ask_lucius"})
+
+
 def tool_allowed(name: str, scopes: tuple[str, ...]) -> bool:
     """THE scope seam for inbound MCP. ``write`` allows everything the static token can; without
     it a tool runs only if it passes BOTH read-only classifiers: the client-facing annotation
@@ -50,6 +55,8 @@ def tool_allowed(name: str, scopes: tuple[str, ...]) -> bool:
     it is used (ADR 2026-11-16-hosted-ai-apps-connect-to-mcp-through-the-apps-own-oauth-server)."""
     if "write" in scopes:
         return True
+    if name in TALK_TOOLS:
+        return "talk" in scopes
     if "read" not in scopes:
         return False
     return _annotations_for(name).get("readOnlyHint") is True and not may_change_something(name)
@@ -101,6 +108,8 @@ _SIDE_EFFECT_NO_DOMAIN: frozenset[str] = frozenset(
         # An Automation run's own task list — turn-ephemeral, like the scope changes above.
         "add_run_tasks",
         "update_run_task",
+        # Starts or continues a Lucius conversation; Lucius may change what the owner allows.
+        "ask_lucius",
     }
 )
 
@@ -365,8 +374,9 @@ def _assert_resource_tools_are_read_only() -> None:
 _assert_resource_tools_are_read_only()
 
 
-def mcp_resource_descriptors() -> list[dict]:
-    """The MCP ``resources/list`` payload: ``{uri, name, description, mimeType}`` per resource."""
+def mcp_resource_descriptors(*, scopes: tuple[str, ...]) -> list[dict]:
+    """The MCP ``resources/list`` payload: ``{uri, name, description, mimeType}`` per resource the
+    caller's ``scopes`` may read (a resource is its mapped tool, judged by ``tool_allowed``)."""
     descriptors = [
         {
             "uri": uri,
@@ -374,7 +384,8 @@ def mcp_resource_descriptors() -> list[dict]:
             "description": desc,
             "mimeType": MCP_RESOURCE_MIME,
         }
-        for uri, (_tool, name, desc) in _RESOURCE_CATALOG.items()
+        for uri, (tool, name, desc) in _RESOURCE_CATALOG.items()
+        if tool_allowed(tool, scopes)
     ]
     descriptors.sort(key=lambda d: d["uri"])
     return descriptors
@@ -385,7 +396,7 @@ def is_resource(uri: str) -> bool:
     return uri in _RESOURCE_CATALOG
 
 
-async def read_resource(uri: str) -> list[dict]:
+async def read_resource(uri: str, *, scopes: tuple[str, ...]) -> list[dict]:
     """Fetch one curated resource → the MCP ``contents`` list (a single JSON text block).
 
     Validates ``uri`` against the curated catalog (unknown → ``McpResourceNotFound``, which
@@ -396,7 +407,9 @@ async def read_resource(uri: str) -> list[dict]:
     if not is_resource(uri):
         raise McpResourceNotFound(uri)
     tool, _name, _desc = _RESOURCE_CATALOG[uri]
-    text, _proposed = await call_tool(tool, {})
+    if not tool_allowed(tool, scopes):
+        raise McpResourceNotFound(uri)  # out of scope reads exactly like an unknown uri
+    text, _proposed = await call_tool(tool, {}, scopes=scopes)
     return [{"uri": uri, "mimeType": MCP_RESOURCE_MIME, "text": text}]
 
 

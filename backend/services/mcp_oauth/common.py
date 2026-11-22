@@ -9,6 +9,10 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 SCOPES = ("read", "write")
+# Grant-only: the OWNER picks "Talk to Lucius" on the consent page; a client never requests it
+# (parse_scopes still knows only read/write). Such a grant reaches ask_lucius and nothing else.
+TALK = "talk"
+GRANT_SCOPES = (*SCOPES, TALK)
 
 ACCESS_TTL = timedelta(hours=1)
 REFRESH_IDLE_TTL = timedelta(days=30)
@@ -94,4 +98,4 @@ def parse_scopes(value: str | None) -> tuple[str, ...]:
 
 
 def scope_string(scopes: tuple[str, ...] | list[str]) -> str:
-    return " ".join(s for s in SCOPES if s in scopes)
+    return " ".join(s for s in GRANT_SCOPES if s in scopes)

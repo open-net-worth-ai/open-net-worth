@@ -69,6 +69,11 @@ def clip_tail(text: str, limit: int) -> str:
     return text if len(text) <= limit else "[earlier text cut]…" + text[-limit:]
 
 
+# A user-role row written by a connected app (``ai.app_asks``), not typed by the owner. The judge
+# never reads it as the owner's intent: an app must not approve its own Ask-level calls.
+APP_ASK_MARKER = "_onw_app_ask"
+
+
 def conversation_from_rows(rows: list[dict], owner_limit: int, owner_chars: int) -> list[Said]:
     """The last ``owner_limit`` owner messages and Lucius's messages before and between them, in
     order. Consecutive Lucius rows (one turn's steps) read as one message. Empty when the owner
@@ -79,7 +84,7 @@ def conversation_from_rows(rows: list[dict], owner_limit: int, owner_chars: int)
     said: list[Said] = []
     for row in rows:
         role = row.get("role")
-        if role == "user" and not row.get("_onw_skill"):
+        if role == "user" and not row.get("_onw_skill") and not row.get(APP_ASK_MARKER):
             text = typed_text(row.get("content")).strip()
             if text and not is_harness_note(text):
                 said.append(Said("owner", clip(text, owner_chars)))

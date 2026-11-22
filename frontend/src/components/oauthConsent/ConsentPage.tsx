@@ -4,13 +4,14 @@
 // Rendered BEFORE the sign-in gate (main.tsx). Two steps: type the password for this request, then
 // the consent card with Deny / Allow. The sign-in is for THIS request only (a short cookie on the
 // consent routes, never the app's session, never loopback trust), so a link someone else started
-// always needs the password typed for it. Read-only is the default; changes are a switch.
+// always needs the password typed for it. Read is the default; Read and change and Talk to Lucius
+// are the other choices.
 // The app's name is the server's label for a known host, never what the app calls itself.
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useBrand } from '../../brand-context'
 import { Check, LockKeyhole, X } from '../../ui/icons'
-import { Button, ErrorState, Loading, PasswordField, Switch } from '../ui'
+import { Button, ErrorState, Loading, PasswordField, RadioGroup } from '../ui'
 import { decideConsent, loadConsent, signIn } from './consentApi'
 import type { ConsentDetails } from './consentApi'
 
@@ -191,6 +192,27 @@ function SignInStep({
   )
 }
 
+type Access = 'read' | 'write' | 'talk'
+
+function accessOptions(canWrite: boolean) {
+  const options = [
+    { value: 'read', label: 'Read', description: 'See your whole book, without changing it.' },
+  ]
+  if (canWrite)
+    options.push({
+      value: 'write',
+      label: 'Read and change',
+      description: 'Also add, edit and delete records. Every change is recorded and can be undone.',
+    })
+  options.push({
+    value: 'talk',
+    label: 'Talk to Lucius',
+    description:
+      'It talks to Lucius instead of opening your book. Lucius may share anything he can see in his answers, and makes changes under your own permissions, asking you when they say so.',
+  })
+  return options
+}
+
 function Ability({ allowed, children }: { allowed: boolean; children: ReactNode }) {
   return (
     <li className={allowed ? 'consent-can' : 'consent-cannot'}>
@@ -212,18 +234,21 @@ function Decide({
   onSignedOut: () => void
 }) {
   const brand = useBrand()
-  const [write, setWrite] = useState(false)
+  const [access, setAccess] = useState<Access>('read')
   const [busy, setBusy] = useState<'allow' | 'deny' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const canWrite = details.requested_scopes.includes('write')
-  const changes = canWrite && write
+  const changes = canWrite && access === 'write'
+  const talk = access === 'talk'
   const app = details.app_name
 
   async function decide(decision: 'allow' | 'deny') {
     setBusy(decision)
     setError(null)
     const result = await decideConsent(
-      decision === 'allow' ? { request, decision, allow_write: changes } : { request, decision },
+      decision === 'allow'
+        ? { request, decision, allow_write: changes, ...(talk ? { talk_only: true } : {}) }
+        : { request, decision },
     )
     setBusy(null)
     if (result.ok) onLeave(result.redirect)
@@ -251,24 +276,27 @@ function Decide({
       <section className="consent-scope" aria-label={`What ${app} can do`}>
         <p className="consent-scope__title">{app} will be able to</p>
         <ul>
-          <Ability allowed>See your accounts, transactions, budget and investments</Ability>
+          <Ability allowed>
+            {talk
+              ? "See your book through Lucius's answers"
+              : 'See your accounts, transactions, budget and investments'}
+          </Ability>
+          <Ability allowed={talk || changes}>
+            Talk to Lucius, who acts under your permissions
+          </Ability>
           <Ability allowed={changes}>Add, edit and delete records</Ability>
           <Ability allowed={changes}>Run automations and send messages for you</Ability>
           <Ability allowed={false}>
             Use tools from MCP servers you've connected to {brand.app_name}
           </Ability>
         </ul>
-        {canWrite ? (
-          <div className="consent-scope__switch">
-            <label htmlFor="consent-write">Also let it make changes</label>
-            <Switch
-              id="consent-write"
-              checked={write}
-              onChange={(e) => setWrite(e.target.checked)}
-            />
-            <p>Every change is recorded and can be undone. Leave off for read-only access.</p>
-          </div>
-        ) : null}
+        <RadioGroup
+          name="consent-access"
+          ariaLabel={`What ${app} can do`}
+          value={access}
+          onChange={(next) => setAccess(next as Access)}
+          options={accessOptions(canWrite)}
+        />
       </section>
 
       <p className="consent-warn">
@@ -289,7 +317,11 @@ function Decide({
           Deny
         </Button>
         <Button type="submit" variant="primary" loading={busy === 'allow'} disabled={busy !== null}>
-          {changes ? 'Allow read and write access' : 'Allow read access'}
+          {talk
+            ? 'Allow talking to Lucius'
+            : changes
+              ? 'Allow read and write access'
+              : 'Allow read access'}
         </Button>
       </div>
 

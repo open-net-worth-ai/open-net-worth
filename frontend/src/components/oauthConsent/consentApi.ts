@@ -48,6 +48,7 @@ export async function decideConsent(body: {
   request: string
   decision: 'allow' | 'deny'
   allow_write?: boolean
+  talk_only?: boolean
 }): Promise<DecideResult> {
   let r: Response
   try {

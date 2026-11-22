@@ -32,12 +32,13 @@ Bearer check is the inner ring MCP-specific requirement.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from typing import Any, Optional
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.core.config import get_settings
 from backend.core.security import verify_api_token
@@ -255,14 +256,14 @@ async def _handle_method(
         return await _handle_tools_call(name, arguments, req_id, caller)
 
     if method == "resources/list":
-        return _rpc_result(req_id, {"resources": mcp_resource_descriptors()})
+        return _rpc_result(req_id, {"resources": mcp_resource_descriptors(scopes=caller.scopes)})
 
     if method == "resources/read":
         uri = params.get("uri")
         if not isinstance(uri, str) or not uri:
             return _rpc_error(req_id, INVALID_PARAMS, "missing resource uri")
         try:
-            contents = await read_resource(uri)
+            contents = await read_resource(uri, scopes=caller.scopes)
         except McpResourceNotFound as exc:
             # An unlisted uri — refuse as a proper JSON-RPC error (never a 500 / leak).
             return _rpc_error(req_id, INVALID_PARAMS, str(exc))
@@ -330,11 +331,67 @@ async def mcp_endpoint(request: Request):
             pass
         return Response(status_code=202)
 
+    token = _progress_token(method, params)
+    if token is not None and "text/event-stream" in request.headers.get("accept", ""):
+        return _streamed(method, params, req_id, caller, token)
     try:
         envelope = await _handle_method(method, params, req_id, caller)
     except Exception as exc:  # noqa: BLE001 — never leak a 500 to an MCP client
         return JSONResponse(content=_rpc_error(req_id, INTERNAL_ERROR, str(exc)))
     return JSONResponse(content=envelope)
+
+
+def _progress_token(method: str, params: dict) -> Any:
+    """A ``tools/call`` whose client asked for progress (``params._meta.progressToken``)."""
+    if method != "tools/call":
+        return None
+    meta = params.get("_meta")
+    return meta.get("progressToken") if isinstance(meta, dict) else None
+
+
+def _sse(message: dict) -> str:
+    return f"event: message\ndata: {json.dumps(message, ensure_ascii=False)}\n\n"
+
+
+def _streamed(method: str, params: dict, req_id: Any, caller: McpCaller, token: Any):
+    """Answer a long ``tools/call`` as an SSE stream (Streamable HTTP): MCP
+    ``notifications/progress`` while the tool reports (``core.mcp_progress``), then the result."""
+    from backend.core import mcp_progress
+
+    queue: asyncio.Queue = asyncio.Queue()
+    count = 0
+
+    async def report(message: str) -> None:
+        nonlocal count
+        count += 1
+        params_ = {"progressToken": token, "progress": count, "message": message}
+        await queue.put({"jsonrpc": "2.0", "method": "notifications/progress", "params": params_})
+
+    async def run() -> None:
+        bound = mcp_progress.bind(report)
+        try:
+            envelope = await _handle_method(method, params, req_id, caller)
+        except Exception as exc:  # noqa: BLE001 — never leak a 500 to an MCP client
+            envelope = _rpc_error(req_id, INTERNAL_ERROR, str(exc))
+        finally:
+            mcp_progress.reset(bound)
+        await queue.put(envelope)
+
+    async def frames():
+        task = asyncio.create_task(run())
+        try:
+            while True:
+                message = await queue.get()
+                yield _sse(message)
+                if "method" not in message:
+                    return
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        frames(), media_type="text/event-stream", headers={"Cache-Control": "no-store"}
+    )
 
 
 def _oauth_gate(request: Request) -> Optional[JSONResponse]:

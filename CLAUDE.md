@@ -478,8 +478,12 @@ frontend/src/
   WebSocket itself — gateway mode or explicit opt-in, same-origin, a session not an API token, fresh sign-in,
   one at a time; the child env is `core.child_env.scrubbed_environ` (shared with the CLI providers). ADR
   `2026-10-03-terminal-is-a-gated-shell-with-the-providers-env-filter`.
-- MCP inbound: Bearer-only auth. Nonce staging fires server-STORED args — approve-then-substitute
-  is structurally impossible.
+- MCP inbound: the API token (Bearer, full access) or, under flag `mcp_oauth`, an OAuth grant whose
+  scope the OWNER picks — read, read+write, or `talk` (only `ask_lucius`: a real Lucius
+  conversation under the owner's permissions, Auto by default; ADR
+  `2026-11-22-talk-to-lucius-is-a-third-mcp-access-mode`). `mcp.adapter.tool_allowed(name, scopes)`
+  is THE scope seam, resources included. Nonce staging fires server-STORED args —
+  approve-then-substitute is structurally impossible.
 - External MCP: `tool_permissions` is the SINGLE authority on whether a call fires — no
   unconfigurable floor, for every tool in the app. `discovered_tools` is what WE observed in a
   handshake, never a client-supplied value.

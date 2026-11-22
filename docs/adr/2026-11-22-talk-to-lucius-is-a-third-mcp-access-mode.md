@@ -63,9 +63,10 @@ We will add a third MCP OAuth access mode, **Talk to Lucius**, beside Read and R
 ## Consequences
 
 ### Positive
-- The safest way to connect an agent: it never sees raw accounts, transactions or SQL, and every
-  change follows the owner's rules, with cards for Ask — closing the "no approval cards for apps"
-  gap for this mode.
+- Every change an agent leads to follows the owner's rules, with cards for Ask — closing the "no
+  approval cards for apps" gap for this mode. The app's own words are never read by the Auto judge
+  as the owner's intent (marked `_onw_app_ask`), so an app cannot approve its own Ask calls. The
+  app does not open the book itself, though Lucius may share in his answers anything he can see.
 - Agents get judgment (memory, goals, bills, cards) instead of data, in Lucius's voice.
 - Approvals can happen where the user already is (MCP Apps), with Open Net Worth as the fallback.
 - One mode, one tool: nothing new to learn on the consent page beyond one choice.

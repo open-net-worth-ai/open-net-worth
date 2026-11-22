@@ -99,15 +99,15 @@ it('allows read-only by default with no password on the consent card', async () 
   expect(consentPost()).toEqual({ request: 'req-abc', decision: 'allow', allow_write: false })
 })
 
-it('grants changes only when the switch is on', async () => {
+it('grants changes only when Read and change is chosen', async () => {
   render(<ConsentPage />)
-  fireEvent.click(await screen.findByLabelText(/Also let it make changes/))
+  fireEvent.click(await screen.findByLabelText(/Read and change/))
   fireEvent.click(screen.getByRole('button', { name: 'Allow read and write access' }))
   await waitFor(() => expect(assign).toHaveBeenCalled())
   expect(consentPost().allow_write).toBe(true)
 })
 
-it('offers no changes switch when the app only asked to read', async () => {
+it('offers no Read and change when the app only asked to read', async () => {
   fetchMock.mockImplementation((_url: string, init?: RequestInit) =>
     !init || init.method !== 'POST'
       ? json(200, { ...DETAILS, requested_scopes: ['read'] })
@@ -115,7 +115,21 @@ it('offers no changes switch when the app only asked to read', async () => {
   )
   render(<ConsentPage />)
   await screen.findByText('Connect Claude to Open Net Worth?')
-  expect(screen.queryByLabelText(/Also let it make changes/)).toBeNull()
+  expect(screen.queryByLabelText(/Read and change/)).toBeNull()
+  expect(screen.getByLabelText(/Talk to Lucius/)).toBeTruthy()
+})
+
+it('grants Talk to Lucius when chosen', async () => {
+  render(<ConsentPage />)
+  fireEvent.click(await screen.findByLabelText(/Talk to Lucius/))
+  fireEvent.click(screen.getByRole('button', { name: 'Allow talking to Lucius' }))
+  await waitFor(() => expect(assign).toHaveBeenCalled())
+  expect(consentPost()).toEqual({
+    request: 'req-abc',
+    decision: 'allow',
+    allow_write: false,
+    talk_only: true,
+  })
 })
 
 it('goes back to sign-in when the sign-in has gone stale', async () => {

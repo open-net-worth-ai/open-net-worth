@@ -130,6 +130,7 @@ class ConsentBody(BaseModel):
     request: str
     decision: str  # "allow" | "deny"
     allow_write: bool = False
+    talk_only: bool = False  # "Talk to Lucius": the app may only call ask_lucius
 
 
 def _cross_site(request: Request) -> bool:
@@ -150,7 +151,9 @@ async def consent_decide(body: ConsentBody, request: Request):
         # The page signs in again and retries; nothing about the request changes.
         return JSONResponse({"detail": "sign in again"}, status_code=401, headers=_NO_STORE)
     try:
-        decision = authorize.decide(body.request, approve, body.allow_write)
+        decision = authorize.decide(
+            body.request, approve, body.allow_write, talk_only=body.talk_only
+        )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if decision.approved:
@@ -204,7 +207,13 @@ def consent_sign_in(body: ConsentSignInBody, request: Request):
 async def _notify_connected(decision: authorize.Decision) -> None:
     from backend.services.notify import notify
 
-    access = "read and change" if "write" in decision.scopes else "read-only"
+    access = (
+        "talk-to-Lucius"
+        if "talk" in decision.scopes
+        else "read and change"
+        if "write" in decision.scopes
+        else "read-only"
+    )
     message = (
         f"{decision.app_name} ({decision.app_host}) was connected to your book with {access} "
         "access. Not you? Revoke it in Settings > MCP and change your password."
