@@ -12,9 +12,28 @@ import {
   WalletCards,
   type LucideIcon,
 } from 'lucide-react'
-import type { AutomationDraft } from '../../../api/automations'
+import type { AutomationDraft, AutomationPermission } from '../../../api/automations'
 
 export type AutomationTemplate = AutomationDraft & { key: string }
+
+/** What a template is FOR runs on its first run, with nobody there: these tools skip the Auto
+ *  judge for this Automation only (`automation_gate_verdict` checks the list first). A judge that
+ *  asks parks an unattended run until someone opens the app, so a new user's first digest or
+ *  sync would silently never finish. Everything else — a delete, a rewrite of a booked row
+ *  (`update_transactions`), a send anywhere else — still goes to the judge. Booked rows are
+ *  `needs_review` (an Automation is not a trusted writer), so every one still reaches the owner. */
+const SEND_TO_ME: AutomationPermission = {
+  src: 'Open Net Worth',
+  desc: 'Message you on your own Telegram or webhook.',
+  tools: ['telegram_send_message', 'webhook_send_message'],
+}
+const BOOK_FOUND: AutomationPermission = {
+  src: 'Open Net Worth',
+  desc: 'Book the transactions it finds, adding a category when none fits.',
+  tools: ['add_transactions', 'create_categories'],
+}
+const REPORTS: AutomationPermission[] = [SEND_TO_ME]
+const BOOKING: AutomationPermission[] = [BOOK_FOUND, SEND_TO_ME]
 
 /** "Recommended": what a new user most likely wants — getting transactions in, then the reports.
  *  Shown first and always; the other lists exclude them. */
@@ -34,6 +53,7 @@ export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
     trigger: { kind: 'schedule', type: 'rrule', rrule: 'FREQ=DAILY;BYHOUR=0,12;BYMINUTE=0' },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
+    always_allowed: BOOKING,
   },
   {
     key: 'daily-briefing',
@@ -46,6 +66,7 @@ export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
     trigger: { kind: 'schedule', type: 'daily', time: '09:00' },
     // Read-only reports: nothing to approve, and nobody is there at 9am to approve it.
     permission_mode: 'auto',
+    always_allowed: REPORTS,
   },
   {
     key: 'weekly-report',
@@ -58,6 +79,7 @@ export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
       'in my records.',
     trigger: { kind: 'schedule', type: 'weekly', day: 'mon', time: '08:30' },
     permission_mode: 'auto',
+    always_allowed: REPORTS,
   },
   {
     key: 'monthly-report',
@@ -70,6 +92,7 @@ export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
       'anything in my records.',
     trigger: { kind: 'schedule', type: 'monthly', day: 1, time: '09:30' },
     permission_mode: 'auto',
+    always_allowed: REPORTS,
   },
 ]
 
@@ -87,6 +110,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
+    always_allowed: BOOKING,
   },
   {
     key: 'subscriptions',
@@ -195,6 +219,7 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     trigger: { kind: 'schedule', type: 'interval', seconds: 21600 },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
+    always_allowed: BOOKING,
   },
   {
     key: 'sync_plaid',
@@ -206,6 +231,7 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     trigger: { kind: 'schedule', type: 'interval', seconds: 21600 },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
+    always_allowed: BOOKING,
   },
   {
     key: 'sync_lunch_money',
@@ -217,6 +243,7 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     trigger: { kind: 'schedule', type: 'interval', seconds: 21600 },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
+    always_allowed: BOOKING,
   },
   {
     key: 'sync_lunch_flow',
@@ -228,6 +255,7 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     trigger: { kind: 'schedule', type: 'interval', seconds: 21600 },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
+    always_allowed: BOOKING,
   },
   {
     key: 'sync_ynab',
@@ -239,6 +267,7 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     trigger: { kind: 'schedule', type: 'interval', seconds: 21600 },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
+    always_allowed: BOOKING,
   },
   {
     key: 'sync_enable_banking',
@@ -251,6 +280,7 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
+    always_allowed: BOOKING,
   },
   {
     key: 'sync_gocardless',
@@ -264,6 +294,7 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
+    always_allowed: BOOKING,
   },
 ]
 

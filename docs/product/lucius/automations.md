@@ -164,6 +164,19 @@ The **Recommended** and **Sync a connector** templates start in **Automatically 
 nobody at the screen at 9am to tap a card. A new Automation you set up yourself starts in
 **Manually approve**.
 
+Those templates also come with their own job already on their **Always allowed** list, so the very
+first run finishes without waiting for you:
+
+- **Email finance digest**, **Auto-log transactions from email** and every **Sync** template:
+  booking the transactions they find, adding a category when none fits, and messaging you on your
+  own Telegram or webhook.
+- **Daily briefing**, **Weekly report** and **Monthly report**: messaging you on your own Telegram
+  or webhook.
+
+Anything else they try, such as deleting or changing a row already booked, still goes through the
+approval mode. Booked rows still land in your review queue. You can revoke any of these on the
+Automation's page.
+
 In every mode:
 
 - A tool set to **Blocked** is refused.

@@ -14,6 +14,48 @@ const mail = byKey('mail_ledger')
 const digest = byKey('mail_digest')
 
 describe('automation templates', () => {
+  // A judge that asks parks an unattended run until someone opens the app: a template's own
+  // work must run on its FIRST run, with nobody there.
+  const allowedTools = (key: string) =>
+    (byKey(key).always_allowed ?? []).flatMap((permission) => permission.tools ?? [])
+  const BOOKS = [
+    'mail_digest',
+    'mail_ledger',
+    ...ALL_TEMPLATES.map((t) => t.key).filter((k) => k.startsWith('sync_')),
+  ]
+
+  it('lets a booking template book what it finds and message the owner without a card', () => {
+    for (const key of BOOKS) {
+      expect(allowedTools(key)).toEqual(
+        expect.arrayContaining([
+          'add_transactions',
+          'create_categories',
+          'telegram_send_message',
+          'webhook_send_message',
+        ]),
+      )
+    }
+  })
+
+  it('lets a report template message the owner without a card', () => {
+    for (const key of ['daily-briefing', 'weekly-report', 'monthly-report']) {
+      expect(allowedTools(key)).toEqual(['telegram_send_message', 'webhook_send_message'])
+    }
+  })
+
+  it('never pre-allows a delete, a rewrite, an email or a trade', () => {
+    for (const template of ALL_TEMPLATES) {
+      for (const tool of allowedTools(template.key)) {
+        expect([
+          'add_transactions',
+          'create_categories',
+          'telegram_send_message',
+          'webhook_send_message',
+        ]).toContain(tool)
+      }
+    }
+  })
+
   it('recommends the email digest, then the three reports', () => {
     expect(RECOMMENDED_TEMPLATES.map((t) => t.key)).toEqual([
       'mail_digest',

@@ -432,3 +432,15 @@ def test_an_unreadable_permission_store_raises_so_the_dispatch_gate_refuses(
         gate.effective_level("create_account")
     text, proposed = asyncio.run(registry.dispatch("get_net_worth", {}, tool_use_id="toolu_unread"))
     assert proposed is None and "nothing ran" in json.loads(text)["error"]
+
+
+def test_a_tool_on_the_automations_list_runs_in_auto_even_when_the_judge_would_ask(
+    monkeypatch, db_isolated
+):
+    """A booking template ships ``add_transactions`` on its own list so its FIRST unattended run
+    finishes: the list is read before the judge, so a judge that would ask never parks it. A tool
+    not on the list still follows the judge."""
+    monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
+
+    assert _verdict("add_transactions", "auto", "add_transactions", judged="ask") == "allow"
+    assert _verdict("delete_transactions", "auto", "add_transactions", judged="ask") == "gate"
