@@ -442,7 +442,10 @@
     display: inline-block;
     flex: none;
     background-color: currentColor;
-    mask: url('/lucius-mark.svg') center / contain no-repeat;
+    /* The image itself is set inline by LuciusLogo (bundled, never fetched). */
+    mask-position: center;
+    mask-size: contain;
+    mask-repeat: no-repeat;
   }
   .sidebar-brandrow {
     display: flex;
