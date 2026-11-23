@@ -192,8 +192,9 @@ export function ChatSection({ toast }: SectionProps) {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 12.5, fontWeight: 600 }}>Screen awareness by default</div>
           <div className="rd-help" style={{ marginTop: 3, display: 'block', lineHeight: 1.5 }}>
-            On: the screen you're on goes along with each message. Off: it doesn't, but Lucius can
-            still look if you ask. The switch above the message box changes it on that device.
+            Off (the default): Lucius looks at your screen only if you ask. On: your screen is
+            always sent with your message, which can use more tokens. The switch above the message
+            box changes it on that device.
           </div>
         </div>
         <Toggle

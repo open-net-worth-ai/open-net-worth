@@ -2666,9 +2666,8 @@
   .lx-scope-sub {
     font-size: 11px;
     color: var(--faint);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .lx-scope-peek {
     flex: none;

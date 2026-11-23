@@ -118,8 +118,8 @@ describe('ScreenContextBar', () => {
     expect(mockScreen.setEnabled).toHaveBeenCalledWith(false)
     const notice = document.body.querySelector('.lx-scope-notice')
     expect(notice?.getAttribute('role')).toBe('status')
-    expect(notice?.textContent).toContain("won't be sent with messages")
-    expect(notice?.textContent).toContain('can still look')
+    expect(notice?.textContent).toContain('Lucius will look only if you ask')
+    expect(notice?.textContent).toContain('only if you ask')
   })
 
   it('says what turning it on does, and lets the notice go', () => {
@@ -132,7 +132,7 @@ describe('ScreenContextBar', () => {
 
       expect(mockScreen.setEnabled).toHaveBeenCalledWith(true)
       expect(document.body.querySelector('.lx-scope-notice')?.textContent).toContain(
-        'sent with each message',
+        'Always sent with your message',
       )
       act(() => {
         vi.advanceTimersByTime(5000)
@@ -148,7 +148,7 @@ describe('ScreenContextBar', () => {
     const { container } = render(
       <ScreenContextBar compact={compact} visibleIds={EMPTY_VISIBLE_IDS} />,
     )
-    expect(container.textContent).toContain('Attach screen content as context')
+    expect(container.textContent).toContain('Lucius looks only if you ask')
     expect(container.textContent).not.toContain('Overview')
   })
 

@@ -28,12 +28,11 @@ const PEEK_VIEWPORT_EDGE = 4
 const PEEK_ANCHOR_GAP = 6
 const PEEK_MAX_HEIGHT = 244
 const NOTICE_MS = 4500
-const NOTICE_ON = 'Screen awareness on. Your screen is sent with each message.'
-const NOTICE_OFF =
-  "Screen awareness off. Your screen won't be sent with messages, but Lucius can still look if you ask."
-const OFF_SUB = 'Attach screen content as context'
-const OFF_TOOLTIP =
-  "Screen awareness off — your screen isn't sent with messages. Lucius can still look if you ask."
+const NOTICE_ON = 'Screen awareness on. Always sent with your message — can use more tokens.'
+const NOTICE_OFF = 'Screen awareness off. Lucius will look only if you ask.'
+const OFF_SUB = 'Lucius looks only if you ask'
+const ON_SUB = 'Always sent with your message — can use more tokens'
+const OFF_TOOLTIP = 'Screen awareness off — Lucius will look only if you ask.'
 
 export interface ScreenContextBarProps {
   visibleIds: Set<string>
@@ -292,7 +291,7 @@ export function ScreenContextBar({
             <span className="lx-aw-toggle">
               <span className="lx-aw-dot">◉</span>
               <span className="lx-aw-label">Screen awareness</span>
-              <span className="lx-aw-sub">• {enabled ? snap.title : OFF_SUB}</span>
+              <span className="lx-aw-sub">• {enabled ? ON_SUB + ' • ' + snap.title : OFF_SUB}</span>
             </span>
             {!collapsed && (
               <button
@@ -320,7 +319,7 @@ export function ScreenContextBar({
                   ? 'Screen awareness on — click to stop sending this screen with each message'
                   : 'Screen awareness off — click to send this screen with each message'
               }
-              title={enabled ? 'Sent with each message' : 'Not sent with your messages'}
+              title={enabled ? 'Always sent with your message' : 'Lucius looks only if you ask'}
               onMouseDown={(e) => e.preventDefault()}
               onClick={flip}
             >
@@ -336,7 +335,7 @@ export function ScreenContextBar({
             <span className="lx-scope-sub">
               {enabled ? (
                 <>
-                  {snap.title}
+                  {ON_SUB} • {snap.title}
                   {inView ? ' • ' + inView[1] : ''}
                   {handles.length ? ' • ' + handles.length + ' sources' : ''}
                 </>
@@ -388,7 +387,7 @@ export function ScreenContextBar({
             aria-checked={enabled}
             onMouseDown={(e) => e.preventDefault()}
             onClick={flip}
-            title={enabled ? 'Sent with each message' : 'Not sent with your messages'}
+            title={enabled ? 'Always sent with your message' : 'Lucius looks only if you ask'}
           >
             <span className="lx-switch-knob" />
           </button>
