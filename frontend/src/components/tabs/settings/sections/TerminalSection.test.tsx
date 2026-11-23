@@ -32,19 +32,18 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('TerminalSection', () => {
-  it('shows the ownership notice and opens a terminal only when asked', async () => {
+  it('shows the notice and the sign-in commands, and opens the terminal by itself', async () => {
     mockAuthFetch.mockImplementation(async () =>
       json({ available: true, reason: null, in_use: false }),
     )
     render(<TerminalSection toast={vi.fn()} gatewayMode />)
 
     expect(screen.getByText(/your own agreement with their provider/i)).toBeTruthy()
-    const open = await screen.findByRole('button', { name: 'Open terminal' })
-    expect(screen.queryByText('fake terminal')).toBeNull()
-    fireEvent.click(open)
+    expect(screen.getByText('codex login --device-auth')).toBeTruthy()
+    expect(await screen.findByText('fake terminal')).toBeTruthy() // no Open terminal click
+    expect(screen.queryByRole('button', { name: 'Open terminal' })).toBeNull()
+    fireEvent.click(screen.getByText('fake terminal')) // the session ends: a new one, same box
     expect(await screen.findByText('fake terminal')).toBeTruthy()
-    fireEvent.click(screen.getByText('fake terminal'))
-    expect(await screen.findByRole('button', { name: 'Open terminal' })).toBeTruthy()
   })
 
   it('explains when the terminal is switched off', async () => {
@@ -56,7 +55,7 @@ describe('TerminalSection', () => {
     expect(screen.queryByRole('button', { name: 'Open terminal' })).toBeNull()
   })
 
-  it('asks for a code by email in the terminal screen and opens once it is confirmed', async () => {
+  it('asks for a code in the terminal box and opens the terminal as soon as the 6th digit is in', async () => {
     let fresh = false
     mockAuthFetch.mockImplementation(async () =>
       fresh
@@ -73,19 +72,18 @@ describe('TerminalSection', () => {
     try {
       render(<TerminalSection toast={vi.fn()} gatewayMode />)
       fireEvent.click(await screen.findByRole('button', { name: 'Email me a code' }))
-      expect(await screen.findByText('Enter the code we sent to me@example.com.')).toBeTruthy()
-      fireEvent.change(screen.getByLabelText('Code from the email'), {
+      expect(await screen.findByText(/Sent to me@example.com/)).toBeTruthy()
+      fireEvent.change(screen.getByLabelText('Digit 1'), {
         target: { value: '123456' },
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-      expect(await screen.findByRole('button', { name: 'Open terminal' })).toBeTruthy()
+      expect(await screen.findByText('fake terminal')).toBeTruthy() // opens right away
       expect(startGatewayReauth).not.toHaveBeenCalled()
     } finally {
       vi.unstubAllGlobals()
     }
   })
 
-  it('shows a wrong code and lets them try again', async () => {
+  it('a wrong code says so and clears the box for another try', async () => {
     mockAuthFetch.mockImplementation(async () => json({ code: 'fresh_session_required' }, 401))
     vi.stubGlobal(
       'fetch',
@@ -98,11 +96,11 @@ describe('TerminalSection', () => {
     try {
       render(<TerminalSection toast={vi.fn()} gatewayMode />)
       fireEvent.click(await screen.findByRole('button', { name: 'Email me a code' }))
-      fireEvent.change(await screen.findByLabelText('Code from the email'), {
+      fireEvent.change(await screen.findByLabelText('Digit 1'), {
         target: { value: '000000' },
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
       expect(await screen.findByText(/didn't work/)).toBeTruthy()
+      expect((screen.getByLabelText('Digit 1') as HTMLInputElement).value).toBe('')
     } finally {
       vi.unstubAllGlobals()
     }
@@ -146,6 +144,27 @@ describe('TerminalSection', () => {
       expect(await screen.findByText(/could not start the sign-in/i)).toBeTruthy()
     } finally {
       delete window.onwDesktopClient
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('waits 30 seconds before another code, and moves box to box as you type', async () => {
+    mockAuthFetch.mockImplementation(async () => json({ code: 'fresh_session_required' }, 401))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ sent_to: 'me@example.com' })),
+    )
+    try {
+      render(<TerminalSection toast={vi.fn()} gatewayMode />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Email me a code' }))
+      const resend = await screen.findByRole('button', { name: /Send a new code in 30s/ })
+      expect((resend as HTMLButtonElement).disabled).toBe(true)
+      fireEvent.change(screen.getByLabelText('Digit 1'), { target: { value: '4' } })
+      fireEvent.change(screen.getByLabelText('Digit 2'), { target: { value: '8' } })
+      expect((screen.getByLabelText('Digit 1') as HTMLInputElement).value).toBe('4')
+      expect((screen.getByLabelText('Digit 2') as HTMLInputElement).value).toBe('8')
+      expect((screen.getByLabelText('Digit 3') as HTMLInputElement).value).toBe('')
+    } finally {
       vi.unstubAllGlobals()
     }
   })

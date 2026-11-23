@@ -10,8 +10,9 @@ import {
   startGatewayReauth,
 } from '../../../../utils/gatewayReauth'
 import { TERMINAL_NOTICE } from '../../../shared/privateCloudCopy'
-import { Btn, Panel } from '../ds'
+import { Btn, Empty, Panel } from '../ds'
 import { TerminalConfirm } from './TerminalConfirm'
+import { TerminalHelp } from './TerminalHelp'
 import type { SectionProps } from '../ds'
 
 const TerminalView = lazy(() => import('./TerminalView').then((m) => ({ default: m.TerminalView })))
@@ -82,61 +83,74 @@ export function TerminalSection({ gatewayMode = false }: SectionProps) {
 
   const recheck = () => void loadStatus(gatewayMode).then((next) => next && setStatus(next))
 
+  // Opening this screen is asking for the terminal: it starts on its own once allowed. A button
+  // only comes back after a session ends, to start another.
+  useEffect(() => {
+    if (status.kind === 'ready' && !open) {
+      setSession((n) => n + 1)
+      setOpen(true)
+    }
+  }, [status.kind, open])
+
+  if (status.kind === 'unavailable')
+    return (
+      <Panel title="Terminal" sub={TERMINAL_NOTICE}>
+        <div className="rd-help">{status.reason}</div>
+      </Panel>
+    )
   return (
     <Panel title="Terminal" sub={TERMINAL_NOTICE}>
-      {status.kind === 'loading' && <div className="rd-help">Checking…</div>}
-      {status.kind === 'unavailable' && <div className="rd-help">{status.reason}</div>}
-      {status.kind === 'sign-in-again' && gatewayMode && (
-        <TerminalConfirm
-          email={identity?.email ?? null}
-          onConfirmed={recheck}
-          onFallback={(url) => signInAgain(url ?? status.reauth)}
-        />
-      )}
-      {status.kind === 'sign-in-again' && gatewayMode && signInError && (
-        <div className="rd-help">{signInError}</div>
-      )}
-      {status.kind === 'sign-in-again' && !gatewayMode && (
-        <div className="rd-term-note">
-          <div className="rd-help">
-            For your security the terminal asks for a recent sign-in. Sign in again to continue.
-          </div>
-          {status.reauth || !identity?.portal_url ? (
-            <Btn variant="primary" onClick={() => signInAgain(status.reauth)}>
-              Sign in again
-            </Btn>
-          ) : (
-            <a href={identity.portal_url} target="_blank" rel="noopener noreferrer">
-              Open the Private Cloud portal to sign in again
-            </a>
-          )}
-          {signInError && <div className="rd-help">{signInError}</div>}
-        </div>
-      )}
-      {status.kind === 'ready' && !open && (
-        <div>
-          <Btn
-            variant="primary"
-            onClick={() => {
-              setSession((n) => n + 1)
-              setOpen(true)
-            }}
-          >
-            Open terminal
-          </Btn>
-        </div>
-      )}
-      {status.kind === 'ready' && open && (
-        <Suspense fallback={<div className="rd-help">Loading…</div>}>
-          <TerminalView
-            key={session}
-            onEnded={(reason) => {
-              setOpen(false)
-              if (reason === 'sign-in-again') recheck()
-            }}
+      <div className="rd-term-area">
+        <TerminalHelp />
+        {(status.kind === 'loading' || (status.kind === 'ready' && !open)) && (
+          <div className="rd-term-slot" aria-busy="true" />
+        )}
+        {status.kind === 'sign-in-again' && gatewayMode && (
+          <TerminalConfirm
+            email={identity?.email ?? null}
+            onConfirmed={() => setStatus({ kind: 'ready' })}
+            onFallback={(url) => signInAgain(url ?? status.reauth)}
           />
-        </Suspense>
-      )}
+        )}
+        {status.kind === 'sign-in-again' && gatewayMode && signInError && (
+          <div className="rd-term-error">{signInError}</div>
+        )}
+        {status.kind === 'sign-in-again' && !gatewayMode && (
+          <div className="rd-term-slot">
+            <Empty
+              title="Sign in again to use the terminal"
+              body="For your security it asks for a recent sign-in."
+              action={
+                <>
+                  {status.reauth || !identity?.portal_url ? (
+                    <Btn variant="primary" onClick={() => signInAgain(status.reauth)}>
+                      Sign in again
+                    </Btn>
+                  ) : (
+                    <a href={identity.portal_url} target="_blank" rel="noopener noreferrer">
+                      Open the Private Cloud portal to sign in again
+                    </a>
+                  )}
+                  {signInError && <div className="rd-term-error">{signInError}</div>}
+                </>
+              }
+            />
+          </div>
+        )}
+        {status.kind === 'ready' && open && (
+          <Suspense fallback={<div className="rd-term-slot" aria-busy="true" />}>
+            <TerminalView
+              key={session}
+              onEnded={(reason) => {
+                if (reason === 'sign-in-again') {
+                  setOpen(false)
+                  recheck()
+                } else setSession((n) => n + 1) // a new shell, in the same box
+              }}
+            />
+          </Suspense>
+        )}
+      </div>
     </Panel>
   )
 }

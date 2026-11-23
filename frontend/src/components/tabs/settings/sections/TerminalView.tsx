@@ -91,7 +91,7 @@ export function TerminalView({ onEnded }: { onEnded: (reason: EndReason) => void
         <div className="rd-term-note" role="status">
           <span className="rd-help">{note}</span>
           <Btn onClick={() => onEnded(signInAgain ? 'sign-in-again' : 'ended')}>
-            {signInAgain ? 'Continue' : 'Close'}
+            {signInAgain ? 'Continue' : 'Start a new session'}
           </Btn>
         </div>
       )}
