@@ -631,7 +631,7 @@ const AllocationDrift: ComponentType<WidgetContentProps> = ({ instance, def }) =
 
 // ── Performance vs benchmark ─────────────────────────────────────────────────
 
-// GET /api/returns has no 6-month bucket, so the def's range setting offers exactly these.
+// Three ranges, as buttons on the widget's header: more would wrap it on a narrow card.
 const RANGE_OPTIONS: { value: ReturnPeriod; label: string }[] = [
   { value: '3M', label: '3M' },
   { value: '1Y', label: '1Y' },

@@ -83,7 +83,7 @@ def test_total_value_each_period_200(client, period):
 
 
 def test_total_value_bad_period_422(client):
-    r = client.get("/api/portfolio/total-value", params={"period": "5Y"})
+    r = client.get("/api/portfolio/total-value", params={"period": "10Y"})
     assert r.status_code == 422
 
 

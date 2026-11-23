@@ -101,9 +101,13 @@ export function moneyTip(v: unknown): string {
 }
 
 /** Standard cartesian axes (frontend styling). Pass per-axis overrides. */
-export function axes(o?: { x?: object; y?: object }) {
+export function axes(o?: { x?: object; y?: object; xTicks?: object }) {
   return {
-    x: { ticks: { color: TICK(), maxTicksLimit: 8 }, grid: { display: false }, ...(o?.x || {}) },
+    x: {
+      ticks: { color: TICK(), maxTicksLimit: 8, ...(o?.xTicks || {}) },
+      grid: { display: false },
+      ...(o?.x || {}),
+    },
     y: { ticks: { color: TICK(), callback: kTick }, grid: { color: GRID() }, ...(o?.y || {}) },
   }
 }

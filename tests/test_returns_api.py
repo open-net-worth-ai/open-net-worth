@@ -120,7 +120,7 @@ def test_returns_each_period_enum_200(client, period):
 
 def test_returns_bad_period_422(client):
     c, _ = client
-    r = c.get("/api/returns", params={"period": "5Y"})
+    r = c.get("/api/returns", params={"period": "10Y"})
     assert r.status_code == 422
 
 
@@ -429,5 +429,5 @@ def test_returns_roster_key_resolves_for_benchmark(bench_client):
 
 def test_returns_risk_true_bad_period_422(real_client):
     """Bad period with risk=true still → 422 (enum validation)."""
-    r = real_client.get("/api/returns", params={"period": "5Y", "risk": "true"})
+    r = real_client.get("/api/returns", params={"period": "10Y", "risk": "true"})
     assert r.status_code == 422

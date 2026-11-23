@@ -7,6 +7,7 @@
 import type { ReactElement } from 'react'
 import type { WidgetDefinition, WidgetGroup } from './types'
 import type { PresetWidget } from './grid'
+import { DEFAULT_NET_WORTH_RANGE, NET_WORTH_RANGES } from './widgets/netWorthRanges'
 import {
   SERIES_PERIOD_OPTIONS,
   CATEGORIES_SETTING,
@@ -67,8 +68,8 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
         key: 'range',
         type: 'segment',
         label: 'Range',
-        options: ['1M', '3M', '6M', '1Y', 'All'],
-        default: '3M',
+        options: [...NET_WORTH_RANGES],
+        default: DEFAULT_NET_WORTH_RANGE,
       },
     ],
     icon: icon('<path d="M3 17l5-5 4 3 8-8" /><path d="M16 7h4v4" />'),
@@ -99,8 +100,8 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
         key: 'range',
         type: 'segment',
         label: 'Range',
-        options: ['1M', '3M', '6M', '1Y', 'All'],
-        default: '3M',
+        options: [...NET_WORTH_RANGES],
+        default: DEFAULT_NET_WORTH_RANGE,
       },
     ],
     icon: icon('<path d="M3 17l5-5 4 3 8-8" /><path d="M4 21h16" />'),

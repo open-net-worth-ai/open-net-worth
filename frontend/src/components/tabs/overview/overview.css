@@ -1104,6 +1104,13 @@
   overflow: visible;
 }
 
+/* A header control small enough to keep the title's row on a narrow card (see the
+   `ovcard` container rules below), where a wider control drops to a row of its own. */
+.ov-header-compact {
+  display: inline-flex;
+  flex: none;
+}
+
 /* The header clips at its edges (above, and the card's own rounded edge), so a focus ring drawn
    outside a control was cut to an arc there. Every control in a widget header draws it inside. */
 .ov-responsive-toolbar :focus-visible {
@@ -1138,24 +1145,35 @@
     width: 100%;
   }
 
+  /* A compact control alone (the net-worth range menu) keeps its place beside the title. */
+  .ov-responsive-toolbar:not(:has(> :not(.ov-widget-header-kebab):not(.ov-header-compact))) {
+    width: auto;
+  }
+
   /* A toolbar with real controls (the Holdings map's Sector/Type/Account/None picker) drops
      to its own row under the title on a narrow card. The widget head is `nowrap` for the
      kebab-only case (overview.css `.ov-widget-panel.panel > .ui-panel__head`), which on a
      phone left the 250px picker on the title row and squeezed "HOLDINGS MAP" and its
      subtitle into one word per line. The kebab rides the second row's right edge. */
   .ov-widget-panel.panel
-    > .ui-panel__head:has(.ov-responsive-toolbar > :not(.ov-widget-header-kebab)) {
+    > .ui-panel__head:has(
+      .ov-responsive-toolbar > :not(.ov-widget-header-kebab):not(.ov-header-compact)
+    ) {
     flex-wrap: wrap;
   }
 
   .ov-widget-panel.panel
-    > .ui-panel__head:has(.ov-responsive-toolbar > :not(.ov-widget-header-kebab))
+    > .ui-panel__head:has(
+      .ov-responsive-toolbar > :not(.ov-widget-header-kebab):not(.ov-header-compact)
+    )
     .ui-panel__actions {
     flex: 1 1 100%;
   }
 
   .ov-widget-panel.panel
-    > .ui-panel__head:has(.ov-responsive-toolbar > :not(.ov-widget-header-kebab))
+    > .ui-panel__head:has(
+      .ov-responsive-toolbar > :not(.ov-widget-header-kebab):not(.ov-header-compact)
+    )
     .ov-widget-header-kebab {
     margin-left: auto;
   }
