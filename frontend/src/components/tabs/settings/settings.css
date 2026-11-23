@@ -799,7 +799,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.02em;
   padding: 3px 8px;
@@ -846,7 +846,7 @@
   gap: 4px;
 }
 .onw-settings .rd-stat-lbl {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1197,7 +1197,7 @@
   color: var(--muted);
 }
 .onw-settings .rd-row-meta {
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--faint);
   display: flex;
   gap: 14px;
@@ -2352,7 +2352,7 @@
   border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .onw-settings .rd-callout-k {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;

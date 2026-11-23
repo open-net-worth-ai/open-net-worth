@@ -9,6 +9,7 @@ import type { TickerStories } from '../../../hooks/useIntelStoryIndex'
 import { fCompact, fPct, fUnitPrice } from '../../../utils/format'
 import type { WatchSort, WatchSortKey } from './useWatchlistBoard'
 import { fChange, fSignedBase, quoteDigits, tone, type WatchColumn } from './watchColumns'
+import { keyActivate } from '../../../utils/keyActivate'
 
 interface CommonProps {
   rows: WatchQuoteRow[]
@@ -217,7 +218,12 @@ export function WatchTable({
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.ticker} className="data drill" onClick={() => onOpen(r)}>
+              <tr
+                key={r.ticker}
+                className="data drill"
+                aria-label={`Open ${r.ticker}`}
+                {...keyActivate(() => onOpen(r))}
+              >
                 <td className="left">
                   <IdentityLine r={r} storyIndex={storyIndex} onOpenStory={onOpenStory} />
                 </td>

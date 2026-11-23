@@ -68,17 +68,17 @@ export function TrajectoryChart({
     // Single visible dot at the crossing point
     const pointRadii = nwValues.map((_, i) => (i === crossIdx && crossIdx > 0 ? 5 : 0))
     const pointColors = nwValues.map((_, i) =>
-      i === crossIdx && crossIdx > 0 ? 'rgb(224,160,50)' : '#34b08a',
+      i === crossIdx && crossIdx > 0 ? cssToken('--warn') : cssToken('--good'),
     )
     const pointBorderColors = nwValues.map((_, i) =>
-      i === crossIdx && crossIdx > 0 ? cssToken('--surface') : '#34b08a',
+      i === crossIdx && crossIdx > 0 ? cssToken('--surface') : cssToken('--good'),
     )
 
     const datasets: Chart['data']['datasets'] = [
       {
         label: 'Net worth',
         data: nwValues,
-        borderColor: '#34b08a',
+        borderColor: cssToken('--good'),
         backgroundColor: 'rgba(52,176,138,0.08)',
         borderWidth: 2,
         pointRadius: pointRadii,

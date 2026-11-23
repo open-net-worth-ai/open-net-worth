@@ -71,7 +71,7 @@ export function HeaderPhoto({ a, cats, cover, onOpen, onAdd }: HeaderPhotoProps)
       aria-label={`Open the photo of ${a.name}`}
       onClick={onOpen}
     >
-      <img src={api.photoUrl(a.photo_ref)} alt="" />
+      <img loading="lazy" src={api.photoUrl(a.photo_ref)} alt="" />
     </button>
   )
 }

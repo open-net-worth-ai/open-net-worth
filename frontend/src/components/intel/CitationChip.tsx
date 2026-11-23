@@ -73,6 +73,7 @@ export function CitationChip({ source }: Props) {
     <>
       {faviconSrc && (
         <img
+          loading="lazy"
           className="citation-chip__favicon"
           src={faviconSrc}
           alt=""

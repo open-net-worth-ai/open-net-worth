@@ -8,6 +8,7 @@ import { storyKey } from './storyKey'
 import { fBase, fUnitPrice, fPct, priceDigits } from '../../../utils/format'
 import { ASSET_CLASS_COLOR, paletteColor } from '../../../utils/constants'
 import { EntityRow } from '../../../lucius/EntityRow'
+import { keyActivate } from '../../../utils/keyActivate'
 
 // Wrapper badges for certain asset sub-classes (mirrors prototype WRAP map)
 const WRAP: Record<string, string> = {
@@ -209,7 +210,8 @@ export function FeedCards({
                     <article
                       className="mk-hold clickable"
                       key={r.rowKey}
-                      onClick={() => onOpenAssetDetail?.(r)}
+                      role="button"
+                      {...keyActivate(() => onOpenAssetDetail?.(r))}
                     >
                       {inner}
                     </article>

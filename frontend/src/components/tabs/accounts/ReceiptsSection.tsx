@@ -14,6 +14,7 @@ function ReceiptThumb({ receipt, onClick }: { receipt: ReceiptEntry; onClick: ()
   const inner =
     receipt.mediaType?.startsWith('image/') && !broken ? (
       <img
+        loading="lazy"
         className="acct-detail-receipt-thumbimg"
         src={`/api/receipts/${receipt.receiptId}/file`}
         alt=""
