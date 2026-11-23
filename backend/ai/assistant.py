@@ -1246,6 +1246,13 @@ def _build_provider(*, transport: str, base_url: str, api_key: str) -> AIProvide
 
         return OpenAIProvider(base_url=base_url, api_key=api_key)
     if transport == "claude_cli":
+        from backend.services.feature_flags import enabled
+
+        # THE seam for `claude_cli_native_tools`: off builds the text-protocol provider untouched.
+        if enabled("claude_cli_native_tools"):
+            from backend.ai.models.claude_sdk_provider import ClaudeSdkProvider
+
+            return ClaudeSdkProvider(cli_path=base_url, api_key=api_key)
         from backend.ai.models.claude_cli_provider import ClaudeCliProvider
 
         return ClaudeCliProvider(cli_path=base_url, api_key=api_key)

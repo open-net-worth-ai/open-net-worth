@@ -28,6 +28,7 @@ SQLAlchemy>=2.0.30      # storage engine (Core only — no ORM); spec 2026-08-05
 alembic>=1.13.0          # versioned, ordered migrations; spec 2026-08-05 D3
 psycopg[binary]>=3.1.0   # Postgres dialect for hosted/CI; SQLite needs no driver
 trafilatura>=2.2.0       # local readability extraction for plain_get_fetch (ai/search/base.py)
+claude-agent-sdk>=0.2.187  # native tool calls on the Claude Code CLI (ai/models/claude_sdk_provider.py, flag claude_cli_native_tools); drives the owner's own `claude`, never its bundled copy
 # Voice calls (the voice_calls flag is the only switch — owner, 2026-11-03). Installed everywhere
 # its native parts (LiveKit's WebRTC, onnxruntime for the voice-activity model) ship a build:
 # Apple Silicon on macOS 14+, Linux x86_64/aarch64, Windows x64. Elsewhere the app installs as

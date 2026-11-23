@@ -217,6 +217,15 @@ jobs:
       - name: pytest (bank_data_sync off)
         run: python3 -m pytest -q -m "not integration" -n auto --flag bank_data_sync=off $(cat tests/bank_data_sync_on_files.txt)
 
+      # docs/FEATURE_FLAGS.md rule 3: claude_cli_native_tools defaults OFF (ADR 2026-11-23), so the
+      # `test` job proves the off path; the Claude CLI, reply-cleanup and live-stream suites run
+      # again with it ON. Remove with the flag.
+      - name: pytest (claude_cli_native_tools on)
+        run: >
+          python3 -m pytest -q -m "not integration" -n auto --flag claude_cli_native_tools=on
+          tests/test_claude_*.py tests/test_cli_*.py tests/test_tool_syntax_leak.py
+          tests/test_turn_completion_gate.py tests/test_live_stream_*.py
+
   # --- test-windows: the backend imports and the Windows-ported areas pass on windows-latest.
   # The focused list is every area with platform-specific code (locks, process trees, anchored
   # directory access, the sandbox, autostart, self-upgrade, instance claim, desktop bootstrap). The full suite
