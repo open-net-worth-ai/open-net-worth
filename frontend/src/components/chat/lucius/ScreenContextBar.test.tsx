@@ -109,7 +109,7 @@ describe('ScreenContextBar', () => {
     expect(container.querySelector('.lx-switch.on')).not.toBeNull()
   })
 
-  it('says what turning it off does, and that Lucius can still look', () => {
+  it('confirms turning it off', () => {
     const { container } = render(<ScreenContextBar visibleIds={EMPTY_VISIBLE_IDS} />)
     expect(document.body.querySelector('.lx-scope-notice')).toBeNull()
 
@@ -118,11 +118,10 @@ describe('ScreenContextBar', () => {
     expect(mockScreen.setEnabled).toHaveBeenCalledWith(false)
     const notice = document.body.querySelector('.lx-scope-notice')
     expect(notice?.getAttribute('role')).toBe('status')
-    expect(notice?.textContent).toContain('Lucius will look only if you ask')
-    expect(notice?.textContent).toContain('only if you ask')
+    expect(notice?.textContent).toBe('Screen awareness off.')
   })
 
-  it('says what turning it on does, and lets the notice go', () => {
+  it('confirms turning it on, and lets the notice go', () => {
     vi.useFakeTimers()
     try {
       mockScreen.enabled = false
@@ -131,8 +130,8 @@ describe('ScreenContextBar', () => {
       fireEvent.click(container.querySelector('.lx-switch')!)
 
       expect(mockScreen.setEnabled).toHaveBeenCalledWith(true)
-      expect(document.body.querySelector('.lx-scope-notice')?.textContent).toContain(
-        'Always sent with your message',
+      expect(document.body.querySelector('.lx-scope-notice')?.textContent).toBe(
+        'Screen awareness on.',
       )
       act(() => {
         vi.advanceTimersByTime(5000)
