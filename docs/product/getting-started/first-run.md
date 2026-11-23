@@ -22,6 +22,9 @@ Have one thing ready before you start: a way for Lucius to think — a Claude or
 subscription, an API key, or a local model. [Connecting an AI provider](connecting-an-ai-provider.md)
 shows how to get each one.
 
+**On Private Cloud** there is only the currency screen. Open Net Worth AI is already connected
+and there is no password to set, so **Continue** takes you straight to Lucius.
+
 ## Before the steps: Welcome
 
 The first screen says what Open Net Worth is and what happens next. Click **Get started**.

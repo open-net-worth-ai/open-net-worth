@@ -402,3 +402,43 @@ describe('FirstRun — Back from the password step', () => {
     await waitFor(() => expect(onStepChange).toHaveBeenCalledWith('model', undefined))
   })
 })
+
+describe('Private Cloud, with Open Net Worth AI already connected', () => {
+  function mockManaged(managed: boolean) {
+    mockApi()
+    const base = authFetch.getMockImplementation()!
+    authFetch.mockImplementation((url: string, init?: RequestInit) =>
+      url === '/api/model-config/onw-ai' ? ok({ managed, credit: null }) : base(url, init),
+    )
+  }
+
+  it('goes from the currency straight to Lucius, with no model step', async () => {
+    mockManaged(true)
+    const onDone = vi.fn()
+    render(<FirstRun onDone={onDone} gatewayMode />)
+    await enterSetup()
+    fireEvent.click(await screen.findByRole('button', { name: /^continue$/i }))
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    expect(called('/api/setup-status/complete', 'POST')).toBe(true)
+    expect(screen.queryByText('Lucius, your wealth manager.')).toBeNull()
+  })
+
+  it('does not promise a model step on the greeting', async () => {
+    mockManaged(true)
+    render(<FirstRun onDone={() => {}} gatewayMode />)
+    await waitFor(() =>
+      expect(authFetch.mock.calls.some((c) => c[0] === '/api/model-config/onw-ai')).toBe(true),
+    )
+    await waitFor(() => expect(screen.queryByText('Bring your own model')).toBeNull())
+  })
+
+  it('still asks for a model when nothing is connected', async () => {
+    mockManaged(false)
+    const onDone = vi.fn()
+    render(<FirstRun onDone={onDone} gatewayMode />)
+    await enterSetup()
+    fireEvent.click(await screen.findByRole('button', { name: /^continue$/i }))
+    expect(await screen.findByText('Lucius, your wealth manager.')).toBeTruthy()
+    expect(onDone).not.toHaveBeenCalled()
+  })
+})

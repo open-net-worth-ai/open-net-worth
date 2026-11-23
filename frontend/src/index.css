@@ -3053,6 +3053,10 @@ body.hide-amounts .mask * {
     inset: 0;
     z-index: var(--z-modal);
     overflow-y: auto;
+    /* The page is drawn edge to edge (viewport-fit=cover): keep setup clear of the iPhone's
+       status bar, notch and home bar, as every other screen does. */
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
     background: var(--bg, #0d1017);
     font-variant-numeric: tabular-nums;
     /* The width of the trailing action column. Every row ends with something in it — a
