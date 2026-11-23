@@ -38,7 +38,7 @@ from backend.core.chat_context_markers import (  # noqa: F401 — re-exported: t
 # every shape that appears in the transcript the model is imitating.
 _RESIDUE_TAG_RE = re.compile(
     r"</?(?:tool_call|tool_result|tool_use|function|function_calls|parameter|arg_key|arg_value"
-    r"|invoke|call)(?:_[a-z]+)?(?:[ =][^<>]*)?>",
+    r"|invoke|call|parse|reasoning_effort)(?:_[a-z]+)?(?:[ =][^<>]*)?>",
     re.IGNORECASE,
 )
 
@@ -179,6 +179,22 @@ _FORMAT_NARRATION_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
+# What a call cut off mid-write leaves on a line of its own (issue #214, Haiku over the Claude CLI):
+# the tail of a tag (`_directory">`, `name="get_connector_status">`), a name the model made up to
+# fill a slot (`_placeholder_do_not_use`), an error line it imitated from a tool
+# (`ERROR: Invalid JSON in …`), the bare turn label of the transcript it was shown (`Assistant`),
+# and a lone `<` or invisible characters. Only ever a WHOLE line, so a sentence that mentions the
+# word "Assistant" or quotes a tag is untouched.
+_INVISIBLE = "\u200b\u200c\u200d\u2060\ufeff\ufffd"
+_RESIDUE_LINE_RE = re.compile(
+    r"^[ \t]*(?:name=)?\"?[\w.-]*\"[ \t]*/?>[ \t]*$"
+    r"|^[ \t]*_[a-z][a-z0-9_]*[ \t]*$"
+    r"|^[ \t]*ERROR: Invalid JSON in\b[^\n]*$"
+    r"|^[ \t]*Assistant[ \t]*$"
+    rf"|^[ \t]*[<{_INVISIBLE}][ \t<{_INVISIBLE}]*$",
+    re.MULTILINE,
+)
+
 # A model that forgets even a fence tag writes the call's raw JSON body straight into its
 # reply — no ``<...>`` markup at all for ``_RESIDUE_TAG_RE`` to catch. Live 2026-08-18 (an
 # Automation run, claude_cli): the reply was
@@ -263,7 +279,7 @@ def strip_tool_syntax(text: str) -> str:
     """
     if not text:
         return text
-    text = _drop_unclosed_edge_fence(text)
+    text = _drop_unclosed_edge_fence(text).lstrip("\ufffd")
     spans = [(m.start(), m.end()) for m in _RESIDUE_TAG_RE.finditer(text)]
     spans.extend(_embedded_call_spans(text))
     if spans:
@@ -277,9 +293,14 @@ def strip_tool_syntax(text: str) -> str:
             head = _FENCE_BEFORE_RE.sub("", head)
         tail = _FENCE_AFTER_RE.sub("", text[end:])
         text = head + " " + tail
-    elif not _ROLE_MARKER_RE.search(text) and not _FORMAT_NARRATION_RE.search(text):
+    elif not (
+        _ROLE_MARKER_RE.search(text)
+        or _FORMAT_NARRATION_RE.search(text)
+        or _RESIDUE_LINE_RE.search(text)
+    ):
         return text
     text = _ROLE_MARKER_RE.sub("", text)
+    text = _RESIDUE_LINE_RE.sub("", text)
     text = _FORMAT_NARRATION_RE.sub("", text)
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
@@ -297,6 +318,14 @@ def drop_call_preamble(text: str, *, has_calls: bool) -> str:
         return ""
     return text
 
+
+# The echoed effort setting and a stray parse wrapper, whole or as a lone tag, with the figure
+# between them: `strip_tool_syntax` cuts them as residue tags, and this is the same cut for the
+# one line the live filter holds.
+_EFFORT_MARKER_RE = re.compile(
+    r"</?(?:reasoning_effort|parse)>|(?<=<reasoning_effort>)[^<>\n]{0,20}(?=</reasoning_effort>)",
+    re.IGNORECASE,
+)
 
 # A line that is nothing but a markdown fence: bare, or carrying a language tag.
 _FENCE_LINE_RE = re.compile(r"^[ \t]*```([\w+-]*)[ \t]*$")
@@ -406,7 +435,10 @@ class LiveLineFilter:
         """The line without self-talk; None when nothing but self-talk was on it."""
         if not line.strip():
             return line
-        cleaned = _FORMAT_NARRATION_RE.sub("", line)
+        cleaned = _EFFORT_MARKER_RE.sub("", line.lstrip("\ufffd"))
+        if not cleaned.strip() or _RESIDUE_LINE_RE.fullmatch(cleaned):
+            return None
+        cleaned = _FORMAT_NARRATION_RE.sub("", cleaned)
         return cleaned if cleaned.strip() else None
 
 
