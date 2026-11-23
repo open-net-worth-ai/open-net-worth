@@ -36,6 +36,16 @@ default is already the newest).
 - **Reasoning text.** Codex reasoning parts must not fuse (`****`) and, when more than one part
   streams, are newline-separated. A turn that streams a single part warns "not exercised".
 
+### Native tool calls (flag `claude_cli_native_tools`)
+
+`tests/cli_live/test_claude_native_live.py` runs through `ClaudeSdkProvider` (Agent SDK, the owner's
+own `claude`): the synthetic `get_secret_number` round trip, the `system/init` check that the CLI
+lists ONLY `mcp__lucius__*` tools and the one `lucius` server, and a parked call that waits
+`ONW_CLI_LIVE_PARK_WAIT` seconds (default 20) for its result and must continue the SAME query.
+Measured with `claude` 2.1.329 and the SDK's `PostToolUse` hook: a result 150 s and 703 s after the
+call both continued the query (explicit hook timeout above the wait; the default hook timeout also
+held for 200 s). The 703 s run drove the SDK directly, the 150 s run the provider.
+
 ### Snapshots
 
 `tests/cli_live/snapshots/codex-features.json` (the whole `codex features list`, under our
