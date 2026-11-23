@@ -295,6 +295,7 @@ One line each — full reasoning and the scar behind each is in
   The Codex turn stays OPEN across tool rounds — the call parks and the next round answers it
   in-thread; never re-paste the transcript into a fresh thread per round (that looped a report
   67× — ADR `2026-10-05-codex-turns-stay-open-across-tool-rounds`).
+- Flag `claude_cli_native_tools` (default off): the Claude CLI gets Lucius's tools as real MCP tool calls over its own control channel (`ai/models/claude_native_*`, no SDK, no dependency) instead of `<tool_call>` text. The host still runs every call: `tools/call` is never executed, only PARKED and answered with what `assistant.run` returned; a tool loaded later is called through `use_tool`, which the host unwraps to the real name, so a live session never restarts (ADR `2026-11-24-the-claude-cli-gets-tools-as-native-calls-over-its-own-control-channel`).
 - NEVER add a caller-chosen `fields` param to a money-bearing read (defeats the rate lock).
   `run_sql_query` is the one deliberately-scoped exception.
 - First run configures the machine; Lucius onboards the book (two separate predicates).

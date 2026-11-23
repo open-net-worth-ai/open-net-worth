@@ -227,22 +227,23 @@ def render_tool_manifest(tools: list[dict]) -> str:
     return "\n".join([_MANIFEST_HEADER, *_tool_sections(tools)])
 
 
-def render_tool_addendum(tools: list[dict]) -> str:
+def render_tool_addendum(tools: list[dict], via_tool: str = "") -> str:
     """The schemas of tools loaded after a live CLI process started, for its next message.
 
     Its system prompt (and so its prompt cache) stays as spawned; these join the
-    ``## Available tools`` it already holds. "" when there are none.
+    ``## Available tools`` it already holds. "" when there are none. ``via_tool`` is the one
+    native tool a process that holds its tools as real functions calls them through, since its
+    function list cannot grow.
     """
     if not tools:
         return ""
-    return "\n".join(
-        [
-            "<tools_added>",
-            "These tools are now in your Available tools too — call them exactly like the others:",
-            *_tool_sections(tools),
-            "</tools_added>",
-        ]
+    intro = (
+        "These tools are now available too. They are not in your function list: call each one "
+        f"through the `{via_tool}` tool, with its exact `name` and its arguments as `args`:"
+        if via_tool
+        else "These tools are now in your Available tools too — call them exactly like the others:"
     )
+    return "\n".join(["<tools_added>", intro, *_tool_sections(tools), "</tools_added>"])
 
 
 def _tool_sections(tools: list[dict]) -> list[str]:

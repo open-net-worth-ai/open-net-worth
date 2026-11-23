@@ -19,6 +19,9 @@ from backend.ai.models import claude_live_session as cls
 from backend.ai.models.claude_cli_provider import ClaudeCliProvider
 from tests.fake_exe import python_cli
 
+# The text protocol's own suite: it pins `claude_cli_native_tools` off, whatever the default.
+pytestmark = pytest.mark.flags(claude_cli_native_tools=False)
+
 USER = {"role": "user", "content": "what did I spend?"}
 REPLY = {"role": "assistant", "content": "hi"}
 FOLLOW = {"role": "user", "content": "and last month?"}
