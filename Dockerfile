@@ -132,6 +132,9 @@ USER onw
 # you need a different one.
 ENV HOST=0.0.0.0
 ENV PORT=8080
+# Claude Code keeps its settings in ~/.claude.json, OUTSIDE ~/.claude, so a new container lost them
+# on every update ("Claude configuration file not found"). Keep them inside the saved folder.
+ENV CLAUDE_CONFIG_DIR=/home/onw/.claude
 
 EXPOSE 8080
 

@@ -23,6 +23,8 @@ _ALLOWED_EXACT = frozenset(
         # the network: proxies and certificate bundles
         "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "REQUESTS_CA_BUNDLE",
         "CURL_CA_BUNDLE", "NODE_EXTRA_CA_CERTS",
+        # where the AI CLIs keep their own settings and sign-in (paths, not secrets)
+        "CLAUDE_CONFIG_DIR", "CODEX_HOME",
         # Windows cannot start or locate anything without these
         "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "USERNAME", "USERPROFILE",
         "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES",

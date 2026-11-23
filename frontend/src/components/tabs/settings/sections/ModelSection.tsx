@@ -23,7 +23,7 @@ import { openReportProblem } from '../../../../state/reportProblem'
 import { useCliDetectionPoll } from '../../../../hooks/useCliDetectionPoll'
 import { CliSubscriptionHelp } from '../../../shared/CliSubscriptionHelp'
 import type { CliHostPlatform, CliSignInState } from '../../../shared/CliSubscriptionHelp'
-import { NO_LOCAL_MODELS_NOTE, isLocalOnlyProvider } from '../../../shared/privateCloudCopy'
+import { isLocalOnlyProvider } from '../../../shared/privateCloudCopy'
 import { ModelPicker } from '../../../ui'
 import { ChevronRight, Eye, EyeOff, TriangleAlert, Plus } from '../../../../ui/icons'
 import {
@@ -339,11 +339,16 @@ function ProviderRow({
           {entry.key === ONW_AI_KEY && (cfg.managed || cfg.has_api_key) && enabled ? (
             <OnwAiCredit />
           ) : null}
-          {subscription && (
-            <div className="rd-help">
-              Use your {entry.key === 'claude_cli' ? 'Claude' : 'ChatGPT'} subscription; no API key
-              needed.
-            </div>
+          {subscription?.terminal && (entry.key === 'claude_cli' || entry.key === 'codex_cli') && (
+            <CliSubscriptionHelp
+              provider={entry.key}
+              platform={subscription.platform}
+              detected={detected}
+              signIn={signIn}
+              inContainer={subscription.inContainer}
+              onCheck={subscription.onCheck}
+              terminal={subscription.terminal}
+            />
           )}
         </div>
         {badge()}
@@ -369,17 +374,19 @@ function ProviderRow({
           </>
         )}
       </div>
-      {subscription && (entry.key === 'claude_cli' || entry.key === 'codex_cli') && (
-        <CliSubscriptionHelp
-          provider={entry.key}
-          platform={subscription.platform}
-          detected={detected}
-          signIn={signIn}
-          inContainer={subscription.inContainer}
-          onCheck={subscription.onCheck}
-          terminal={subscription.terminal}
-        />
-      )}
+      {subscription &&
+        !subscription.terminal &&
+        (entry.key === 'claude_cli' || entry.key === 'codex_cli') && (
+          <CliSubscriptionHelp
+            provider={entry.key}
+            platform={subscription.platform}
+            detected={detected}
+            signIn={signIn}
+            inContainer={subscription.inContainer}
+            onCheck={subscription.onCheck}
+            terminal={subscription.terminal}
+          />
+        )}
     </div>
   )
 }
@@ -1334,11 +1341,6 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
                 />
               ))}
             </div>
-          </div>
-        )}
-        {gatewayMode && (
-          <div className="rd-help" role="note">
-            {NO_LOCAL_MODELS_NOTE}
           </div>
         )}
         {cliDetectionError && (

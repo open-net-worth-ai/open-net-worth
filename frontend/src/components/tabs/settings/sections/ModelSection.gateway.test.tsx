@@ -128,10 +128,10 @@ it('on a Private Cloud server, points subscription sign-in at the Terminal', asy
   expect(openSection).toHaveBeenCalledWith('terminal')
 })
 
-it('on a Private Cloud server, hides local models and says why', async () => {
+it('on a Private Cloud server, hides local models, with no extra note', async () => {
   render(<ModelSection toast={vi.fn()} gatewayMode openSection={vi.fn()} />)
   await screen.findByRole('group', { name: 'Connect a subscription' })
-  expect(screen.getByText(/can.t reach a model running on your own computer/i)).toBeTruthy()
+  expect(screen.queryByText(/can.t reach a model running on your own computer/i)).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: /add provider/i }))
   expect(screen.queryByText('Ollama (local)')).toBeNull()
 })

@@ -129,7 +129,6 @@ it.each([
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
     const card = subscription('Claude Code CLI')
-    expect(within(card).getByText(/subscription.*no API key/i)).toBeTruthy()
     fireEvent.click(within(card).getByRole('button', { name: /install & sign in/i }))
     expect(within(card).getByText(command)).toBeTruthy()
     expectNoWrites()

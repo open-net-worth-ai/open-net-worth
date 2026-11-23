@@ -240,8 +240,10 @@ export function CliSubscriptionHelp({
     check.current = onCheck
   }, [onCheck])
 
+  // Private Cloud asks nothing to be opened: a CLI not signed in shows one line, re-checked the same way.
+  const watching = open || Boolean(terminal && detected && signIn === 'not_signed_in')
   useEffect(() => {
-    if (!open) return
+    if (!watching) return
     let busy = false
     const recheck = () => {
       if (busy) return
@@ -259,7 +261,7 @@ export function CliSubscriptionHelp({
       window.removeEventListener('focus', recheck)
       clearInterval(timer)
     }
-  }, [open])
+  }, [watching])
 
   // Help is for a tool that isn't there yet, or can't sign in yet. A found tool with no word
   // against its login needs no row; one found while the help is open (installed just now) keeps
@@ -267,6 +269,20 @@ export function CliSubscriptionHelp({
   const needsSignIn = detected && signIn === 'not_signed_in'
   const justSignedIn = detected && signIn === 'signed_in'
   if (detected && !open && !needsSignIn) return null
+  if (terminal && detected) {
+    if (!needsSignIn) return null
+    const command = provider === 'claude_cli' ? 'claude' : 'codex login --device-auth'
+    return (
+      <div className="cli-terminal-hint rd-help">
+        <span>
+          Run <code>{command}</code> in the Terminal to sign in.
+        </span>
+        <button type="button" className="rd-btn secondary xs" onClick={terminal.onOpen}>
+          Open Terminal
+        </button>
+      </div>
+    )
+  }
 
   return (
     <CollapsibleSection

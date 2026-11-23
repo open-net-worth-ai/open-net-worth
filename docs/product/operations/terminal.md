@@ -50,7 +50,9 @@ files and saved credentials. Read [Safeguards](#safeguards) first.
 
 ## Sign in to Claude Code or Codex from it
 
-1. Open **Settings → Terminal → Open terminal**.
+1. Open **Settings → Terminal**. The terminal starts on its own; both sign-in commands sit above
+   it with a **Copy** button. Under **Settings → AI**, a subscription that isn't signed in yet shows
+   the command with **Open Terminal**.
 2. Run the provider's sign-in:
    - **Claude Code:** `claude`, then follow its sign-in prompts.
    - **Codex:** `codex login --device-auth` — the device-code sign-in. Codex's normal browser
@@ -86,9 +88,8 @@ server. Under Docker, that folder only survives an update with the volumes in th
   its memory and drops its sign-in secrets from its environment once loaded.
 - **Confirm it's you (Private Cloud):** the terminal asks you to confirm it's you at most every 2
   hours. Signing in with an emailed code counts, so right after signing in it just opens. Otherwise
-  it shows "For your security, the terminal asks you to confirm it's you every 2 hours" with
-  **Email me a code**: type the code from the email in the terminal screen and it opens, without
-  leaving the page. Accounts with two-step sign-in finish on the Private Cloud sign-in page instead.
+  it shows **Confirm it's you** with **Email me a code**: type the 6-digit code from the email in
+  the boxes and the terminal opens in place. A new code can be sent every 30 seconds. Accounts with two-step sign-in finish on the Private Cloud sign-in page instead.
 - **Only from the app's own page:** another website can't open or drive your shell.
 - **Never through the API token:** phone Shortcuts, the CLI and other AI apps never get a shell.
 

@@ -19,8 +19,6 @@ SECRETS = {
     "ANTHROPIC_API_KEY": "sk-ant",
     "OPENAI_API_KEY": "sk-openai",
     "OPENAI_BASE_URL": "http://elsewhere",
-    "CODEX_HOME": "/elsewhere",
-    "CLAUDE_CONFIG_DIR": "/elsewhere",
     "DATA_DIR": "/data",
     "AWS_SECRET_ACCESS_KEY": "aws",
     "GITHUB_TOKEN": "gh",
@@ -87,3 +85,15 @@ def test_a_provider_adds_only_its_own_stored_key(monkeypatch):
     assert "OPENAI_API_KEY" not in claude_cli_provider._child_env("stored")
     assert codex_cli_provider._child_env("stored")["OPENAI_API_KEY"] == "stored"
     assert "ANTHROPIC_API_KEY" not in codex_cli_provider._child_env("stored")
+
+
+def test_the_ai_clis_find_their_own_settings_folder():
+    """CLAUDE_CONFIG_DIR keeps Claude Code's settings in the saved ~/.claude on Private Cloud."""
+    from backend.core.child_env import scrubbed_environ
+
+    env = scrubbed_environ(
+        {"CLAUDE_CONFIG_DIR": "/home/onw/.claude", "CODEX_HOME": "/home/onw/.codex"}
+    )
+    assert (
+        env["CLAUDE_CONFIG_DIR"] == "/home/onw/.claude" and env["CODEX_HOME"] == "/home/onw/.codex"
+    )
