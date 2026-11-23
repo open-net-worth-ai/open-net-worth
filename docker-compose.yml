@@ -17,7 +17,7 @@ services:
     # Pinned to the release this file shipped with (stamped by scripts/stamp_version.py), so
     # the compose file and the app it starts always agree. To run another release:
     #   ONW_VERSION=0.2.1 docker compose up -d
-    image: ghcr.io/open-net-worth-ai/open-net-worth:${ONW_VERSION:-0.1.63}
+    image: ghcr.io/open-net-worth-ai/open-net-worth:${ONW_VERSION:-0.1.64}
     container_name: open-net-worth
     ports:
       # Bound to the HOST'S LOOPBACK ONLY — reachable from this machine, not
