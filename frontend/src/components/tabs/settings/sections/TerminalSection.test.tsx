@@ -56,36 +56,77 @@ describe('TerminalSection', () => {
     expect(screen.queryByRole('button', { name: 'Open terminal' })).toBeNull()
   })
 
-  it('asks for a recent sign-in when the session is too old', async () => {
+  it('asks for a code by email in the terminal screen and opens once it is confirmed', async () => {
+    let fresh = false
     mockAuthFetch.mockImplementation(async () =>
-      json({ code: 'fresh_session_required', reauth: 'https://cloud.example/r' }, 401),
+      fresh
+        ? json({ available: true, reason: null, in_use: false })
+        : json({ code: 'fresh_session_required', reauth: 'https://cloud.example/r' }, 401),
     )
-    render(<TerminalSection toast={vi.fn()} gatewayMode />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Sign in again' }))
-    await waitFor(() =>
-      expect(startGatewayReauth).toHaveBeenCalledWith(
-        'https://cloud.example/r',
-        undefined,
-        undefined,
-        true,
-      ),
-    )
+    const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === '/_gateway/confirm/send') return json({ sent_to: 'me@example.com' })
+      expect(JSON.parse(String(init?.body))).toEqual({ code: '123456' })
+      fresh = true
+      return json({ ok: true })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      render(<TerminalSection toast={vi.fn()} gatewayMode />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Email me a code' }))
+      expect(await screen.findByText('Enter the code we sent to me@example.com.')).toBeTruthy()
+      fireEvent.change(screen.getByLabelText('Code from the email'), {
+        target: { value: '123456' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+      expect(await screen.findByRole('button', { name: 'Open terminal' })).toBeTruthy()
+      expect(startGatewayReauth).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
-  it('inside the desktop app the fresh sign-in goes through the app, not a navigation', async () => {
+  it('shows a wrong code and lets them try again', async () => {
+    mockAuthFetch.mockImplementation(async () => json({ code: 'fresh_session_required' }, 401))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (path: string) =>
+        path === '/_gateway/confirm/send'
+          ? json({ sent_to: 'me@example.com' })
+          : json({ error: "That code didn't work. Check it, or send a new one." }, 400),
+      ),
+    )
+    try {
+      render(<TerminalSection toast={vi.fn()} gatewayMode />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Email me a code' }))
+      fireEvent.change(await screen.findByLabelText('Code from the email'), {
+        target: { value: '000000' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+      expect(await screen.findByText(/didn't work/)).toBeTruthy()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('two-step accounts finish through the desktop app, not a navigation', async () => {
     mockAuthFetch.mockImplementation(async () =>
       json({ code: 'fresh_session_required', reauth: 'https://cloud.example/r' }, 401),
     )
     window.history.replaceState(null, '', '/settings/terminal')
     const requestFreshSignIn = vi.fn().mockResolvedValue(undefined)
     window.onwDesktopClient = { version: 1, requestFreshSignIn } as never
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ fallback: '/_gateway/refresh?return=x' }, 409)),
+    )
     try {
       render(<TerminalSection toast={vi.fn()} gatewayMode />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Sign in again' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Email me a code' }))
       await waitFor(() => expect(requestFreshSignIn).toHaveBeenCalledWith('/settings/terminal'))
       expect(startGatewayReauth).not.toHaveBeenCalled()
     } finally {
       delete window.onwDesktopClient
+      vi.unstubAllGlobals()
     }
   })
 
@@ -95,12 +136,17 @@ describe('TerminalSection', () => {
       version: 1,
       requestFreshSignIn: vi.fn().mockRejectedValue(new Error('no')),
     } as never
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ fallback: '/_gateway/refresh?return=x' }, 409)),
+    )
     try {
       render(<TerminalSection toast={vi.fn()} gatewayMode />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Sign in again' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Email me a code' }))
       expect(await screen.findByText(/could not start the sign-in/i)).toBeTruthy()
     } finally {
       delete window.onwDesktopClient
+      vi.unstubAllGlobals()
     }
   })
 })

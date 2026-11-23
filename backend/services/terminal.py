@@ -8,7 +8,7 @@ checked on the WebSocket itself (``api/terminal.py`` only moves bytes):
   POSIX only.
 * **Who.** Gateway mode: a request the gateway signed in. Self-host: a real login-session cookie —
   never an API token, loopback trust or a disabled login.
-* **How recently.** Gateway mode: the gateway session was minted in the last 15 minutes.
+* **How recently.** Gateway mode: the person confirmed it's them (a sign-in, or a code typed in the Terminal) in the last 2 hours.
 * **From where.** The page's own origin (a cross-site page cannot drive someone's shell).
 * **How many.** One open terminal at a time.
 
@@ -38,7 +38,7 @@ from backend.db.run_history_store import RunHistoryStore
 
 logger = logging.getLogger(__name__)
 
-FRESH_SESSION_SECONDS = 15 * 60
+FRESH_SESSION_SECONDS = 2 * 60 * 60  # Private Cloud: confirm it's you at most every 2 hours
 IDLE_TIMEOUT_SECONDS = 15 * 60
 MAX_INPUT_BYTES = 64 * 1024
 MAX_COLS, MAX_ROWS = 500, 300
@@ -89,7 +89,7 @@ def is_signed_in(conn: HTTPConnection) -> bool:
 
 
 def is_fresh(conn: HTTPConnection, now: float | None = None) -> bool:
-    """Gateway mode asks for a sign-in within the last 15 minutes; self-host has no such clock."""
+    """Gateway mode asks for a sign-in or a confirmed code within the last 2 hours; self-host has no such clock."""
     if not gateway_active():
         return True
     started = getattr(conn.state, "gateway_session_started", None)

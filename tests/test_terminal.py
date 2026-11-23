@@ -168,8 +168,8 @@ def test_forwarded_host_counts_for_a_gateway_signed_request(env):
         _read_until(ws, "fwd")
 
 
-@pytest.mark.parametrize("age", [16 * 60, 3600])
-def test_a_session_older_than_fifteen_minutes_is_asked_to_sign_in_again(env, age):
+@pytest.mark.parametrize("age", [2 * 3600 + 60, 6 * 3600])
+def test_a_session_older_than_two_hours_is_asked_to_confirm_again(env, age):
     env(ONW_GATEWAY_TOKEN=TOKEN)
     headers = _gateway_headers(**{"X-Onw-Session-Started": str(int(time.time()) - age)})
     with _client().websocket_connect("/api/terminal", headers=headers) as ws:
@@ -187,7 +187,7 @@ def test_a_session_with_no_start_time_is_treated_as_stale(env):
 
 def test_status_endpoint_signals_a_stale_session_with_a_code(env):
     env(ONW_GATEWAY_TOKEN=TOKEN)
-    stale = _gateway_headers(**{"X-Onw-Session-Started": str(int(time.time()) - 3600)})
+    stale = _gateway_headers(**{"X-Onw-Session-Started": str(int(time.time()) - 3 * 3600)})
     r = _client().get("/api/terminal/status", headers=stale)
     assert r.status_code == 401 and r.json()["code"] == "fresh_session_required"
     ok = _client().get("/api/terminal/status", headers=_gateway_headers())

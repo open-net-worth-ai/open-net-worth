@@ -84,10 +84,11 @@ server. Under Docker, that folder only survives an update with the volumes in th
   connector credentials and stored API keys. That's why only the signed-in owner gets it. What it
   can't read is the running app itself — on Linux the app blocks other processes from inspecting
   its memory and drops its sign-in secrets from its environment once loaded.
-- **Recent sign-in (Private Cloud):** the terminal asks for a sign-in from the last 15 minutes.
-  An older session sees "For your security the terminal asks for a recent sign-in." with **Sign
-  in again**, and returns to the terminal afterwards. In the desktop app the sign-in opens in your
-  browser (the app waits on "Continue in your browser"), then picks up the new session.
+- **Confirm it's you (Private Cloud):** the terminal asks you to confirm it's you at most every 2
+  hours. Signing in with an emailed code counts, so right after signing in it just opens. Otherwise
+  it shows "For your security, the terminal asks you to confirm it's you every 2 hours" with
+  **Email me a code**: type the code from the email in the terminal screen and it opens, without
+  leaving the page. Accounts with two-step sign-in finish on the Private Cloud sign-in page instead.
 - **Only from the app's own page:** another website can't open or drive your shell.
 - **Never through the API token:** phone Shortcuts, the CLI and other AI apps never get a shell.
 

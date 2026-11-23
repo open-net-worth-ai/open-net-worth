@@ -496,7 +496,7 @@ def test_a_gateway_session_must_be_fresh(client, monkeypatch):
         == 200
     )
     stale = _export(
-        _stamped({"gateway_authenticated": True, "gateway_session_started": now - 16 * 60})
+        _stamped({"gateway_authenticated": True, "gateway_session_started": now - (2 * 3600 + 60)})
     )
     assert stale.status_code == 401 and stale.json()["detail"]["code"] == "fresh_session_required"
     assert _export(_stamped({"gateway_authenticated": True})).status_code == 401
