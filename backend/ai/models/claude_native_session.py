@@ -66,6 +66,13 @@ class NativeSession(claude_live_session.LiveSession):
 
     async def _control(self, request_id: str, request: dict) -> None:
         message = request.get("message") or {}
+        log.debug(
+            "claude_native: control %s %s rpc=%s id=%s",
+            request.get("subtype"),
+            message.get("method"),
+            message.get("id"),
+            ((message.get("params") or {}).get("_meta") or {}).get(_TOOL_USE_ID),
+        )
         if request.get("subtype") != "mcp_message":
             await self._send(wire.control_error(request_id, "unsupported control request"))
         elif request.get("server_name") != wire.SERVER:
@@ -93,6 +100,8 @@ class NativeSession(claude_live_session.LiveSession):
             )
         else:
             self.waiting[call_id] = (request_id, message.get("id"))
+            if self.open and call_id not in self.open:
+                await self._refuse(call_id)
 
     def _unclaimed(self, params: dict) -> Optional[str]:
         """An older CLI sends no tool-use id: the oldest open call of that name is the one."""
@@ -102,13 +111,25 @@ class NativeSession(claude_live_session.LiveSession):
         return None
 
     async def _send(self, payload: dict) -> None:
+        log.debug("claude_native: answer %.160s", json.dumps(payload, ensure_ascii=False))
         await self._write((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
 
     # ── parking ───────────────────────────────────────────────────────────────
 
-    def park(self, calls: list[dict]) -> None:
-        """The round ended on these calls (``id``, CLI-side ``cli_name``): they now wait."""
+    async def park(self, calls: list[dict]) -> None:
+        """The round ended on these calls (``id``, CLI-side ``cli_name``): they now wait.
+
+        A ``tools/call`` already on the wire for any OTHER id is one the host never saw, so
+        nothing will ever answer it: it is refused now, and the model carries on."""
         self.open = {c["id"]: c["cli_name"] for c in calls}
+        for call_id in [i for i in self.waiting if i not in self.open]:
+            await self._refuse(call_id)
+
+    async def _refuse(self, call_id: str) -> None:
+        log.warning("claude_native: refusing tools/call %s — the host never saw that call", call_id)
+        request_id, rpc_id = self.waiting.pop(call_id)
+        text = "This call was not recognised and was not run."
+        await self._send(wire.control_response(request_id, wire.call_result(rpc_id, text, True)))
 
     async def answer(self, results: dict[str, tuple[str, bool]]) -> None:
         """Hand the host's results to the parked calls; the query goes on by itself."""

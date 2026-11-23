@@ -82,6 +82,20 @@ def _fake_cli(tmp_path):
                     ):
                         out(ev)
                     return
+                for i, (name, arguments) in enumerate(c for c in calls if c[0].startswith("ghost_")):
+                    # A tool the CLI was never given: it refuses the call itself and goes on.
+                    out({"type": "stream_event", "event": {"type": "message_start",
+                         "message": {"model": "claude-haiku-5-5", "usage": usage(6)}}})
+                    out({"type": "stream_event", "event": {"type": "content_block_start",
+                         "content_block": {"type": "tool_use", "id": "g%d" % i,
+                                           "name": "mcp__lucius__" + name}}})
+                    out({"type": "assistant", "message": {"content": [{"type": "tool_use",
+                         "id": "g%d" % i, "name": "mcp__lucius__" + name, "input": arguments}]}})
+                    out({"type": "stream_event", "event": {"type": "message_delta",
+                         "delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 2}}})
+                    out({"type": "user", "message": {"content": [{"type": "tool_result",
+                         "tool_use_id": "g%d" % i, "is_error": True}]}})
+                calls = [c for c in calls if not c[0].startswith("ghost_")]
                 out({"type": "stream_event", "event": {"type": "message_start",
                      "message": {"model": "claude-haiku-5-5", "usage": usage(7)}}})
                 ids = []
@@ -505,3 +519,33 @@ async def test_stopping_a_round_kills_its_process_and_leaves_nothing_parked(tmp_
 
     assert cls.pool().all() == [], "a stopped round is not kept"
     assert session.proc is None or session.proc.returncode is not None
+
+
+async def test_calls_the_cli_refused_itself_do_not_end_the_round_early(tmp_path, provider):
+    """Live (Sonnet, 2026-11-24): the model first called a tool loaded mid-session by its own
+    name; the CLI refused that call itself, its message ended on `tool_use`, and the next message
+    carried two real calls. The round ended after the first, the second `tools/call` was never
+    answered, and the turn sat until the 300 s ceiling."""
+    messages = [
+        _calls(("ghost_get_x", {}), ("list_accounts", {}), ("get_spending_summary", {"month": 3}))
+    ]
+    first = await _round(provider, messages, [TOOL_A, TOOL_B])
+
+    assert [u["name"] for u in _called(first)] == ["list_accounts", "get_spending_summary"]
+    second = await _round(provider, messages + _after(first), [TOOL_A, TOOL_B])
+    text = "".join(e.get("text", "") for e in second if e["type"] == "text_delta")
+    assert text == "got: result of list_accounts | result of get_spending_summary"
+
+
+async def test_a_call_the_host_never_saw_is_refused_not_waited_on(tmp_path, provider):
+    messages = [_calls(("list_accounts", {}))]
+    first = await _round(provider, messages, [TOOL_A])
+    session = next(iter(cls.pool().all()))
+
+    await session._called(
+        "rq", {"id": 9, "params": {"name": "x", "_meta": {"claudecode/toolUseId": "toolu_stray"}}}
+    )
+
+    assert "toolu_stray" not in session.waiting, "answered at once, with an error"
+    sent = [r["msg"] for r in _rows(tmp_path, "received.jsonl")]
+    assert first[-1]["type"] == "done" and sent

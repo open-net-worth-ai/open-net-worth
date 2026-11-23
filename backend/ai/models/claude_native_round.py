@@ -205,6 +205,13 @@ async def _read(session: NativeSession, rnd: Round, model: str) -> AsyncGenerato
     try:
         async for ev in source:
             kind = ev.get("type")
+            log.debug(
+                "claude_native: event %s %s",
+                kind,
+                (ev.get("event") or {}).get("type")
+                if kind == "stream_event"
+                else ev.get("subtype") or "",
+            )
             if kind == "system" and ev.get("subtype") == "init":
                 api_key_source = ev.get("apiKeySource") or ""
             elif kind == "stream_event":
@@ -224,8 +231,17 @@ async def _read(session: NativeSession, rnd: Round, model: str) -> AsyncGenerato
                 )
                 yield {"type": "done", "stop_reason": ev.get("stop_reason") or "end_turn"}
                 return
-            if rnd.complete:
-                session.park(rnd.calls)
+            if kind == "tool_progress" and session.waiting:
+                # The CLI is blocked on a `tools/call` it sent us. With calls in hand the round
+                # is over whatever else the stream said; with none it waits on something the
+                # host never saw, and nobody would ever answer.
+                if not rnd.calls:
+                    raise ExternalServiceError(
+                        "Claude Code CLI is waiting on a tool call Lucius never received"
+                    )
+                rnd.ended_on_tools = True
+            if rnd.complete or (kind == "tool_progress" and rnd.calls and session.waiting):
+                await session.park(rnd.calls)
                 yield _usage(session, rnd, model, resolved, api_key_source, None)
                 yield {"type": "done", "stop_reason": "tool_use"}
                 return
@@ -243,6 +259,11 @@ def _stream_event(ev: dict, rnd: Round):
         message = ev.get("message") or {}
         rnd.requests.append(dict(message.get("usage") or {}))
         rnd.delta_seen = False
+        # One model message at a time: calls the CLI refused on its own (a tool it was not
+        # given) end a message with `stop_reason: tool_use` too, and the next message goes on.
+        rnd.ended_on_tools = False
+        rnd.started = 0
+        rnd.calls = []
         if message.get("model"):
             yield {"_model": message["model"]}
     elif kind == "content_block_start":
