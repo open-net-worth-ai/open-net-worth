@@ -26,13 +26,14 @@ import { useScreenSnapshot } from '../../../state/screenSnapshot'
 
 const PEEK_VIEWPORT_EDGE = 4
 const PEEK_ANCHOR_GAP = 6
+const NOTICE_GAP = 14
 const PEEK_MAX_HEIGHT = 244
 const NOTICE_MS = 4500
-const NOTICE_ON = 'Screen awareness on. Always sent with your message — can use more tokens.'
-const NOTICE_OFF = 'Screen awareness off. Lucius can still look when you ask.'
+const NOTICE_ON = 'Always send screen context: on. Sent with every message — can use more tokens.'
+const NOTICE_OFF = 'Always send screen context: off. Lucius can still look when you ask.'
 const OFF_SUB = 'Lucius can still look when you ask'
 const ON_SUB = 'Always sent with your message'
-const OFF_TOOLTIP = 'Screen awareness off — Lucius can still look when you ask.'
+const OFF_TOOLTIP = 'Always send screen context is off — Lucius can still look when you ask.'
 
 export interface ScreenContextBarProps {
   visibleIds: Set<string>
@@ -91,19 +92,17 @@ export function ScreenContextBar({
       message: next ? NOTICE_ON : NOTICE_OFF,
       left: anchor.left,
       width: anchor.width,
-      bottom: window.innerHeight - anchor.top + PEEK_ANCHOR_GAP,
+      bottom: window.innerHeight - anchor.top + NOTICE_GAP,
     })
-    // The bar re-renders taller or shorter with the switch (its subtitle wraps), so it moves
-    // after this click: sit on its top edge once it has settled, not where it was.
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        const settled = anchorRef.current?.getBoundingClientRect()
-        if (!settled) return
-        setNotice((n) =>
-          n ? { ...n, bottom: window.innerHeight - settled.top + PEEK_ANCHOR_GAP } : n,
-        )
-      }),
-    )
+    // The bar re-renders taller or shorter with the switch (its subtitle wraps) and may still be
+    // animating, so it moves after this click: sit on its top edge once it has settled.
+    const settle = () => {
+      const settled = anchorRef.current?.getBoundingClientRect()
+      if (!settled) return
+      setNotice((n) => (n ? { ...n, bottom: window.innerHeight - settled.top + NOTICE_GAP } : n))
+    }
+    requestAnimationFrame(() => requestAnimationFrame(settle))
+    window.setTimeout(settle, 300)
     window.clearTimeout(noticeTimer.current)
     noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_MS)
   }
@@ -255,7 +254,7 @@ export function ScreenContextBar({
   }, [compact, showPeek])
 
   const tooltip = enabled
-    ? 'Screen awareness — ' +
+    ? 'Always send screen context — ' +
       snap.title +
       (inView ? ' • ' + inView[1] : '') +
       (handles.length ? ' • ' + handles.length + ' sources' : '')
@@ -301,7 +300,7 @@ export function ScreenContextBar({
                 on/off state deserves a control that LOOKS like one. */}
             <span className="lx-aw-toggle">
               <span className="lx-aw-dot">◉</span>
-              <span className="lx-aw-label">Screen awareness</span>
+              <span className="lx-aw-label">Always send screen context</span>
               <span className="lx-aw-sub">• {enabled ? ON_SUB + ' • ' + snap.title : OFF_SUB}</span>
             </span>
             {!collapsed && (
@@ -327,8 +326,8 @@ export function ScreenContextBar({
               aria-checked={enabled}
               aria-label={
                 enabled
-                  ? 'Screen awareness on — click to stop sending this screen with each message'
-                  : 'Screen awareness off — click to send this screen with each message'
+                  ? 'Always send screen context is on — click to stop sending this screen with each message'
+                  : 'Always send screen context is off — click to send this screen with each message'
               }
               title={
                 enabled ? 'Always sent with your message' : 'Lucius can still look when you ask'
@@ -344,7 +343,7 @@ export function ScreenContextBar({
         <div className="lx-scope-row">
           <span className="lx-scope-ic">◉</span>
           <span className="lx-scope-txt">
-            <b>Screen awareness</b>
+            <b>Always send screen context</b>
             <span className="lx-scope-sub">
               {enabled ? (
                 <>

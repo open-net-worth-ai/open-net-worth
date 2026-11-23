@@ -106,7 +106,11 @@ export function ChatSection({ toast }: SectionProps) {
       setCachedQueryData(PROFILE_KEY, body.profile ?? body)
       // This device follows at once, dropping any choice it made with the switch.
       window.dispatchEvent(new Event(SCREEN_AWARENESS_DEFAULT_CHANGED_EVENT))
-      toast(enabled ? 'Screen awareness on by default' : 'Screen awareness off by default')
+      toast(
+        enabled
+          ? 'Always send screen context: on by default'
+          : 'Always send screen context: off by default',
+      )
     } catch {
       toast('Could not reach the server. Try again.')
     }
@@ -190,7 +194,7 @@ export function ChatSection({ toast }: SectionProps) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600 }}>Screen awareness by default</div>
+          <div style={{ fontSize: 12.5, fontWeight: 600 }}>Always send screen context</div>
           <div className="rd-help" style={{ marginTop: 3, display: 'block', lineHeight: 1.5 }}>
             Off (the default): your screen isn't sent, but Lucius can still look when you ask. On:
             your screen is always sent with your message, which can use more tokens. The switch
@@ -201,7 +205,7 @@ export function ChatSection({ toast }: SectionProps) {
           on={suggestions.data?.screen_awareness_default === true}
           disabled={!suggestions.data}
           onChange={(v) => void putScreenAwarenessDefault(v)}
-          label="Screen awareness by default"
+          label="Always send screen context"
         />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>

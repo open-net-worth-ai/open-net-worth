@@ -33,7 +33,7 @@ describe('ScreenContextPanel', () => {
         onPin={() => {}}
       />,
     )
-    expect(getByText('Screen awareness')).toBeTruthy()
+    expect(getByText('Always send screen context')).toBeTruthy()
     expect(getByText('Passed inline now')).toBeTruthy()
     expect(getByText('NVIDIA Corporation')).toBeTruthy() // the Screen fact
     expect(getByText('170 USD')).toBeTruthy()
@@ -107,6 +107,6 @@ describe('ScreenContextPanel', () => {
         onPin={() => {}}
       />,
     )
-    expect(getByText('Screen awareness off')).toBeTruthy()
+    expect(getByText('Always send screen context: off')).toBeTruthy()
   })
 })

@@ -177,7 +177,7 @@ Want everything? Say so: *"give me a full breakdown of…"*, or change **Respons
 
 ## He can see what you're looking at
 
-With **Screen awareness** on (it's off by default; turn it on in Settings → Chat), what's on your screen goes along with your message —
+With **Always send screen context** on (it's off by default; turn it on in Settings → Chat), what's on your screen goes along with your message —
 *"why did this drop?"* while looking at a chart is enough. With it off, nothing goes along
 automatically, but he can still look if you ask about your screen. Password and key fields are never
 included. See [Mentioning things in chat](mentions.md#screen-awareness--lucius-sees-what-youre-looking-at).

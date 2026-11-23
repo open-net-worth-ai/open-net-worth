@@ -43,7 +43,7 @@ export function ScreenContextPanel({ snapshot, enabled, onToggle, pinnedIds, onP
         </span>
         <div className="screen-ctx__head-text">
           <div className="screen-ctx__title">
-            {enabled ? 'Screen awareness' : 'Screen awareness off'}
+            {enabled ? 'Always send screen context' : 'Always send screen context: off'}
           </div>
           {enabled && summary && <div className="screen-ctx__sub">{summary}</div>}
         </div>
@@ -56,7 +56,11 @@ export function ScreenContextPanel({ snapshot, enabled, onToggle, pinnedIds, onP
             {collapsed ? 'Peek' : 'Hide'}
           </button>
         )}
-        <Switch checked={enabled} onChange={onToggle} aria-label="Toggle screen awareness" />
+        <Switch
+          checked={enabled}
+          onChange={onToggle}
+          aria-label="Toggle always send screen context"
+        />
       </div>
 
       {enabled && snapshot && !collapsed && (

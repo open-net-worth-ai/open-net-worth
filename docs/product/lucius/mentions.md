@@ -51,13 +51,13 @@ Lucius about this**. On a computer you can also drag a row into the chat. In
 
 ## Screen awareness — Lucius sees what you're looking at
 
-With **Screen awareness** on, what's on your screen is sent along with each message, so *"why did
+With **Always send screen context** on, what's on your screen is sent along with each message, so *"why did
 this drop?"* while looking at a chart is enough.
 
-- **Turn it on or off** with the **Screen awareness** switch just above the message box. Your choice
+- **Turn it on or off** with the **Always send screen context** switch just above the message box. Your choice
   is remembered in this browser (or this copy of the desktop app), for every screen. With it off,
   the bar reads **Lucius can still look when you ask**; turning the switch on sends your screen with every message, which can use more tokens.
-- **Choose how new devices start** in **Settings → Chat → Screen awareness by default**. It's **off**
+- **Choose how new devices start** in **Settings → Chat → Always send screen context**. It's **off**
   unless you change it. Changing it also resets the switch on the device you're using; a device where
   you've already used the switch keeps your choice. On a phone, Lucius is a full tab that replaces
   the screen, so there's no switch and messages never carry one.

@@ -68,16 +68,16 @@ describe('ScreenContextBar', () => {
     expect(container.querySelector('.lx-scope')).not.toBeNull()
   })
 
-  it('shows "Screen awareness" by default', () => {
+  it('shows "Always send screen context" by default', () => {
     const { container } = render(<ScreenContextBar visibleIds={EMPTY_VISIBLE_IDS} />)
-    expect(container.textContent).toContain('Screen awareness')
+    expect(container.textContent).toContain('Always send screen context')
   })
 
-  it('shows "Screen awareness" regardless of recipient name', () => {
+  it('shows "Always send screen context" regardless of recipient name', () => {
     const { container } = render(
       <ScreenContextBar visibleIds={EMPTY_VISIBLE_IDS} recipientName="Budget Bot" />,
     )
-    expect(container.textContent).toContain('Screen awareness')
+    expect(container.textContent).toContain('Always send screen context')
   })
 
   it('shows Peek button when not collapsed', () => {
@@ -118,7 +118,9 @@ describe('ScreenContextBar', () => {
     expect(mockScreen.setEnabled).toHaveBeenCalledWith(false)
     const notice = document.body.querySelector('.lx-scope-notice')
     expect(notice?.getAttribute('role')).toBe('status')
-    expect(notice?.textContent).toBe('Screen awareness off. Lucius can still look when you ask.')
+    expect(notice?.textContent).toBe(
+      'Always send screen context: off. Lucius can still look when you ask.',
+    )
   })
 
   it('confirms turning it on, and lets the notice go', () => {
@@ -131,7 +133,7 @@ describe('ScreenContextBar', () => {
 
       expect(mockScreen.setEnabled).toHaveBeenCalledWith(true)
       expect(document.body.querySelector('.lx-scope-notice')?.textContent).toBe(
-        'Screen awareness on. Always sent with your message — can use more tokens.',
+        'Always send screen context: on. Sent with every message — can use more tokens.',
       )
       act(() => {
         vi.advanceTimersByTime(5000)
