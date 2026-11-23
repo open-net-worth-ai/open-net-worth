@@ -19,6 +19,7 @@ Imports only db + core (layering contract).
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from backend.db.instrument_store import InstrumentStore
@@ -63,21 +64,36 @@ _CURRENCY_TO_REGION: dict[str, str] = {
     "ETH": "Global",
 }
 
-# International-fund name/symbol hints → region bucket.
-_INTL_FUND_HINTS: dict[str, str] = {
-    "WORLD": "Global",
-    "MSCI": "Global",
-    "ACWI": "Global",
-    "EAFE": "Global",  # Europe, Australasia, Far East
-    "VWRA": "Global",
-    "IWDA": "Global",
-    "SWRD": "Global",
-    "EM": "Emerging Markets",
-    "EMERG": "Emerging Markets",
-    "EEM": "Emerging Markets",
-    "VWO": "Emerging Markets",
-    "MCHI": "Greater China",
-}
+# International-fund name/symbol hints → region bucket, matched as WHOLE WORDS (a bare substring
+# read "VanEck Semiconductor" as "Emerging Markets"). First match wins, so ex-US comes before
+# WORLD: "FTSE All-World ex-US" holds no US.
+_INTL_FUND_HINTS: tuple[tuple[str, str], ...] = (
+    ("EX-US", "Global ex-US"),
+    ("EX US", "Global ex-US"),
+    ("VXUS", "Global ex-US"),
+    ("VEU", "Global ex-US"),
+    ("BNDX", "Global ex-US"),
+    ("INTL", "Global ex-US"),
+    ("INTERNATIONAL", "Global ex-US"),
+    ("EAFE", "Global ex-US"),  # Europe, Australasia, Far East
+    ("DEVELOPED", "Global ex-US"),
+    ("EMERGING", "Emerging Markets"),
+    ("EM", "Emerging Markets"),
+    ("EEM", "Emerging Markets"),
+    ("VWO", "Emerging Markets"),
+    ("MCHI", "Greater China"),
+    ("WORLD", "Global"),
+    ("ALL-WORLD", "Global"),
+    ("ACWI", "Global"),
+    ("VWRA", "Global"),
+    ("VWRL", "Global"),
+    ("IWDA", "Global"),
+    ("SWRD", "Global"),
+)
+_INTL_FUND_PATTERNS = tuple(
+    (re.compile(r"(?<![A-Z0-9])" + re.escape(hint) + r"(?![A-Z0-9])"), region)
+    for hint, region in _INTL_FUND_HINTS
+)
 
 # Asset subclasses we consider fund-wrappers (ETF/ETC/ETP/index/mutual fund).
 # Used for intl-fund region hints and for skipping stock-style Fundamental Analysis.
@@ -108,8 +124,8 @@ def _detect_intl_fund_region(inst: dict) -> str | None:
     symbol = (inst.get("symbol") or "").upper()
     name = (inst.get("name") or "").upper()
     combined = f"{symbol} {name}"
-    for hint, region in _INTL_FUND_HINTS.items():
-        if hint in combined:
+    for pattern, region in _INTL_FUND_PATTERNS:
+        if pattern.search(combined):
             return region
     return None
 

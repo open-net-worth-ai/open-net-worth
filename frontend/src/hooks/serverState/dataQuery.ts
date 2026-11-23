@@ -30,6 +30,7 @@ export type DataSource =
   | 'commitments_coverage'
   | 'planning_summary'
   | 'investments_brief'
+  | 'portfolio_xray'
   | 'reports_rollup'
   | 'cashflow_flow'
   | 'cashflow_projections'

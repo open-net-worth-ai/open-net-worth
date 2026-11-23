@@ -1,7 +1,15 @@
 // SectorGeo — sector & geography exposure panel. Verbatim port of prototype SectorGeo().
 // Toggle: Sector | Region. Shows ranked bars with concentration flag.
+//
+// Region is the server's look-through (`portfolio_xray`, services/xray.py): a fund with saved
+// constituents is spread across them, anything else is placed by services/classification.py,
+// and what neither can place is shown as "Unmapped". The browser used to guess a fund's region
+// from its listing currency, so a EUR-listed global fund read "Europe 100%" (issue #210).
 
 import { useMemo, useState } from 'react'
+import type { PortfolioXray } from '../../../api/investments'
+import { querySource } from '../../../hooks/serverState/dataQuery'
+import { useQueryCache } from '../../../state/queryCache'
 import type { BookRow, DerivedBook } from './useInvestmentsBook'
 
 const SECTOR_MAP: Record<string, string> = {
@@ -80,16 +88,29 @@ const REGION_COLOR: Record<string, string> = {
   'United Kingdom': '#e2554f',
   'Hong Kong': '#bd7a1a',
   Japan: '#d4537e',
+  'North America': '#3b86dd',
+  Canada: '#2ba39a',
+  'Greater China': '#bd7a1a',
+  'Emerging Markets': '#c8921a',
+  Pacific: '#d4537e',
+  Australia: '#2ba39a',
+  Unmapped: '#6b7280',
 }
 
-const REGION_BY_CCY: Record<string, string> = {
-  USD: 'United States',
-  EUR: 'Europe',
-  SGD: 'Singapore',
-  GBP: 'United Kingdom',
-  HKD: 'Hong Kong',
-  JPY: 'Japan',
+const UNMAPPED = 'Unmapped'
+// A look-through region is whatever its constituents say ("Emerging markets", "Pacific"), so a
+// name the map doesn't know gets a stable colour of its own — never Unmapped's grey.
+const SPARE_COLORS = ['#3b86dd', '#9a7fd0', '#e0a032', '#22b8cf', '#1d9e75', '#e2554f', '#d4537e']
+
+function colorFor(map: Record<string, string>, k: string): string {
+  const known =
+    map[k] ?? Object.entries(map).find(([n]) => n.toLowerCase() === k.toLowerCase())?.[1]
+  if (known) return known
+  let h = 0
+  for (const ch of k) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return SPARE_COLORS[h % SPARE_COLORS.length] ?? '#3b86dd'
 }
+const XRAY_URL = '/api/portfolio/xray'
 
 function rowSector(r: BookRow): string {
   if (r.cls === 'crypto') return 'Digital assets'
@@ -106,15 +127,6 @@ function rowSector(r: BookRow): string {
   return SECTOR_MAP[r.sym] ?? 'Other'
 }
 
-function rowRegion(r: BookRow): string {
-  if (r.cls === 'crypto' || r.cls === 'commodity') return 'Global'
-  const label = r.sym + ' ' + r.name
-  if (/ex-us|intl|emerging|developed|VXUS|BNDX/i.test(label)) return 'Global ex-US'
-  // An all-world fund holds the US too (VWRA is ~60% US) — never "ex-US".
-  if (/world|acwi|VWRA/i.test(label)) return 'Global'
-  return REGION_BY_CCY[r.ccy] ?? 'United States'
-}
-
 function exposureBreakdown(all: BookRow[], keyFn: (r: BookRow) => string) {
   const m = new Map<string, number>()
   let tot = 0
@@ -127,6 +139,24 @@ function exposureBreakdown(all: BookRow[], keyFn: (r: BookRow) => string) {
     .map(([k, v]) => ({ k, v, pct: tot ? (v / tot) * 100 : 0 }))
     .sort((a, b) => b.v - a.v)
   return { rows, tot }
+}
+
+/** The X-ray's region split as this panel's rows, its unplaced share last. */
+function regionBreakdown(xray: PortfolioXray | null | undefined) {
+  if (!xray) return { rows: [] as { k: string; v: number; pct: number }[] }
+  const rows = xray.by_region.map((b) => ({ k: b.name, v: b.value_base, pct: b.pct }))
+  if (xray.region_unmapped_pct >= 0.5) {
+    rows.push({ k: UNMAPPED, v: xray.region_unmapped_base, pct: xray.region_unmapped_pct })
+  }
+  return { rows }
+}
+
+function useRegionXray() {
+  return useQueryCache<PortfolioXray>(
+    XRAY_URL,
+    () => querySource<PortfolioXray>('portfolio_xray', {}, XRAY_URL),
+    { staleTime: 0 },
+  )
 }
 
 interface Props {
@@ -156,17 +186,18 @@ function Card({
 export function SectorGeo({ d }: Props) {
   const [view, setView] = useState<'sector' | 'geography'>('sector')
 
-  const bd = useMemo(
-    () => exposureBreakdown(d.all, view === 'sector' ? rowSector : rowRegion),
-    [d.all, view],
-  )
+  const xray = useRegionXray()
+  const sectors = useMemo(() => exposureBreakdown(d.all, rowSector), [d.all])
+  const regions = useMemo(() => regionBreakdown(xray.data), [xray.data])
+  const bd = view === 'sector' ? sectors : regions
+  const regionPending = view === 'geography' && !xray.data
 
   const colorMap = view === 'sector' ? SECTOR_COLOR : REGION_COLOR
   const max = Math.max(1, ...bd.rows.map((r) => r.pct))
 
   const tech = bd.rows.find((r) => r.k === 'Technology')
   const techHi = view === 'sector' && tech && tech.pct >= 30
-  const top = bd.rows[0]
+  const top = bd.rows.find((r) => r.k !== UNMAPPED)
   const regionHi = view === 'geography' && top && top.pct >= 70
 
   return (
@@ -183,12 +214,17 @@ export function SectorGeo({ d }: Props) {
         </div>
       }
     >
+      {regionPending && (
+        <div className="mk-lots-note">
+          {xray.error ? 'Couldn’t load the region breakdown.' : 'Loading regions…'}
+        </div>
+      )}
       <div className="sec-list">
         {bd.rows.map((s) => (
           <div className="sec-row" key={s.k}>
             <div className="sec-top">
               <span className="sec-k">
-                <span className="sec-dot" style={{ background: colorMap[s.k] ?? '#6b7280' }} />
+                <span className="sec-dot" style={{ background: colorFor(colorMap, s.k) }} />
                 {s.k}
               </span>
               <span className="sec-v mask">{s.pct.toFixed(0)}%</span>
@@ -196,7 +232,7 @@ export function SectorGeo({ d }: Props) {
             <div className="sec-track">
               <span
                 className="sec-fill"
-                style={{ width: (s.pct / max) * 100 + '%', background: colorMap[s.k] ?? '#6b7280' }}
+                style={{ width: (s.pct / max) * 100 + '%', background: colorFor(colorMap, s.k) }}
               />
             </div>
           </div>
@@ -223,8 +259,9 @@ export function SectorGeo({ d }: Props) {
         </div>
       )}
       <div className="mk-lots-note">
-        Look-through by where revenue and listing sit, not just asset class. ETFs counted at fund
-        level.
+        {view === 'sector'
+          ? 'Grouped by each holding’s own sector. ETFs counted at fund level.'
+          : 'A fund with a saved look-through is spread across its regions; anything else is placed by its listing. Unmapped is what can’t be placed.'}
       </div>
     </Card>
   )
