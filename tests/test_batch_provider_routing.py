@@ -190,6 +190,41 @@ def test_dispatch_submit_unknown_openai_compatible_uses_sync_fallback():
     assert handle.startswith(_seam.SYNC_HANDLE_PREFIX)
 
 
+def test_dispatch_submit_request_pinned_to_another_provider_uses_sync_fallback():
+    """A task model pinned to a provider other than the instance default (the default is
+    Anthropic here) must not ride the DEFAULT's batch API with someone else's model id —
+    it runs through the sync fallback, which resolves the ref to its own provider."""
+    from backend.ai.batch import dispatch
+    from backend.core import llm_seam as _seam
+    from backend.db.model_config_store import ModelConfigStore
+
+    ModelConfigStore().update_provider("openai", {"api_key": "sk-oai"})
+    anthropic_called = []
+    seen_models = []
+
+    async def _fake_anthropic_submit(task, requests):
+        anthropic_called.append(True)
+        return "should-not-be-called"
+
+    async def _fake_complete(prompt, *, model="", **_):
+        seen_models.append(model)
+        return "sync reply"
+
+    orig_complete = _seam._complete
+    try:
+        _seam._complete = _fake_complete
+        with mpatch("backend.ai.batch.anthropic_batch.submit", _fake_anthropic_submit):
+            submit, _collect = dispatch.build_batch_hooks()
+            req = BatchRequest(custom_id="c1", prompt="p", model="openai:gpt-4o-mini")
+            handle = asyncio.run(submit("intel", [req]))
+    finally:
+        _seam._complete = orig_complete
+
+    assert anthropic_called == []
+    assert seen_models == ["openai:gpt-4o-mini"]
+    assert handle.startswith(_seam.SYNC_HANDLE_PREFIX)
+
+
 def test_dispatch_collect_parses_adapter_prefix():
     """A collect call routes by the HANDLE's own adapter prefix — not the current config
     — so a batch minted before a provider switch still resolves to the adapter that
