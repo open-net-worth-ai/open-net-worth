@@ -11,6 +11,7 @@ import {
 } from '../../../../utils/gatewayReauth'
 import { TERMINAL_NOTICE } from '../../../shared/privateCloudCopy'
 import { Btn, Panel } from '../ds'
+import { TerminalConfirm } from './TerminalConfirm'
 import type { SectionProps } from '../ds'
 
 const TerminalView = lazy(() => import('./TerminalView').then((m) => ({ default: m.TerminalView })))
@@ -85,7 +86,17 @@ export function TerminalSection({ gatewayMode = false }: SectionProps) {
     <Panel title="Terminal" sub={TERMINAL_NOTICE}>
       {status.kind === 'loading' && <div className="rd-help">Checking…</div>}
       {status.kind === 'unavailable' && <div className="rd-help">{status.reason}</div>}
-      {status.kind === 'sign-in-again' && (
+      {status.kind === 'sign-in-again' && gatewayMode && (
+        <TerminalConfirm
+          email={identity?.email ?? null}
+          onConfirmed={recheck}
+          onFallback={(url) => signInAgain(url ?? status.reauth)}
+        />
+      )}
+      {status.kind === 'sign-in-again' && gatewayMode && signInError && (
+        <div className="rd-help">{signInError}</div>
+      )}
+      {status.kind === 'sign-in-again' && !gatewayMode && (
         <div className="rd-term-note">
           <div className="rd-help">
             For your security the terminal asks for a recent sign-in. Sign in again to continue.

@@ -98,7 +98,7 @@ def _require_secrets_principal(request: Request) -> None:
     Never a Bearer API token (it also opens phone Shortcuts and MCP clients, and travels through the
     gateway), never loopback trust, never a disabled or unconfigured login, never a gateway
     pass-through. Accepted: this computer's own desktop backend; a gateway session minted in the last
-    15 minutes; a self-hosted login cookie.
+    2 hours; a self-hosted login cookie.
     """
     state = request.state
     if getattr(state, "desktop_authenticated", False):
@@ -112,7 +112,7 @@ def _require_secrets_principal(request: Request) -> None:
             raise HTTPException(
                 401,
                 {
-                    "message": "Sign in again to move your keys; your session is more than 15 minutes old.",
+                    "message": "Confirm it's you to move your keys; your last sign-in is more than 2 hours old.",
                     "code": "fresh_session_required",
                 },
             )
