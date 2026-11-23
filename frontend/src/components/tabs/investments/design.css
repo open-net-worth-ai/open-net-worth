@@ -2511,6 +2511,97 @@
   outline: none;
   border-color: var(--line-strong);
 }
+
+/* ── Benchmark picker (Performance): the select's look, a searchable list behind it ── */
+.mk-bench {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+.mk-toolsel.mk-bench-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 280px;
+  background-image: none;
+  padding-right: 12px;
+  text-align: left;
+}
+.mk-bench-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mk-bench-trigger svg {
+  flex: none;
+  color: var(--faint);
+}
+.mk-bench-pop {
+  gap: var(--space-2);
+  padding: var(--space-2);
+  overflow: hidden;
+}
+.mk-bench-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mk-bench-group {
+  padding: 10px 8px 4px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.mk-bench-item {
+  width: 100%;
+  justify-content: space-between;
+}
+.mk-bench-item.is-active {
+  background: var(--hover);
+}
+.mk-bench-item.is-selected {
+  color: var(--ink);
+  font-weight: 600;
+}
+.mk-bench-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.mk-bench-item-label,
+.mk-bench-item-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mk-bench-item-detail {
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--faint);
+}
+.mk-bench-status {
+  padding: 6px 8px;
+  font-size: var(--text-sm);
+  color: var(--faint);
+}
+.mk-bench-status.is-error {
+  color: var(--bad);
+}
+/* Phone: the same list in a bottom sheet, rows a thumb can hit. */
+.mk-bench-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.mk-bench-sheet .mk-bench-item {
+  min-height: 44px;
+  font-size: 15px;
+}
 .mk-toolbar > .mk-toolsel {
   flex: 1 1 200px;
   width: auto;

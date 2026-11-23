@@ -691,11 +691,14 @@ def _resolve_benchmark_instrument(ref: str) -> dict | None:
     """
     if not ref:
         return None
+    from backend.services.risk_metrics import benchmark_instrument
+
     store = InstrumentStore()
     inst = store.find_by_id(ref)
     if inst:
         return inst
-    return store.find_by_symbol(ref)
+    # A roster key resolves by its own listing first (see risk_metrics.benchmark_instrument).
+    return benchmark_instrument(ref) or store.find_by_symbol(ref)
 
 
 def benchmark_price_series(price_source_id: str, start: str, end: str) -> list[dict]:

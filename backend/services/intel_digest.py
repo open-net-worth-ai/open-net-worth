@@ -151,11 +151,13 @@ def build_digest(
     crypto_benchmark_payload = None
     try:
         from backend.services.returns import benchmark_return
-        from backend.services.risk_metrics import preferred_benchmark
+        from backend.services.risk_metrics import benchmark_instrument, preferred_benchmark
 
         # The user's own benchmark first (the Performance picker) — the SAME index every other
         # "vs the market" figure uses; the fixed list only backs it up when it isn't priced.
-        bench_inst = _find_benchmark_instrument((preferred_benchmark(profile), *_BENCHMARK_SYMBOLS))
+        bench_inst = benchmark_instrument(
+            preferred_benchmark(profile)
+        ) or _find_benchmark_instrument(_BENCHMARK_SYMBOLS)
         if bench_inst:
             ref = bench_inst.get("id") or bench_inst.get("symbol") or ""
             if ref:

@@ -339,10 +339,13 @@ class ProfileBody(BaseModel):
     @field_validator("preferred_benchmark")
     @classmethod
     def validate_benchmark(cls, v):
-        from backend.services.risk_metrics import BENCHMARK_ROSTER
+        from backend.services.risk_metrics import BENCHMARK_ROSTER, is_benchmark_key
 
-        if v is not None and v not in BENCHMARK_ROSTER:
-            raise ValueError(f"preferred_benchmark must be one of {', '.join(BENCHMARK_ROSTER)}")
+        if not is_benchmark_key(v):
+            raise ValueError(
+                "preferred_benchmark must be one of "
+                f"{', '.join(k for k in BENCHMARK_ROSTER if k)} or a ticker the app can price"
+            )
         return v
 
     @field_validator("retirement_target_age")

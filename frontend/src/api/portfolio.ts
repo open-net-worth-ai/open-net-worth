@@ -54,6 +54,18 @@ export async function fetchInstruments(): Promise<InstrumentOption[]> {
 }
 
 /** Curated benchmark roster (GET /api/returns/benchmarks) — server-authoritative. */
+/** Ready a ticker picked from the market search to be the benchmark (its price history is
+ *  fetched server-side); returns its picker entry. Saving it is the profile's write. */
+export async function prepareBenchmark(instrumentId: string): Promise<BenchmarkRosterItem> {
+  return asJson<BenchmarkRosterItem>(
+    await authFetch('/api/returns/benchmarks/prepare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instrument_id: instrumentId }),
+    }),
+  )
+}
+
 export async function fetchBenchmarkRoster(): Promise<BenchmarkRosterItem[]> {
   const res = await asJson<{ benchmarks: BenchmarkRosterItem[] }>(
     await authFetch('/api/returns/benchmarks'),

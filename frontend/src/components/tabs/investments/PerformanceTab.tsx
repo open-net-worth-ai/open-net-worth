@@ -7,6 +7,7 @@ import { usePerformanceView } from './usePerformanceView'
 import type { PerfStatCard } from './usePerformanceView'
 import type { ReturnPeriod, ReturnSeriesPoint } from '../../../types/portfolio'
 import { PERFORMANCE_PERIODS } from './performancePeriod'
+import { BenchmarkPicker } from './BenchmarkPicker'
 import { fDate } from '../../../utils/format'
 import './design.css'
 
@@ -372,18 +373,7 @@ export function PerformanceTab({
               <span className="mk-panel-title">Returns &amp; performance</span>
               <span className="mk-panel-spacer" />
               {benchmarks.length > 0 && (
-                <select
-                  className="mk-toolsel"
-                  value={benchKey}
-                  onChange={(e) => setBenchKey(e.target.value)}
-                  aria-label="Compare against a benchmark"
-                >
-                  {benchmarks.map((b) => (
-                    <option key={b.key || 'none'} value={b.key}>
-                      {b.key ? 'vs ' + b.label : b.label}
-                    </option>
-                  ))}
-                </select>
+                <BenchmarkPicker value={benchKey} roster={benchmarks} onPick={setBenchKey} />
               )}
               <div className="mk-seg mk-seg--periods" role="group" aria-label="Range">
                 {PERIODS.map((p) => (

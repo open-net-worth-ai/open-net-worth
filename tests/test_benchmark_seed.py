@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-N_ROSTER = 5
+N_ROSTER = 12  # US, world, Europe, Asia & emerging, crypto (issue #223)
 N_SECTOR_FUNDS = 11
 N_ALL = N_ROSTER + N_SECTOR_FUNDS
 
@@ -145,7 +145,8 @@ class TestBackfillBenchmarkPrices:
         from backend.services.benchmark_seed import backfill_benchmark_prices
 
         result = backfill_benchmark_prices()
-        # All 5 roster price_source_ids must have been requested
+        # Every roster price_source_id must have been requested, the regional ones included
+        assert {"EXS1.DE", "EXW1.DE", "EXSA.DE", "EUNL.DE", "1321.T", "EWJ", "EEM"} <= set(called)
         assert "SPY" in called
         assert "VWRA.L" in called
         assert "QQQ" in called

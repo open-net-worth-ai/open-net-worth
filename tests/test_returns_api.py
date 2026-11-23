@@ -309,15 +309,29 @@ def test_returns_no_benchmark_omits_comparison(bench_client):
 
 
 def test_get_benchmarks_200(real_client):
-    """GET /api/returns/benchmarks → 200, exactly 6 roster entries."""
+    """GET /api/returns/benchmarks → 200, the twelve roster entries plus 'none'."""
     r = real_client.get("/api/returns/benchmarks")
     assert r.status_code == 200
     body = r.json()
     assert "benchmarks" in body
     entries = body["benchmarks"]
-    assert len(entries) == 6
+    assert len(entries) == 13
     keys = {e["key"] for e in entries}
-    assert keys == {"SPY", "VWRA", "QQQ", "ACWI", "BTC", ""}
+    assert keys == {
+        "SPY",
+        "QQQ",
+        "VWRA",
+        "ACWI",
+        "EUNL",
+        "EXS1",
+        "EXW1",
+        "EXSA",
+        "1321",
+        "EWJ",
+        "EEM",
+        "BTC",
+        "",
+    }
     for e in entries:
         assert "key" in e
         assert "label" in e
