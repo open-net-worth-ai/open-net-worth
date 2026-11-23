@@ -93,6 +93,17 @@ export function ScreenContextBar({
       width: anchor.width,
       bottom: window.innerHeight - anchor.top + PEEK_ANCHOR_GAP,
     })
+    // The bar re-renders taller or shorter with the switch (its subtitle wraps), so it moves
+    // after this click: sit on its top edge once it has settled, not where it was.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const settled = anchorRef.current?.getBoundingClientRect()
+        if (!settled) return
+        setNotice((n) =>
+          n ? { ...n, bottom: window.innerHeight - settled.top + PEEK_ANCHOR_GAP } : n,
+        )
+      }),
+    )
     window.clearTimeout(noticeTimer.current)
     noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_MS)
   }
