@@ -103,7 +103,7 @@ Same harness, `claude_cli:sonnet`, 6 warm pairs, a warm-up run discarded (35 tur
 
 | per run | text | native |
 |---|---|---|
-| timed-out / failed turns (all 38 runs on both models) | 0 | 0 |
+| timed-out turns (every run after the hang fix, both models) | 0 | 0 |
 | cost, list-equivalent | $1.391 ± 0.062 | $1.449 ± 0.051 (+4%) |
 | CLI model requests | 105.5 | 110.5 |
 | cache read tokens | 4.27M | 4.75M |
