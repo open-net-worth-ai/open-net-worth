@@ -100,6 +100,26 @@ describe('InlineVisual', () => {
     expect(screen.getByText(/What-if/)).toBeTruthy()
   })
 
+  it("draws each chart's own note right under that chart, not in the caption", () => {
+    const { container } = render(
+      <InlineVisual
+        visual={{
+          ...FIXTURE,
+          caption: [],
+          blocks: [
+            chart('diverging', { note: 'Largest 12 of 32' }),
+            chart('stack', { note: 'Largest 8 of 22' }),
+          ],
+        }}
+      />,
+    )
+    const kids = Array.from(container.querySelector('.ivis')!.children)
+    const notes = kids.filter((el) => el.classList.contains('ivis-block-note'))
+    expect(notes.map((n) => n.textContent)).toEqual(['Largest 12 of 32', 'Largest 8 of 22'])
+    expect(kids.indexOf(notes[0]!)).toBe(kids.indexOf(container.querySelector('.ivis-rows')!) + 1)
+    expect(kids.indexOf(notes[1]!)).toBe(kids.indexOf(container.querySelector('.ivis-stack')!) + 1)
+  })
+
   it('renders a line chart through the same wrapper', () => {
     render(<InlineVisual visual={{ ...FIXTURE, blocks: [chart('line')] }} />)
     expect((chartSpy.mock.calls[0]![0] as { type: string }).type).toBe('line')

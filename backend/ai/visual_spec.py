@@ -27,6 +27,9 @@ MAX_TIMELINE = 20
 # Rows a breakdown may READ before it keeps its largest ones; a line keeps every point it shows.
 MAX_SOURCE_ROWS = 500
 LABEL_MAX, TITLE_MAX = 40, 60
+# A `percent` value is a fraction (0.12 → 12%). One this far from zero (±1,000%) is almost
+# certainly already in points (−31.2 meaning −31.2%), which would draw as −3,120%.
+PERCENT_FRACTION_LIMIT = 10.0
 
 # An amount written into a label: a currency sign before digits, a thousands group, or a decimal.
 _AMOUNT_RE = re.compile(r"[$€£¥]\s?\d|\d{1,3}(?:,\d{3})+|\d+\.\d+|\d{5,}")
@@ -148,6 +151,16 @@ def _format(block: dict) -> tuple[str, Optional[str]]:
     return fmt, None
 
 
+def _check_percent(fmt: str, values: list[Optional[float]], where: str) -> None:
+    if fmt != "percent":
+        return
+    if any(v is not None and abs(v) > PERCENT_FRACTION_LIMIT for v in values):
+        raise VisualSpecError(
+            f"{where}: format 'percent' takes a fraction (0.12 for 12%), but these values are "
+            "already percentages — use format 'percent_points'"
+        )
+
+
 def _stats(block: dict, used: list[ToolCall], notes: list[str]) -> dict:
     tiles = block.get("tiles")
     if not isinstance(tiles, list) or not 1 <= len(tiles) <= MAX_TILES:
@@ -159,6 +172,7 @@ def _stats(block: dict, used: list[ToolCall], notes: list[str]) -> dict:
         compare = tile.get("compare")
         value = _number(_lookup(tile.get("value"), used), f"{label} value")
         then = _number(_lookup(compare, used), f"{label} compare") if compare else None
+        _check_percent(fmt, [value, then], label)
         better = tile.get("better")
         if better not in (None, "up", "down"):
             raise VisualSpecError(f'{label}: better is "up" or "down"')
@@ -241,6 +255,9 @@ def _chart(block: dict, used: list[ToolCall], notes: list[str]) -> dict:
         if not block.get("target"):
             raise VisualSpecError("a progress chart needs 'target' (the field holding the goal)")
         targets = [_number(_field(r, block["target"], "target"), "target") for r in rows]
+    for s in series:
+        _check_percent(fmt, s["values"], f"series {s['name']}")
+    _check_percent(fmt, targets or [], "target")
     chart = {
         "type": "chart",
         "kind": kind,
@@ -276,6 +293,7 @@ def _timeline(block: dict, used: list[ToolCall], notes: list[str]) -> dict:
                 else None,
             }
         )
+    _check_percent(fmt or "", [it["value"] for it in items], "timeline")
     items.sort(key=lambda item: item["date"])
     if len(items) > MAX_TIMELINE:
         notes.append(f"First {MAX_TIMELINE} of {len(items)}")
@@ -336,15 +354,20 @@ def resolve(request: dict) -> dict:
     elif not isinstance(blocks_in, list) or not 1 <= len(blocks_in) <= MAX_BLOCKS:
         raise VisualSpecError(f"a visual takes 1–{MAX_BLOCKS} blocks, or code")
     used: list[ToolCall] = []
-    notes: list[str] = []
     blocks = []
     for i, block in enumerate(blocks_in):
         builder = _BUILDERS.get(block.get("type") if isinstance(block, dict) else None)
         if builder is None:
             raise VisualSpecError(f"block {i + 1}: type must be stats, chart or timeline")
-        blocks.append(builder(block, used, notes))
+        # A block's own note ("Largest 12 of 32") is drawn under that block, never in the
+        # visual's caption, where it could not say which chart it belongs to.
+        notes: list[str] = []
+        built = builder(block, used, notes)
+        if notes:
+            built["note"] = " · ".join(notes)
+        blocks.append(built)
     spec = _drawing_envelope(request) if drawing else _envelope(request)
-    spec["caption"] = notes + _captions(used)
+    spec["caption"] = _captions(used)
     if blocks or not drawing:
         spec["blocks"] = blocks
     return spec

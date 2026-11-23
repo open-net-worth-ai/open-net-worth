@@ -502,7 +502,100 @@ def test_a_long_breakdown_keeps_its_largest_rows_and_says_so():
     chart = spec["blocks"][0]
     assert chart["labels"] == ["Cat 27", "Cat 28", "Cat 29"]
     assert chart["series"][0]["values"] == [27.0, 28.0, 29.0]
-    assert spec["caption"] == ["Largest 3 of 30"]
+    assert chart["note"] == "Largest 3 of 30"
+    assert spec["caption"] == []
+
+
+def test_each_chart_carries_its_own_largest_note():
+    spend = [{"name": f"Cat {i}", "spent": float(i + 1)} for i in range(22)]
+    pnl = [{"symbol": f"T{i}", "pnl": float(i + 1)} for i in range(32)]
+    history = [
+        _use("s1", "get_spending_summary", {}),
+        _res("s1", {"by_category": spend}),
+        _use("p1", "get_portfolio", {}),
+        _res("p1", {"holdings": pnl}),
+    ]
+    token = visual_sources.bind(history)
+    try:
+        spec = visual_spec.resolve(
+            {
+                "blocks": [
+                    {
+                        "type": "chart",
+                        "kind": "bar",
+                        "top": 8,
+                        "rows": {"tool": "get_spending_summary", "path": "by_category"},
+                        "label": "name",
+                        "series": [{"field": "spent", "name": "Spent"}],
+                    },
+                    {
+                        "type": "chart",
+                        "kind": "diverging",
+                        "top": 12,
+                        "rows": {"tool": "get_portfolio", "path": "holdings"},
+                        "label": "symbol",
+                        "series": [{"field": "pnl", "name": "P&L"}],
+                    },
+                ]
+            }
+        )
+    finally:
+        visual_sources.reset(token)
+    assert [b.get("note") for b in spec["blocks"]] == ["Largest 8 of 22", "Largest 12 of 32"]
+    assert spec["caption"] == []
+
+
+@pytest.mark.parametrize("fmt", ["percent", "percent_points"])
+def test_percent_values_already_in_points_are_refused_as_fractions(fmt):
+    rows = [{"symbol": "ACME", "pnl_pct": -31.2}, {"symbol": "XYZ", "pnl_pct": 48.9}]
+    history = [_use("p1", "get_portfolio", {}), _res("p1", {"holdings": rows})]
+    request = {
+        "blocks": [
+            {
+                "type": "chart",
+                "kind": "diverging",
+                "format": fmt,
+                "rows": {"tool": "get_portfolio", "path": "holdings"},
+                "label": "symbol",
+                "series": [{"field": "pnl_pct", "name": "P&L"}],
+            }
+        ]
+    }
+    token = visual_sources.bind(history)
+    try:
+        if fmt == "percent":
+            with pytest.raises(visual_spec.VisualSpecError, match="percent_points"):
+                visual_spec.resolve(request)
+        else:
+            spec = visual_spec.resolve(request)
+            assert spec["blocks"][0]["series"][0]["values"] == [-31.2, 48.9]
+    finally:
+        visual_sources.reset(token)
+
+
+def test_a_percent_tile_in_points_is_refused():
+    history = [_use("r1", "get_returns", {}), _res("r1", {"twr_pct": 12.5})]
+    token = visual_sources.bind(history)
+    try:
+        with pytest.raises(visual_spec.VisualSpecError, match="percent_points"):
+            visual_spec.resolve(
+                {
+                    "blocks": [
+                        {
+                            "type": "stats",
+                            "tiles": [
+                                {
+                                    "label": "Return",
+                                    "format": "percent",
+                                    "value": {"tool": "get_returns", "path": "twr_pct"},
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+    finally:
+        visual_sources.reset(token)
 
 
 def test_empty_rows_drop_without_a_note():

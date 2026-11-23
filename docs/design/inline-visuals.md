@@ -89,8 +89,11 @@ Rules enforced server-side (each failure returns an error the model can fix):
 - caps: stats ≤ 4 tiles, line ≤ 120 points (refused beyond — a trend is never thinned), ≤ 3
   series; `stack`, `diverging`, `progress` take exactly 1 series. A breakdown (bar, diverging,
   stack, progress) drops empty rows and keeps its 24 (or `top`) largest by the first series,
-  captioned "Largest N of M" — nothing is summed into an "Other". A timeline keeps its first 20
-  by date, captioned "First 20 of M";
+  noted "Largest N of M" — nothing is summed into an "Other". A timeline keeps its first 20
+  by date, noted "First 20 of M". These notes are the block's own `note`, drawn under that
+  block, never in the visual's `caption` (which can't say which chart it means);
+- `format: "percent"` is a fraction (0.12 = 12%); a value beyond ±10 (±1,000%) is refused as
+  already in points — use `percent_points` (12 = 12%);
 - a reference to `simulate_retirement` adds a server-written caption naming every lever the
   what-if moved and its saved value ("What-if — monthly saving 3,000 (your plan: 2,000)"); a
   reference to `simulate_cashflow` adds "Projection — not booked".

@@ -82,5 +82,7 @@ def render_text(spec: dict[str, Any]) -> str:
         render = _RENDER.get(block.get("type"))
         if render:
             out.extend(render(block))
+            if block.get("note"):
+                out.append(str(block["note"]))
     out.extend(spec.get("caption") or [])
     return "\n".join(out) if len(out) > (1 if spec.get("title") else 0) else ""
