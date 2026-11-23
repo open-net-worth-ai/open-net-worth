@@ -249,3 +249,30 @@ def test_the_mcp_server_records_which_callers_show_cards():
     assert mcp_ui.supports("oauth:grant9") and apps.supports_ui("oauth:grant9")
     apps.note_initialize("oauth:grant9", {"capabilities": {}})
     assert not mcp_ui.supports("oauth:grant9")
+
+
+def _held_once(monkeypatch):
+    checks = iter([[], [{"id": "t2", "what": "Delete 3 transactions", "in_chat": False}]])
+    monkeypatch.setattr(app_asks, "waiting_approvals", lambda sid: next(checks))
+
+
+def test_the_notice_links_to_the_conversation(lucius, monkeypatch, told):
+    """Regression (2026-11-23): "Open the conversation in Open Net Worth" named no conversation
+    and gave no link, so the owner couldn't find where to approve."""
+    import backend.services.mcp_oauth.settings as settings
+
+    monkeypatch.setattr(settings, "public_url", lambda: "https://onw.example.test")
+    _held_once(monkeypatch)
+    result, _ = _ask({"question": "tidy my duplicates"})
+    link = f"https://onw.example.test/lucius?conversation={result['conversation_id']}"
+    assert link in told[0]
+
+
+def test_without_a_public_address_the_notice_names_the_conversation(lucius, monkeypatch, told):
+    import backend.services.mcp_oauth.settings as settings
+
+    monkeypatch.setattr(settings, "public_url", lambda: "")
+    _held_once(monkeypatch)
+    _ask({"question": "tidy my duplicates"})
+    assert "open Lucius and the conversation" in told[0]
+    assert "tidy my duplicates" in told[0]

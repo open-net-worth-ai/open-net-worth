@@ -105,7 +105,7 @@ async def talk_to_lucius(input_data: dict):
     waiting = app_asks.waiting_approvals(session_id)
     elsewhere = [w for w in waiting if not (w["in_chat"] and mcp_ui.supports(caller))]
     if elsewhere and question:
-        await _tell_owner(caller, elsewhere)
+        await _tell_owner(caller, session_id, elsewhere)
     return json.dumps(result_for(session_id, answer, waiting), ensure_ascii=False), None
 
 
@@ -128,7 +128,7 @@ def result_for(session_id: str, answer: str, waiting: list[dict]) -> dict:
     return result
 
 
-async def _tell_owner(caller: str, waiting: list[dict]) -> None:
+async def _tell_owner(caller: str, session_id: str, waiting: list[dict]) -> None:
     """A notice for the cards the owner can't answer in the app's chat: one the chat shows with
     buttons is already in front of them, and a notice too reached them twice (2026-11-23)."""
     from backend.ai import app_asks
@@ -138,8 +138,23 @@ async def _tell_owner(caller: str, waiting: list[dict]) -> None:
     try:
         await notify(
             f"{app_asks.app_name(caller)} asked Lucius, and he needs your approval: {what}. "
-            "Open the conversation in Open Net Worth to approve or decline.",
+            f"{_where_to_answer(session_id)}",
             title="Approval needed",
         )
     except Exception:  # noqa: BLE001 — the card waits in the conversation either way
         log.warning("talk_to_lucius: could not send the approval notice", exc_info=True)
+
+
+def _where_to_answer(session_id: str) -> str:
+    """Where the owner answers the card: a link to the conversation when the instance has a
+    public address, else the conversation's name in Lucius's list. "Open the conversation"
+    alone left them hunting for it (2026-11-23)."""
+    from backend.ai import assistant
+    from backend.services.mcp_oauth.settings import public_url
+
+    base = public_url()
+    if base:
+        return f"Approve or decline it here: {base}/lucius?conversation={session_id}"
+    title = str((assistant._session_meta_entry(session_id) or {}).get("title") or "").strip()
+    named = f' "{title}"' if title else ""
+    return f"Approve or decline it in Open Net Worth: open Lucius and the conversation{named}."
