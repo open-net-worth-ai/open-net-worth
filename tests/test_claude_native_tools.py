@@ -69,6 +69,17 @@ def _fake_cli(tmp_path):
                         "cache_creation_input_tokens": 10}
 
             def turn(text):
+                if "[end of result" in text:
+                    for ev in (
+                        {"type": "stream_event", "event": {"type": "message_start",
+                            "message": {"model": "claude-haiku-5-5", "usage": usage(3)}}},
+                        {"type": "stream_event", "event": {"type": "content_block_delta",
+                            "delta": {"type": "text_delta", "text": "recovered from transcript"}}},
+                        {"type": "result", "result": "ok", "total_cost_usd": 0.01,
+                         "usage": usage(3), "stop_reason": "end_turn"},
+                    ):
+                        out(ev)
+                    return
                 directive = text.split("CALLS:", 1)[1] if "CALLS:" in text else "[]"
                 calls = json.loads(directive.strip().splitlines()[0])
                 if not calls:
@@ -110,11 +121,28 @@ def _fake_cli(tmp_path):
                 out({"type": "stream_event", "event": {"type": "message_delta",
                      "delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 9}}})
                 seen = []
+                if "CANCEL" in text:
+                    rpc_id[0] += 1
+                    out({"type": "control_request", "request_id": "r%d" % rpc_id[0],
+                         "request": {"subtype": "mcp_message", "server_name": "lucius",
+                                     "message": {"jsonrpc": "2.0", "id": 77, "method": "tools/call",
+                                                 "params": {"name": calls[0][0], "arguments": {},
+                                                            "_meta": {"claudecode/toolUseId": ids[0]}}}}})
+                    out({"type": "control_cancel_request", "request_id": "r%d" % rpc_id[0]})
+                    out({"type": "stream_event", "event": {"type": "message_start",
+                         "message": {"model": "claude-haiku-5-5", "usage": usage(2)}}})
+                    out({"type": "stream_event", "event": {"type": "content_block_delta",
+                         "delta": {"type": "text_delta", "text": "the tool was cancelled"}}})
+                    out({"type": "result", "result": "x", "total_cost_usd": 0.02,
+                         "usage": usage(2), "stop_reason": "end_turn"})
+                    return
                 for cid, (name, arguments) in zip(ids, calls):
+                    meta = {} if "NOMETA" in text else {"_meta": {"claudecode/toolUseId": cid}}
                     reply = ask({"jsonrpc": "2.0", "id": 100 + len(seen), "method": "tools/call",
-                                 "params": {"name": name, "arguments": arguments,
-                                            "_meta": {"claudecode/toolUseId": cid}}})
+                                 "params": {"name": name, "arguments": arguments, **meta}})
                     seen.append(reply["result"]["content"][0]["text"])
+                    if "SKIP" in text:
+                        break
                 out({"type": "stream_event", "event": {"type": "message_start",
                      "message": {"model": "claude-haiku-5-5", "usage": usage(2)}}})
                 out({"type": "stream_event", "event": {"type": "content_block_delta",
@@ -573,3 +601,107 @@ def test_every_sentence_that_names_the_wrapper_uses_the_name_the_cli_knows():
         assert not bare.search(text), text
     assert wire.CALLABLE in spoken[0] and wire.CALLABLE in spoken[1]
     assert "find_tools" in spoken[0], "told to load a tool before calling it"
+
+
+async def test_a_call_without_a_tool_use_id_is_still_matched_by_name(tmp_path, provider):
+    """A CLI that drops `claudecode/toolUseId` must not turn every host-run call into a failure
+    the model then retries: the answered call is found again by its name."""
+    messages = [
+        _user("NOMETA CALLS: " + json.dumps([["list_accounts", {}], ["get_spending_summary", {}]]))
+    ]
+    first = await _round(provider, messages, [TOOL_A, TOOL_B])
+    second = await _round(provider, messages + _after(first), [TOOL_A, TOOL_B])
+
+    text = "".join(e.get("text", "") for e in second if e["type"] == "text_delta")
+    assert text == "got: result of list_accounts | result of get_spending_summary"
+    assert len(_called(first)) == 2 and not _called(second), "each call ran once"
+    assert len(_rows(tmp_path, "spawns.jsonl")) == 1
+
+
+async def test_a_call_the_cli_cancelled_is_rebuilt_from_the_transcript_not_retried(
+    tmp_path, provider
+):
+    """The host ran the call; the CLI cancelled it and told the model it failed. The process is
+    retired and the round starts again from the transcript, where the model reads the REAL result
+    — and the host is never asked to run that call a second time."""
+    messages = [_user("CANCEL CALLS: " + json.dumps([["list_accounts", {}]]))]
+    first = await _round(provider, messages, [TOOL_A])
+    second = await _round(provider, messages + _after(first), [TOOL_A])
+
+    text = "".join(e.get("text", "") for e in second if e["type"] == "text_delta")
+    assert text == "recovered from transcript", "the model never saw the cancellation"
+    assert "cancelled" not in text
+    assert not _called(second), "the host runs the call once"
+    assert len(_rows(tmp_path, "spawns.jsonl")) == 2
+    assert "[result of " in _users(tmp_path)[-1], "history carries the real result"
+
+
+async def test_malformed_control_frames_are_answered_not_fatal(tmp_path):
+    from backend.ai.models.claude_native_session import NativeSession
+
+    sent: list[dict] = []
+    session = NativeSession(["claude"], {}, str(tmp_path))
+
+    async def capture(payload):
+        sent.append(payload)
+
+    session._send = capture
+    for junk in (
+        {"type": "control_request", "request_id": "a", "request": "junk"},
+        {
+            "type": "control_request",
+            "request_id": "b",
+            "request": {"subtype": "mcp_message", "server_name": "lucius", "message": "junk"},
+        },
+        {
+            "type": "control_request",
+            "request_id": "c",
+            "request": {
+                "subtype": "mcp_message",
+                "server_name": "lucius",
+                "message": {
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": [1],
+                },
+            },
+        },
+        {
+            "type": "control_request",
+            "request_id": "d",
+            "request": {
+                "subtype": "mcp_message",
+                "server_name": "lucius",
+                "message": {"id": 2, "method": "tools/call", "params": {"_meta": "x"}},
+            },
+        },
+        {"type": "control_cancel_request", "request_id": None},
+    ):
+        assert await session.intercept(junk) is True
+    assert len(sent) == 4 and sent[0]["response"]["subtype"] == "error"
+    assert not session.waiting
+
+
+def test_a_tool_use_without_an_id_is_skipped_not_a_crash():
+    from backend.ai.models import claude_native_round as rnd
+
+    r = rnd.Round(frozenset({"list_accounts"}))
+    blocks = [
+        {"type": "tool_use", "name": "mcp__lucius__list_accounts", "input": {}},
+        {"type": "tool_use", "id": 5, "name": "mcp__lucius__list_accounts", "input": {}},
+        "junk",
+    ]
+    assert list(rnd._assistant({"content": blocks}, r)) == []
+    assert list(rnd._assistant({"content": "not a list"}, r)) == []
+
+
+async def test_a_result_the_cli_never_asked_for_is_rebuilt_not_left_to_a_retry(tmp_path, provider):
+    messages = [
+        _user("SKIP CALLS: " + json.dumps([["list_accounts", {}], ["get_spending_summary", {}]]))
+    ]
+    first = await _round(provider, messages, [TOOL_A, TOOL_B])
+    second = await _round(provider, messages + _after(first), [TOOL_A, TOOL_B])
+
+    text = "".join(e.get("text", "") for e in second if e["type"] == "text_delta")
+    assert text == "recovered from transcript" and not _called(second)
+    assert len(_rows(tmp_path, "spawns.jsonl")) == 2

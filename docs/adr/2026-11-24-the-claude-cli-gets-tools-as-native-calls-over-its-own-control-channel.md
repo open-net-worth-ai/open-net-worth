@@ -139,8 +139,16 @@ not zero. Haiku is level (cost within 2% on 5 pairs).
   outlasts the reaper degrades to a fresh process from the transcript, never to a hang.
 - The tool-use rendering of a parked call in the chat (`tool_use_start` at the model's block, the
   approval card) is the same stream `assistant.run` already consumes.
-- Not covered: a CLI that stops sending `claudecode/toolUseId` in `tools/call` falls back to the
-  oldest open call of that name; a CLI that changes the control protocol is caught by
-  `make cli-smoke` (`tests/cli_live/test_claude_native_live.py`), not at runtime.
+- A CLI that stops sending `claudecode/toolUseId` is matched by name: every call the model makes
+  is remembered with the name the CLI used until its result reaches the CLI, and a `tools/call`
+  without an id takes the oldest such call of that name.
+- The host and the CLI must agree on every call. If the CLI cancels a call the host answered, or
+  starts its next request or ends the query while a host result was never asked for, the model has
+  been told the call failed while the host ran it. The process is retired and the round starts
+  again from the transcript, where the real result is, so the model never retries a call the host
+  already ran (`Diverged`). A CLI that changes the control protocol is caught by `make cli-smoke`
+  (`tests/cli_live/test_claude_native_live.py`), not at runtime.
+- A parked process nobody resumes is closed when its conversation sends again or by the idle reaper
+  on the next session acquire; there is no periodic reaper, as for an idle text session.
 - Default stays off until the owner flips it. Retire the flag by `remove_by` 2027-02-28: delete the
   text path, or this one if it misbehaves.

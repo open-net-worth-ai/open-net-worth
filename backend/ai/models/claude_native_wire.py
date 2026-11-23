@@ -51,6 +51,11 @@ _NO_METHOD = -32601
 _BAD_PARAMS = -32602
 
 
+def as_dict(value: Any) -> dict:
+    """``value`` when it is an object, else ``{}`` — the CLI's frames are read defensively."""
+    return value if isinstance(value, dict) else {}
+
+
 def mcp_config() -> str:
     """The ``--mcp-config`` value: one sdk-type server, served over the control channel."""
     return json.dumps({"mcpServers": {SERVER: {"type": "sdk", "name": SERVER}}})

@@ -24,12 +24,20 @@ import json
 import logging
 from typing import Any, Optional
 
+from backend.core.errors import ExternalServiceError
+
 from . import claude_live_session
 from . import claude_native_wire as wire
 
 log = logging.getLogger(__name__)
 
 _TOOL_USE_ID = "claudecode/toolUseId"
+
+
+class Diverged(ExternalServiceError):
+    """The CLI and the host no longer agree on a call: the host ran it (or holds its result) but
+    the CLI told the model it failed or was cancelled. The process is retired and the round starts
+    again from the transcript, where the model reads the REAL result."""
 
 
 class NativeSession(claude_live_session.LiveSession):
@@ -44,6 +52,13 @@ class NativeSession(claude_live_session.LiveSession):
         self.waiting: dict[str, tuple[str, Any]] = {}
         # Results given before their `tools/call` arrived: id → (text, is_error).
         self.early: dict[str, tuple[str, bool]] = {}
+        # Every call the model made whose result has not reached the CLI yet: id → CLI-side name.
+        # It is how a `tools/call` without a tool-use id is matched to its call.
+        self.names: dict[str, str] = {}
+        # Calls answered on the wire but not yet confirmed by the CLI going on: request id → call id.
+        self.answered: dict[str, str] = {}
+        # Set when the CLI abandoned a call the host answered; the round then starts over.
+        self.diverged = ""
         # What the rounds of the query in flight have already been charged (price-table estimates).
         self.estimated_cost = 0.0
 
@@ -57,21 +72,33 @@ class NativeSession(claude_live_session.LiveSession):
         kind = event.get("type")
         if kind == "control_cancel_request":
             gone = event.get("request_id")
-            self.waiting = {k: v for k, v in self.waiting.items() if v[0] != gone}
+            if gone in self.answered:
+                self.diverged = f"the CLI cancelled call {self.answered[gone]} we had answered"
+            for call_id, (request_id, _rpc) in list(self.waiting.items()):
+                if request_id == gone:
+                    del self.waiting[call_id]
+                    if call_id in self.names:
+                        self.diverged = f"the CLI cancelled call {call_id}"
             return True
         if kind != "control_request":
             return False
-        await self._control(str(event.get("request_id") or ""), event.get("request") or {})
+        request = event.get("request")
+        request_id = str(event.get("request_id") or "")
+        if not isinstance(request, dict):
+            await self._send(wire.control_error(request_id, "malformed control request"))
+        else:
+            await self._control(request_id, request)
         return True
 
     async def _control(self, request_id: str, request: dict) -> None:
-        message = request.get("message") or {}
+        message = wire.as_dict(request.get("message"))
+        meta = wire.as_dict(wire.as_dict(message.get("params")).get("_meta"))
         log.debug(
             "claude_native: control %s %s rpc=%s id=%s",
             request.get("subtype"),
             message.get("method"),
             message.get("id"),
-            ((message.get("params") or {}).get("_meta") or {}).get(_TOOL_USE_ID),
+            meta.get(_TOOL_USE_ID),
         )
         if request.get("subtype") != "mcp_message":
             await self._send(wire.control_error(request_id, "unsupported control request"))
@@ -85,14 +112,17 @@ class NativeSession(claude_live_session.LiveSession):
             await self._send(wire.control_response(request_id, answer))
 
     async def _called(self, request_id: str, message: dict) -> None:
-        params = message.get("params") or {}
-        call_id = (params.get("_meta") or {}).get(_TOOL_USE_ID) or self._unclaimed(params)
+        params = wire.as_dict(message.get("params"))
+        found = wire.as_dict(params.get("_meta")).get(_TOOL_USE_ID)
+        call_id = found if isinstance(found, str) and found else self._unclaimed(params)
         if not call_id:
             error = wire.bad_params(message.get("id"), "this call is not one the host knows")
             await self._send(wire.control_response(request_id, error))
             return
         if call_id in self.early:
             text, is_error = self.early.pop(call_id)
+            self.names.pop(call_id, None)
+            self.answered[request_id] = call_id
             await self._send(
                 wire.control_response(
                     request_id, wire.call_result(message.get("id"), text, is_error)
@@ -104,11 +134,17 @@ class NativeSession(claude_live_session.LiveSession):
                 await self._refuse(call_id)
 
     def _unclaimed(self, params: dict) -> Optional[str]:
-        """An older CLI sends no tool-use id: the oldest open call of that name is the one."""
-        for call_id, name in self.open.items():
+        """A CLI that sends no tool-use id: the oldest call of that name whose `tools/call` has
+        not arrived yet — answered already (``early``) or not — is the one."""
+        for call_id, name in self.names.items():
             if name == params.get("name") and call_id not in self.waiting:
                 return call_id
         return None
+
+    def note(self, calls: list[dict]) -> None:
+        """The model made these calls (``id``, CLI-side ``cli_name``): remember them by name."""
+        for call in calls:
+            self.names.setdefault(call["id"], call["cli_name"])
 
     async def _send(self, payload: dict) -> None:
         log.debug("claude_native: answer %.160s", json.dumps(payload, ensure_ascii=False))
@@ -122,12 +158,14 @@ class NativeSession(claude_live_session.LiveSession):
         A ``tools/call`` already on the wire for any OTHER id is one the host never saw, so
         nothing will ever answer it: it is refused now, and the model carries on."""
         self.open = {c["id"]: c["cli_name"] for c in calls}
+        self.note(calls)
         for call_id in [i for i in self.waiting if i not in self.open]:
             await self._refuse(call_id)
 
     async def _refuse(self, call_id: str) -> None:
         log.warning("claude_native: refusing tools/call %s — the host never saw that call", call_id)
         request_id, rpc_id = self.waiting.pop(call_id)
+        self.names.pop(call_id, None)
         text = "This call was not recognised and was not run."
         await self._send(wire.control_response(request_id, wire.call_result(rpc_id, text, True)))
 
@@ -140,9 +178,24 @@ class NativeSession(claude_live_session.LiveSession):
                 self.early[call_id] = (text, is_error)
                 continue
             request_id, rpc_id = waiting
+            self.names.pop(call_id, None)
+            self.answered[request_id] = call_id
             await self._send(
                 wire.control_response(request_id, wire.call_result(rpc_id, text, is_error))
             )
+
+    def check_agreement(self, at: str) -> None:
+        """Raise :class:`Diverged` if the CLI has gone on without a call the host answered.
+
+        A result still undelivered when the CLI starts its next request or ends the query is
+        one the CLI no longer waits for: it told the model the call failed. Retire the process
+        rather than let the model retry a call the host already ran."""
+        if not self.diverged and self.early:
+            self.diverged = f"a result was never delivered ({', '.join(self.early)}) at {at}"
+        if not self.diverged:
+            self.answered.clear()
+        if self.diverged:
+            raise Diverged(f"Claude Code CLI and Lucius disagree on a tool call: {self.diverged}")
 
     def tail(self, messages: list[dict]) -> list[dict]:
         """What this process has not seen: ``messages`` past its consumed prefix, minus its own
@@ -175,7 +228,8 @@ class NativeSession(claude_live_session.LiveSession):
         return not any(_has_tool_block(m) for m in self.tail(messages))
 
     async def close(self) -> None:
-        self.open, self.waiting, self.early = {}, {}, {}
+        self.open, self.waiting, self.early, self.names = {}, {}, {}, {}
+        self.answered = {}
         await super().close()
 
 

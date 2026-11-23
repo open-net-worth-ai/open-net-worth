@@ -210,19 +210,23 @@ async def _read(session: NativeSession, rnd: Round, model: str) -> AsyncGenerato
             log.debug(
                 "claude_native: event %s %s",
                 kind,
-                (ev.get("event") or {}).get("type")
+                wire.as_dict(ev.get("event")).get("type")
                 if kind == "stream_event"
                 else ev.get("subtype") or "",
             )
+            inner = wire.as_dict(ev.get("event")).get("type") if kind == "stream_event" else ""
+            if session.diverged or kind == "result" or inner == "message_start":
+                session.check_agreement(str(kind))
             if kind == "system" and ev.get("subtype") == "init":
                 api_key_source = ev.get("apiKeySource") or ""
             elif kind == "stream_event":
-                for out in _stream_event(ev.get("event") or {}, rnd):
+                for out in _stream_event(wire.as_dict(ev.get("event")), rnd):
                     resolved = out.pop("_model", resolved)
                     if out:
                         yield out
             elif kind == "assistant":
-                for out in _assistant(ev.get("message") or {}, rnd):
+                for out in _assistant(wire.as_dict(ev.get("message")), rnd):
+                    session.note(rnd.calls)
                     yield out
             elif kind == "result":
                 if ev.get("is_error"):
@@ -258,8 +262,8 @@ async def _read(session: NativeSession, rnd: Round, model: str) -> AsyncGenerato
 def _stream_event(ev: dict, rnd: Round):
     kind = ev.get("type")
     if kind == "message_start":
-        message = ev.get("message") or {}
-        rnd.requests.append(dict(message.get("usage") or {}))
+        message = wire.as_dict(ev.get("message"))
+        rnd.requests.append(dict(wire.as_dict(message.get("usage"))))
         rnd.delta_seen = False
         # One model message at a time: calls the CLI refused on its own (a tool it was not
         # given) end a message with `stop_reason: tool_use` too, and the next message goes on.
@@ -269,11 +273,11 @@ def _stream_event(ev: dict, rnd: Round):
         if message.get("model"):
             yield {"_model": message["model"]}
     elif kind == "content_block_start":
-        block = ev.get("content_block") or {}
+        block = wire.as_dict(ev.get("content_block"))
         if block.get("type") == "tool_use" and _known(block.get("name"), rnd):
             rnd.started += 1
     elif kind == "content_block_delta":
-        delta = ev.get("delta") or {}
+        delta = wire.as_dict(ev.get("delta"))
         if delta.get("type") == "thinking_delta" and delta.get("thinking"):
             yield {"type": "thinking_delta", "text": delta["thinking"]}
         elif delta.get("type") == "text_delta" and delta.get("text"):
@@ -282,11 +286,11 @@ def _stream_event(ev: dict, rnd: Round):
             rnd.delta_seen = True
             yield {"type": "text_delta", "text": delta["text"]}
     elif kind == "message_delta" and rnd.requests:
-        usage = ev.get("usage") or {}
+        usage = wire.as_dict(ev.get("usage"))
         rnd.requests[-1]["output_tokens"] = usage.get(
             "output_tokens", rnd.requests[-1].get("output_tokens", 0)
         )
-        if (ev.get("delta") or {}).get("stop_reason") == "tool_use":
+        if wire.as_dict(ev.get("delta")).get("stop_reason") == "tool_use":
             rnd.ended_on_tools = True
 
 
@@ -297,7 +301,8 @@ def _known(cli_name: object, rnd: Round) -> bool:
 
 def _assistant(message: dict, rnd: Round):
     """The calls and (without partial deltas) the text of one ``assistant`` event."""
-    for block in message.get("content") or []:
+    content = message.get("content")
+    for block in content if isinstance(content, list) else []:
         if not isinstance(block, dict):
             continue
         if block.get("type") == "tool_use":
@@ -306,13 +311,16 @@ def _assistant(message: dict, rnd: Round):
                 log.info(
                     "claude_native: the model called %s, which the CLI refuses itself", cli_name
                 )
-            if not _known(cli_name, rnd) or any(c["id"] == block["id"] for c in rnd.calls):
+            call_id = block.get("id")
+            if not isinstance(call_id, str) or not call_id or not _known(cli_name, rnd):
+                continue
+            if any(c["id"] == call_id for c in rnd.calls):
                 continue
             name, args = wire.unwrap(cli_name, block.get("input"))
-            rnd.calls.append({"id": block["id"], "cli_name": cli_name.removeprefix(wire.PREFIX)})
+            rnd.calls.append({"id": call_id, "cli_name": cli_name.removeprefix(wire.PREFIX)})
             rnd.started = max(rnd.started, len(rnd.calls))
-            yield {"type": "tool_use_start", "id": block["id"], "name": name}
-            yield {"type": "tool_use", "id": block["id"], "name": name, "input": args}
+            yield {"type": "tool_use_start", "id": call_id, "name": name}
+            yield {"type": "tool_use", "id": call_id, "name": name, "input": args}
         elif block.get("type") == "text" and block.get("text") and not rnd.delta_seen:
             yield {"type": "text_delta", "text": block["text"]}
 
