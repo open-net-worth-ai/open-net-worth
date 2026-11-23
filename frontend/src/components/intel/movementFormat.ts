@@ -53,3 +53,11 @@ export function generatedLabel(
   }
   return day === sessionDate ? `Generated ${clock}` : `Generated ${fDate(day)}, ${clock}`
 }
+
+/** Hover text for a notable move: how it compares with the instrument's usual day. */
+export function notableTitle(changePct: number | null, usualMovePct?: number | null): string {
+  if (changePct == null) return 'A notable move'
+  if (!usualMovePct) return 'A notable move for this kind of asset'
+  const times = Math.abs(changePct) / usualMovePct
+  return `About ${times.toFixed(1)}× its usual daily move (${usualMovePct.toFixed(1)}%)`
+}

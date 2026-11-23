@@ -323,16 +323,65 @@ def test_old_days_show_only_when_already_written_up_and_limit_counts_visible_row
     ]
 
 
-def test_notable_flag_uses_the_threshold():
-    bars = _bars(("2026-09-16", 100.0), ("2026-09-17", 103.0))
-    rows = svc.compose_rows(bars=bars, notes={}, live={}, market={"state": "CLOSED"}, today=TODAY)
-    assert rows[1]["notable"] is True
-    assert (
-        svc.compose_rows(bars=BARS, notes={}, live={}, market={"state": "CLOSED"}, today=TODAY)[1][
-            "notable"
-        ]
-        is False
+def _history(n: int, swing: float, start: float = 100.0) -> list[tuple[str, float]]:
+    """`n` weekday closes ending 2026-09-16, alternating ±`swing`% — a usual move of ~`swing`%."""
+    from datetime import date, timedelta
+
+    days: list[str] = []
+    d = date(2026, 9, 16)
+    while len(days) < n:
+        if d.weekday() < 5:
+            days.append(d.isoformat())
+        d -= timedelta(days=1)
+    days.reverse()
+    out, price = [], start
+    for i, day in enumerate(days):
+        price *= 1 + (swing if i % 2 else -swing) / 100
+        out.append((day, price))
+    return out
+
+
+def _last_row(history: list[tuple[str, float]], move_pct: float, asset_class=None) -> dict:
+    last = history[-1][1]
+    bars = _bars(*history, ("2026-09-17", last * (1 + move_pct / 100)))
+    rows = svc.compose_rows(
+        bars=bars,
+        notes={},
+        live={},
+        market={"state": "CLOSED"},
+        today=TODAY,
+        asset_class=asset_class,
     )
+    return next(r for r in rows if r["session_date"] == "2026-09-17")
+
+
+def test_notable_is_measured_against_the_instruments_usual_move():
+    calm, volatile = _history(70, 0.5), _history(70, 3.0)
+    # 2% is a big day for a calm name (~4× usual) and an ordinary one for a volatile name.
+    row = _last_row(calm, 2.0)
+    assert row["notable"] is True
+    assert row["usual_move_pct"] == pytest.approx(0.5, abs=0.1)
+    assert _last_row(volatile, 2.0)["notable"] is False
+    assert _last_row(volatile, 4.0)["notable"] is False  # ~1.3× usual
+    assert _last_row(volatile, 7.0)["notable"] is True  # ~2.3× usual
+    # However calm the name, a sub-1.5% day is never notable.
+    assert _last_row(_history(70, 0.1), 1.2)["notable"] is False
+
+
+def test_usual_move_never_includes_the_day_being_judged():
+    # A huge day must not inflate its own yardstick and talk itself out of being notable.
+    row = _last_row(_history(70, 0.5), 25.0)
+    assert row["usual_move_pct"] == pytest.approx(0.5, abs=0.1)
+    assert row["notable"] is True
+
+
+def test_without_history_the_asset_class_floor_applies():
+    short = [("2026-09-15", 100.0), ("2026-09-16", 100.0)]
+    assert _last_row(short, 3.0)["usual_move_pct"] is None
+    assert _last_row(short, 3.0)["notable"] is False  # equity floor 5%
+    assert _last_row(short, 5.5)["notable"] is True
+    assert _last_row(short, 8.0, asset_class="crypto")["notable"] is False  # crypto floor 10%
+    assert _last_row(short, 11.0, asset_class="crypto")["notable"] is True
 
 
 def test_fill_gaps_adds_a_skipped_weekday_from_our_closes_but_never_a_holiday_echo_or_tail():

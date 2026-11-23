@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import math
 
-LOOKBACK_RETURNS = 60  # trading days of daily returns for "usual move" and beta
-MIN_RETURNS = 30  # fewer than this → no stats
+from backend.services.move_significance import LOOKBACK_RETURNS, usual_move
+from backend.services.move_significance import daily_returns as _returns
+from backend.services.move_significance import stdev as _stdev
+
 DRAWDOWN_WINDOW = 20
 MOMENTUM_WINDOW = 21
 CROSS_LOOKBACK = 5  # a 200-day cross stays news for this many sessions
@@ -53,18 +55,6 @@ def bench_today(
     if not bench or bench_day is None:
         return None
     return bench[-1][1] * (1 + bench_day / 100)
-
-
-def _returns(closes: list[float]) -> list[float]:
-    return [(b - a) / a * 100.0 for a, b in zip(closes, closes[1:]) if a > 0]
-
-
-def _stdev(xs: list[float]) -> float | None:
-    if len(xs) < 2:
-        return None
-    m = sum(xs) / len(xs)
-    var = sum((x - m) ** 2 for x in xs) / (len(xs) - 1)
-    return math.sqrt(var) if var > 0 else None
 
 
 def _beta(
@@ -131,10 +121,9 @@ def history_stats(
     """Everything the rules read from history, or None when there's too little of it."""
     dated = closes_of(series)
     closes = [c for _, c in dated]
-    rets = _returns(closes)[-LOOKBACK_RETURNS:]
-    if len(rets) < MIN_RETURNS or not price:
+    if not price:
         return None
-    sigma = _stdev(rets)
+    sigma = usual_move(closes)
     if not sigma:
         return None
     out: dict = {"sigma": round(sigma, 3), "z": None, "beta": None, "move_kind": None}

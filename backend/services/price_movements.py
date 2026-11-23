@@ -21,10 +21,10 @@ from zoneinfo import ZoneInfo
 
 from backend.db.instrument_store import InstrumentStore
 from backend.db.price_movement_store import PriceMovementStore
+from backend.services.move_significance import is_notable, usual_move
 
 _log = logging.getLogger(__name__)
 
-NOTABLE_PCT = 2.0  # |day move| at/above this is emphasised as notable
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 30
 _FINAL_STATES = {"POST", "POSTPOST", "CLOSED"}
@@ -167,11 +167,34 @@ def _row(kind: str, session_date: str, **fields: Any) -> dict:
         "narrated_at": None,
         "narration": "none",
         "notable": False,
+        "usual_move_pct": None,
     }
     base.update(fields)
-    pct = base.get("change_pct")
-    base["notable"] = pct is not None and abs(pct) >= NOTABLE_PCT
     return base
+
+
+def score_rows(rows: list[dict], sessions: list[dict], asset_class: str | None) -> None:
+    """Stamp each row's `usual_move_pct` and `notable` from the ONE definition
+    (``move_significance``): the move against the instrument's own usual daily move, measured
+    over the sessions BEFORE that row's day — never the day itself, never a later one."""
+    dates = [s["session_date"] for s in sessions]
+    closes = [s["price"] for s in sessions]
+    for row in rows:
+        if row["kind"] == "market_closed":
+            continue
+        before = closes[: _count_before(dates, row["session_date"])]
+        sigma = usual_move(before)
+        row["usual_move_pct"] = None if sigma is None else round(sigma, 2)
+        row["notable"] = is_notable(row.get("change_pct"), sigma, asset_class)
+
+
+def _count_before(dates: list[str], day: str) -> int:
+    n = 0
+    for d in dates:
+        if d >= day:
+            break
+        n += 1
+    return n
 
 
 def _today_row(state: str, always_open: bool, today: str, live: dict, session: dict | None):
@@ -291,6 +314,7 @@ def compose_rows(
     market: dict | None,
     today: str,
     limit: int = DEFAULT_LIMIT,
+    asset_class: str | None = None,
 ) -> list[dict]:
     """The wire rows, newest first: today's row (live / notice / just-closed session) then up to
     `limit` VISIBLE completed sessions — a session inside the backfill window, or an older one
@@ -336,6 +360,7 @@ def compose_rows(
         visible += 1
         if visible >= limit:
             break
+    score_rows(rows, sessions, asset_class)
     return rows
 
 
@@ -613,7 +638,15 @@ def read_timeline(instrument_id: str, limit: int = DEFAULT_LIMIT) -> dict | None
         _persist_last_post(inst, live, notes)
     except Exception:
         _log.debug("price_movements: last-post persist skipped for %s", pid, exc_info=True)
-    rows = compose_rows(bars=bars, notes=notes, live=live, market=market, today=today, limit=limit)
+    rows = compose_rows(
+        bars=bars,
+        notes=notes,
+        live=live,
+        market=market,
+        today=today,
+        limit=limit,
+        asset_class=inst.get("asset_class"),
+    )
     return {
         "instrument_id": instrument_id,
         "ticker": inst.get("symbol"),

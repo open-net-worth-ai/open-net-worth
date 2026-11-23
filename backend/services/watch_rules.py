@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from backend.services.move_significance import FALLBACK_MOVE_PCT, fallback_threshold
 from backend.services.watch_findings import finding as _finding
 from backend.services.watch_history_rules import (
     Z_MATERIAL,
@@ -31,10 +32,9 @@ from backend.services.watch_history_rules import (
 from backend.services.watch_intent import intent_findings
 from backend.services.watch_market import split_suspect, volume_pace
 
-# Day-move thresholds (%) — deliberately far below crash-watch's 12/15/25: this is "worth a look
-# before you decide", not "your holding is cratering".
-MOVE_THRESHOLD_PCT = {"equity": 5.0, "commodity": 6.0, "crypto": 10.0}
-_DEFAULT_CLASS = "equity"
+# Day-move floors without history (%) live in ``move_significance`` — deliberately far below
+# crash-watch's 12/15/25: this is "worth a look before you decide", not "your holding is cratering".
+MOVE_THRESHOLD_PCT = FALLBACK_MOVE_PCT
 
 NEAR_EXTREME_PCT = 2.0  # within this % of a 52-week high/low
 NEAR_LOW_PCT = 3.0
@@ -63,7 +63,7 @@ OPPORTUNITY_KINDS = frozenset(
 
 
 def move_threshold(asset_class: str | None) -> float:
-    return MOVE_THRESHOLD_PCT.get((asset_class or "").lower(), MOVE_THRESHOLD_PCT[_DEFAULT_CLASS])
+    return fallback_threshold(asset_class)
 
 
 def day_pct(snap: dict) -> float | None:

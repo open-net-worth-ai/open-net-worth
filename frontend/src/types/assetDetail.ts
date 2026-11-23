@@ -469,7 +469,12 @@ export interface MovementRow {
    *  and the day was quiet in our news cache; failed = the provider or the guard let it down
    *  and it will retry (never shown as "no coverage"). Every row on the page gets one. */
   narration: 'ready' | 'pending' | 'none' | 'failed'
+  /** The move is notable for THIS instrument: at least 2× its usual daily move (never under
+   *  1.5%), or a fixed per-asset-class floor without enough history. */
   notable: boolean
+  /** The instrument's usual daily move (%) over the 60 sessions before this row's day; null
+   *  on thin history. */
+  usual_move_pct?: number | null
 }
 
 export interface MovementTimeline {

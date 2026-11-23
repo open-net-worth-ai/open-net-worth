@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generatedLabel } from './movementFormat'
+import { generatedLabel, notableTitle } from './movementFormat'
 
 // generatedLabel: the paragraph's own timestamp beside the sources pill. Relative inside 24h
 // ("3 hours ago") — owner ask 2026-09-21 — absolute, with the date, beyond that. The clock
@@ -39,5 +39,15 @@ describe('generatedLabel', () => {
   it('is empty without a stamp', () => {
     expect(generatedLabel(null, '2026-09-21', ET, 'ET', NOW)).toBe('')
     expect(generatedLabel('garbage', '2026-09-21', ET, 'ET', NOW)).toBe('')
+  })
+})
+
+describe('notableTitle', () => {
+  it('compares the move with the usual daily move', () => {
+    expect(notableTitle(-7.5, 2.5)).toBe('About 3.0× its usual daily move (2.5%)')
+  })
+  it('falls back without history', () => {
+    expect(notableTitle(6, null)).toBe('A notable move for this kind of asset')
+    expect(notableTitle(null, 2)).toBe('A notable move')
   })
 })

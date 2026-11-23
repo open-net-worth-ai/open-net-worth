@@ -211,8 +211,12 @@ analyst consensus) more room, drag its left edge; the page remembers the width. 
 to the default width, drag the edge back until it snaps into place (the edge turns blue), or
 double-click it. Under the chart, **Notable Price Movement** explains each
 trading session: the close, the % change, the after-hours price, and a short paragraph on why it
-moved, with the articles it's based on. While the market is open the top row updates live. A
-session with no coverage says *"No notable coverage found"* instead of guessing.
+moved, with the articles it's based on. While the market is open the top row updates live; its
+paragraph is rewritten once the move has changed by about one of the stock's usual daily moves
+(at least 1 percentage point), not on every wiggle of a big day. A session's price is highlighted
+when the move was unusual for that stock, using the same test as **Unusual moves** above; hover
+it to see how it compares with a usual day. A session with no coverage says *"No notable coverage
+found"* instead of guessing.
 
 The **Analysis** tab opens with **Key Issues**: the bull and bear case on each big question for
 the stock. Lucius writes these in the background after you open the page, so a ticker you haven't

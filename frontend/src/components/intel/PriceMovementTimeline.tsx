@@ -4,7 +4,7 @@ import type { Citation, MovementRow, MovementTimeline } from '../../types/assetD
 import { fDate, fPct, fUnitPrice, safeHref } from '../../utils/format'
 import { Skeleton } from '../ui/Skeleton'
 import { Favicon } from './Favicon'
-import { clockIn, generatedLabel } from './movementFormat'
+import { clockIn, generatedLabel, notableTitle } from './movementFormat'
 
 // "Notable Price Movement" — Perplexity Finance's per-session timeline, under the chart: the
 // venue's state on top (a live row while it trades, a "Market closed" notice while it's shut),
@@ -73,9 +73,10 @@ function PriceLine({
   maxFrac?: number
 }) {
   const notableCls = row.notable ? 'asd-pm-price asd-pm-price--notable' : 'asd-pm-price'
+  const title = row.notable ? notableTitle(row.change_pct, row.usual_move_pct) : undefined
   if (row.kind === 'live') {
     return (
-      <div className={notableCls}>
+      <div className={notableCls} title={title}>
         <span className="asd-pm-px">{fUnitPrice(row.price, currency, maxFrac)}</span>{' '}
         <Change pct={row.change_pct} />
         {row.phase === 'pre' && <span className="asd-pm-tag">Pre-Market</span>}
@@ -83,7 +84,7 @@ function PriceLine({
     )
   }
   return (
-    <div className={notableCls}>
+    <div className={notableCls} title={title}>
       <span className="asd-pm-px">{fUnitPrice(row.price, currency, maxFrac)}</span>{' '}
       <Change pct={row.change_pct} />
       <span className="asd-pm-tag">at Close</span>

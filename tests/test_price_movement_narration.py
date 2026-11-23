@@ -233,6 +233,27 @@ def test_live_row_renarrates_on_a_one_point_move_or_stale_with_new_evidence():
     assert mon.narration_due(_row("live", pct=0.5), stale, NOW) is True
 
 
+def test_live_rewrite_waits_for_one_usual_move_of_a_volatile_instrument():
+    # A +30% day on a name whose usual daily move is 3%: a 1.5pt wiggle leaves the paragraph
+    # true, so it is NOT rewritten (it was, every five minutes, under the fixed 1pt rule).
+    narrated = NOW - timedelta(minutes=10)
+    note = {
+        "summary": "…",
+        "narrated_at": narrated.isoformat(),
+        "narration_checked_at": narrated.isoformat(),
+        "narrated_change_pct": 30.0,
+        "narrated_phase": "regular",
+    }
+    volatile = {"usual_move_pct": 3.0}
+    assert mon.rewrite_delta(volatile) == 3.0
+    assert mon.narration_due(_row("live", pct=31.5, **volatile), note, NOW) is False
+    assert mon.narration_due(_row("live", pct=33.2, **volatile), note, NOW) is True
+    # A calm name (or no history) keeps the 1pt floor.
+    assert mon.rewrite_delta({"usual_move_pct": 0.4}) == mon.RENARRATE_PCT_DELTA
+    assert mon.rewrite_delta({}) == mon.RENARRATE_PCT_DELTA
+    assert mon.narration_due(_row("live", pct=31.1, usual_move_pct=0.4), note, NOW) is True
+
+
 def test_live_row_renarrates_when_the_session_phase_changes_under_its_paragraph():
     """Owner-reproduced 2026-09-21, ORCL at 12:35 ET: a paragraph written at 05:25 ET still
     read "trading modestly higher in Monday's pre-market session" three hours into the regular

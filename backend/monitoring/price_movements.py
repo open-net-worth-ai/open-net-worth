@@ -18,7 +18,8 @@ Cadence (the cost bound):
   * today's LIVE row: the four MILESTONES — pre-market open (first paragraph), the open
     (pre → regular phase change), close, post-market close — are guaranteed in the BACKGROUND
     for held/watched instruments (owner decision 2026-09-22, amending ADR 2026-09-20's
-    "live only on demand"); the ≥ ``RENARRATE_PCT_DELTA``-point move and the
+    "live only on demand"); the move-changed rewrite (≥ one usual daily move of the
+    instrument, floor ``RENARRATE_PCT_DELTA`` points — ``rewrite_delta``) and the
     ≥ ``RENARRATE_STALE_MIN``-minutes-with-newer-evidence rewrites stay on demand (someone is
     looking) — never more often than ``NARRATE_MIN_GAP_MIN`` minutes per instrument.
 """
@@ -129,6 +130,14 @@ def note_outcome(note: dict | None) -> str | None:
     return None
 
 
+def rewrite_delta(row: dict) -> float:
+    """How far (in % points) today's move must travel before its paragraph is out of date: one
+    usual daily move of THIS instrument (``move_significance``), never less than
+    RENARRATE_PCT_DELTA — a fixed point rewrote a volatile name on every wiggle of a big day
+    (owner 2026-11-23: a +30% day rewritten every five minutes)."""
+    return max(RENARRATE_PCT_DELTA, float(row.get("usual_move_pct") or 0.0))
+
+
 def narration_due(
     row: dict,
     note: dict | None,
@@ -214,7 +223,7 @@ def narration_due(
         return False  # the background sweep: milestones only, moves and news stay on demand
     last_pct = note.get("narrated_change_pct")
     pct = row.get("change_pct")
-    if pct is not None and last_pct is not None and abs(pct - last_pct) >= RENARRATE_PCT_DELTA:
+    if pct is not None and last_pct is not None and abs(pct - last_pct) >= rewrite_delta(row):
         return True
     stale = (now - narrated_at) >= timedelta(minutes=RENARRATE_STALE_MIN)
     newest = _parse_iso(note.get("newest_evidence_seen"))

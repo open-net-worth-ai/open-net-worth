@@ -6,12 +6,17 @@ cross). Pure: no I/O.
 
 from __future__ import annotations
 
+# The notable-move thresholds have ONE home (``move_significance``); re-exported for readers.
+from backend.services.move_significance import (
+    MIN_ABS_MOVE_PCT,
+    Z_HIGH,
+    Z_MATERIAL,
+    Z_NOTABLE,
+    is_notable,
+)
 from backend.services.watch_findings import finding as _finding
 
-Z_NOTABLE = 2.0  # a move this many "usual daily moves" is worth a chip
-Z_HIGH = 3.0
-Z_MATERIAL = 2.5  # …and this many, company-specific, is worth an explained alert
-MIN_ABS_MOVE_PCT = 1.5  # never call a sub-1.5% day unusual, however calm the stock
+__all__ = ["MIN_ABS_MOVE_PCT", "Z_HIGH", "Z_MATERIAL", "Z_NOTABLE"]
 
 
 def _scored_move_findings(
@@ -19,7 +24,7 @@ def _scored_move_findings(
 ) -> list[dict]:
     """A move measured against the stock's own usual daily move, plus what drove it."""
     z = stats.get("z")
-    if z is None or abs(z) < Z_NOTABLE or abs(d) < MIN_ABS_MOVE_PCT:
+    if z is None or not is_notable(d, stats.get("sigma")):
         return []
     up = d > 0
     times = abs(d) / stats["sigma"]
