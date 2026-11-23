@@ -1627,7 +1627,6 @@ def test_the_child_env_cannot_reroute_the_cli_or_read_app_secrets(monkeypatch):
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_BASE_URL",
         "ANTHROPIC_AUTH_TOKEN",
-        "CLAUDE_CONFIG_DIR",
         "CLAUDE_CODE_USE_BEDROCK",
         "OTEL_EXPORTER_OTLP_ENDPOINT",
         "ONW_SECRET_THING",
@@ -1640,12 +1639,16 @@ def test_the_child_env_cannot_reroute_the_cli_or_read_app_secrets(monkeypatch):
     assert "ANTHROPIC_API_KEY" not in env
     assert "ANTHROPIC_BASE_URL" not in env  # would silently meter a subscription run
     assert "ANTHROPIC_AUTH_TOKEN" not in env
-    assert "CLAUDE_CONFIG_DIR" not in env
     assert "CLAUDE_CODE_USE_BEDROCK" not in env
     assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in env
     assert "ONW_SECRET_THING" not in env
     assert "DATA_DIR" not in env
     assert env.get("PATH")  # the CLI still has to be findable
+
+    # Where the CLI keeps its sign-in is the server's own setting (the image sets it under the
+    # home volume), so the provider reads the same sign-in the Terminal wrote.
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", "/home/onw/.claude")
+    assert ccp._child_env("")["CLAUDE_CONFIG_DIR"] == "/home/onw/.claude"
 
     # An explicitly-stored key is the ONE thing that comes back.
     assert ccp._child_env("sk-ant-test")["ANTHROPIC_API_KEY"] == "sk-ant-test"
