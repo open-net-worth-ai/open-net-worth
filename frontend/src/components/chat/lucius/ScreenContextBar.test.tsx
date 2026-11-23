@@ -118,7 +118,7 @@ describe('ScreenContextBar', () => {
     expect(mockScreen.setEnabled).toHaveBeenCalledWith(false)
     const notice = document.body.querySelector('.lx-scope-notice')
     expect(notice?.getAttribute('role')).toBe('status')
-    expect(notice?.textContent).toBe('Screen awareness off.')
+    expect(notice?.textContent).toBe('Screen awareness off. Lucius can still look when you ask.')
   })
 
   it('confirms turning it on, and lets the notice go', () => {
@@ -131,7 +131,7 @@ describe('ScreenContextBar', () => {
 
       expect(mockScreen.setEnabled).toHaveBeenCalledWith(true)
       expect(document.body.querySelector('.lx-scope-notice')?.textContent).toBe(
-        'Screen awareness on.',
+        'Screen awareness on. Always sent with your message — can use more tokens.',
       )
       act(() => {
         vi.advanceTimersByTime(5000)
@@ -147,7 +147,7 @@ describe('ScreenContextBar', () => {
     const { container } = render(
       <ScreenContextBar compact={compact} visibleIds={EMPTY_VISIBLE_IDS} />,
     )
-    expect(container.textContent).toContain('Lucius looks only if you ask')
+    expect(container.textContent).toContain('Lucius can still look when you ask')
     expect(container.textContent).not.toContain('Overview')
   })
 

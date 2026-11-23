@@ -28,11 +28,11 @@ const PEEK_VIEWPORT_EDGE = 4
 const PEEK_ANCHOR_GAP = 6
 const PEEK_MAX_HEIGHT = 244
 const NOTICE_MS = 4500
-const NOTICE_ON = 'Screen awareness on.'
-const NOTICE_OFF = 'Screen awareness off.'
-const OFF_SUB = 'Lucius looks only if you ask'
-const ON_SUB = 'Always sent with your message — can use more tokens'
-const OFF_TOOLTIP = 'Screen awareness off — Lucius will look only if you ask.'
+const NOTICE_ON = 'Screen awareness on. Always sent with your message — can use more tokens.'
+const NOTICE_OFF = 'Screen awareness off. Lucius can still look when you ask.'
+const OFF_SUB = 'Lucius can still look when you ask'
+const ON_SUB = 'Always sent with your message'
+const OFF_TOOLTIP = 'Screen awareness off — Lucius can still look when you ask.'
 
 export interface ScreenContextBarProps {
   visibleIds: Set<string>
@@ -319,7 +319,9 @@ export function ScreenContextBar({
                   ? 'Screen awareness on — click to stop sending this screen with each message'
                   : 'Screen awareness off — click to send this screen with each message'
               }
-              title={enabled ? 'Always sent with your message' : 'Lucius looks only if you ask'}
+              title={
+                enabled ? 'Always sent with your message' : 'Lucius can still look when you ask'
+              }
               onMouseDown={(e) => e.preventDefault()}
               onClick={flip}
             >
@@ -387,7 +389,7 @@ export function ScreenContextBar({
             aria-checked={enabled}
             onMouseDown={(e) => e.preventDefault()}
             onClick={flip}
-            title={enabled ? 'Always sent with your message' : 'Lucius looks only if you ask'}
+            title={enabled ? 'Always sent with your message' : 'Lucius can still look when you ask'}
           >
             <span className="lx-switch-knob" />
           </button>
