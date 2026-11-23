@@ -166,7 +166,7 @@ describe('affected mobile views', () => {
     expect(
       readFileSync(new URL('./investments/PerformanceTab.tsx', import.meta.url), 'utf8'),
     ).toContain("import './design.css'")
-    for (const cls of ['.mk-toolsel', '.mk-panel', '.stat-pop', '.rk-cell']) {
+    for (const cls of ['.mk-toolsel', '.mk-panel', '.mk-stat-pop', '.rk-cell']) {
       expect(investmentsCss).toContain(`\n${cls} {`)
     }
   })
