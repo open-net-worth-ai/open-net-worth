@@ -40,14 +40,14 @@ def test_default_enabled_true(client):
     assert body["chat_suggestions_enabled"] is True
 
 
-def test_screen_awareness_default_starts_on_and_round_trips(client):
-    # An unset key is on: the app reads anything but an explicit False that way.
-    assert client.get("/api/profile").json().get("screen_awareness_default", True) is True
+def test_screen_awareness_default_starts_off_and_round_trips(client):
+    # An unset key is off: the app reads anything but an explicit True that way.
+    assert client.get("/api/profile").json().get("screen_awareness_default", False) is False
 
-    r = client.put("/api/profile", json={"screen_awareness_default": False})
+    r = client.put("/api/profile", json={"screen_awareness_default": True})
     assert r.status_code == 200
-    assert r.json()["profile"]["screen_awareness_default"] is False
-    assert client.get("/api/profile").json()["screen_awareness_default"] is False
+    assert r.json()["profile"]["screen_awareness_default"] is True
+    assert client.get("/api/profile").json()["screen_awareness_default"] is True
 
 
 def test_toggle_round_trips(client):

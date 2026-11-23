@@ -57,7 +57,7 @@ this drop?"* while looking at a chart is enough.
 - **Turn it on or off** with the **Screen awareness** switch just above the message box. Your choice
   is remembered in this browser (or this copy of the desktop app), for every screen. With it off,
   the bar reads **Attach screen content as context**, which is what turning it on does.
-- **Choose how new devices start** in **Settings → Chat → Screen awareness by default**. It's **on**
+- **Choose how new devices start** in **Settings → Chat → Screen awareness by default**. It's **off**
   unless you change it. Changing it also resets the switch on the device you're using; a device where
   you've already used the switch keeps your choice. On a phone, Lucius is a full tab that replaces
   the screen, so there's no switch and messages never carry one.

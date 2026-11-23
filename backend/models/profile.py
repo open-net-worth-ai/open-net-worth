@@ -107,8 +107,8 @@ class Profile(ONBaseModel):
     # How much detail Lucius puts in an answer: brief | normal | detailed (None = normal). Read
     # per turn by ``assistant._resolve_style``; normal adds no style line.
     chat_response_detail: Optional[Literal["brief", "normal", "detailed"]] = None
-    # Whether a device with no choice of its own sends the screen with each message. Default ON.
-    screen_awareness_default: bool = True
+    # Whether a device with no choice of its own sends the screen with each message. Default OFF.
+    screen_awareness_default: bool = False
     # Feature intros already shown (UI state, never model-facing).
     seen_intros: List[str] = []
 
