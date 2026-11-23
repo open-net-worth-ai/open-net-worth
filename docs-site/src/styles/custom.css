@@ -1514,3 +1514,49 @@ site-search button[data-close-modal] {
   }
   site-search button[data-open-modal] kbd { display: none; }
 }
+
+
+/* ── Docs home: three ways to run it ────────────────────────────────────────
+   Desktop app, your own server (the install command), Private Cloud. Equal columns that
+   share one baseline for their buttons; one column on a phone. */
+.docs-ways {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-block-end: 2.5rem;
+}
+@media (max-width: 50rem) {
+  .docs-ways { grid-template-columns: minmax(0, 1fr); }
+}
+.docs-ways > .docs-way { margin: 0; }  /* the docs theme spaces siblings apart; a row must not */
+.docs-way {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border: 1px solid var(--onw-line);
+  border-radius: 12px;
+  background: var(--onw-surface);
+  padding: 1.1rem 1.2rem;
+}
+.docs-way h2 { margin: 0; font-size: 1.0625rem; font-weight: 600; }
+.docs-way p { margin: 0; font-size: 0.8125rem; line-height: 1.6; color: var(--onw-muted); }
+.docs-way .docs-hero__ctas { margin-top: auto; padding-top: 0.25rem; }
+.docs-way--featured { border-color: var(--onw-line-strong); }
+.docs-ways .docs-hero__ctas a.docs-btn { text-decoration: none; }
+.docs-ways .docs-hero__ctas a.docs-btn--primary,
+.docs-ways .docs-hero__ctas a.docs-btn--primary:hover {
+  color: var(--onw-bg);
+  background: var(--onw-ink);
+  border-color: var(--onw-ink);
+}
+.docs-ways .docs-hero__ctas a.docs-btn--primary:hover { background: var(--onw-muted); border-color: var(--onw-muted); }
+
+/* The header's Private Cloud link, beside the social icons. */
+.onw-header-link {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--onw-ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.onw-header-link:hover { color: var(--onw-muted); }
