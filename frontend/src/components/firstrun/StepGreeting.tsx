@@ -13,6 +13,8 @@ export interface StepGreetingProps {
   onSetup: () => void
   /** Behind an authenticating proxy: no local password, and the host owns where files live. */
   gatewayMode?: boolean
+  /** Private Cloud already connected Open Net Worth AI: there is no model to choose. */
+  managedAi?: boolean
 }
 
 const NEXT_STEPS = [
@@ -33,13 +35,19 @@ const NEXT_STEPS = [
   },
 ]
 
-export function StepGreeting({ onSetup, gatewayMode = false }: StepGreetingProps) {
-  const nextSteps = gatewayMode
-    ? [
-        { ...NEXT_STEPS[0]!, body: 'The one your totals are shown in.' },
-        { ...NEXT_STEPS[1]!, body: 'Claude Code, Codex, or an API key.' },
-      ]
-    : NEXT_STEPS
+export function StepGreeting({
+  onSetup,
+  gatewayMode = false,
+  managedAi = false,
+}: StepGreetingProps) {
+  const nextSteps = managedAi
+    ? [{ ...NEXT_STEPS[0]!, body: 'The one your totals are shown in.' }]
+    : gatewayMode
+      ? [
+          { ...NEXT_STEPS[0]!, body: 'The one your totals are shown in.' },
+          { ...NEXT_STEPS[1]!, body: 'Claude Code, Codex, or an API key.' },
+        ]
+      : NEXT_STEPS
   return (
     <div className="firstrun-greeting">
       <div className="firstrun-greeting__col firstrun-greeting__col--left">

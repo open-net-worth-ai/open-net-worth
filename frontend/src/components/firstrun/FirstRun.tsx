@@ -70,6 +70,25 @@ async function hasSavedModel(): Promise<boolean> {
   }
 }
 
+/** Whether Private Cloud already connected Open Net Worth AI here (only asked behind the gateway). */
+function useManagedAi(gatewayMode: boolean): boolean {
+  const [managed, setManaged] = useState(false)
+  useEffect(() => {
+    if (!gatewayMode) return
+    let live = true
+    void authFetch('/api/model-config/onw-ai')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (live && d?.managed === true) setManaged(true)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [gatewayMode])
+  return managed
+}
+
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
 }
@@ -97,7 +116,10 @@ export function FirstRun({
   restorePending = false,
   gatewayMode = false,
 }: FirstRunProps) {
-  const titles = gatewayMode ? TITLES.slice(0, 2) : TITLES
+  // Private Cloud connects Open Net Worth AI before the first open, so the model step has
+  // nothing to ask: the currency is the last screen and Lucius's chat comes next.
+  const managedAi = useManagedAi(gatewayMode)
+  const titles = managedAi ? TITLES.slice(0, 1) : gatewayMode ? TITLES.slice(0, 2) : TITLES
   const desktop = Boolean(desktopBridge())
   // CONTROLLED by the url when the caller supplies both props, uncontrolled otherwise.
   //
@@ -199,7 +221,8 @@ export function FirstRun({
     } finally {
       setBusy(false)
     }
-    setStep(1)
+    if (managedAi) await finish()
+    else setStep(1)
   }
 
   async function finish() {
@@ -248,7 +271,7 @@ export function FirstRun({
   if (step === GREETING) {
     return (
       <div className="firstrun-shell">
-        <StepGreeting onSetup={() => setStep(0)} gatewayMode={gatewayMode} />
+        <StepGreeting onSetup={() => setStep(0)} gatewayMode={gatewayMode} managedAi={managedAi} />
       </div>
     )
   }
@@ -258,7 +281,7 @@ export function FirstRun({
       <div className="firstrun-page">
         <div className="firstrun-topbar">
           <FirstRunMark />
-          {step !== RESTORE && (
+          {step !== RESTORE && titles.length > 1 && (
             <div className="firstrun-counter">
               <span className="firstrun-counter__current">{pad2(step + 1)}</span>
               <span className="firstrun-counter__rule" aria-hidden="true" />
@@ -303,7 +326,8 @@ export function FirstRun({
               <StepRestore
                 onDone={() => {
                   setRestoredThisSession(true)
-                  setStep(1, { replace: true })
+                  if (managedAi) void finish()
+                  else setStep(1, { replace: true })
                 }}
                 onBack={() => setStep(0)}
               />
