@@ -29,7 +29,7 @@ All relative to the app's address (e.g. `http://localhost:8080`):
 |---|---|
 | `/` | The app. |
 | `/help` | This help center, inside the app. |
-| `/api/health` | A health check — returns `{"status": "ok", …}` with the version when the server is up. Works without signing in, so it's safe for a monitoring tool or a load balancer. |
+| `/api/health` | A health check — returns `{"status": "ok", …}` with the version when the server is up, plus a `memory` block (`total_mb`, `used_mb`, `peak_mb`, `swap_mb`) when the host reports a memory limit — sizes only, no contents. Works without signing in, so it's safe for a monitoring tool or a load balancer. |
 
 To see which address a running server is on, run `onw status`.
 
