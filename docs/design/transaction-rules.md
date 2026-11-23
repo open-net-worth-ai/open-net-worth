@@ -1,6 +1,6 @@
 # Rules — fixed transaction rules, no AI (design)
 
-Status: **draft for owner review** · 2026-11-21 · flag `transaction_rules` (default off)
+Status: **draft for owner review** · 2026-11-21 · flag `transaction_rules` (default on since 2026-11-24)
 
 ## Problem
 

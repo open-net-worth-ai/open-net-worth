@@ -223,7 +223,7 @@ Deleting an Automation also deletes its run history. It can't be undone.
 
 ## Rules
 
-*Needs **Rules in Automations** turned on in Settings, Developer, Experimental.*
+*On by default. To hide Rules, turn off **Settings → Developer → Experimental → Rules in Automations**.*
 
 A Rule handles new transactions with fixed conditions and no AI, so it costs nothing and applies
 the instant a transaction is saved. Use a Rule when you can say exactly what should match ("payee is

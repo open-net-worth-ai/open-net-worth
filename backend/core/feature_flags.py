@@ -255,7 +255,7 @@ FLAGS: tuple[Flag, ...] = (
             "the Ledger. Lucius can make and apply rules too. Off: rules cannot be created, and "
             "existing ones run as before."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 11, 21),
         remove_by=date(2027, 3, 1),
