@@ -390,6 +390,9 @@ export interface BenchmarkRosterItem {
   key: string // roster key (e.g. "SPY") or "" for "no benchmark"
   label: string // display label (e.g. "SPY • S&P 500")
   symbol: string // raw ticker symbol (same as key for these instruments)
+  /** Picker heading: "US", "World", "Europe", "Asia & emerging", "Crypto", or "Your benchmark"
+   *  for a ticker the owner searched for; "" for "No benchmark". */
+  group?: string
 }
 
 // ── Risk-adjusted metrics block (GET /api/returns?risk=true) ─────────────────

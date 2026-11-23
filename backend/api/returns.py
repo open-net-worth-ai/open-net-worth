@@ -28,8 +28,10 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
+from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.services import returns as returns_service
 from backend.services import risk_metrics
 
@@ -65,6 +67,22 @@ def get_benchmarks():
     Returns [{key, label, symbol}] in display order, including the empty-key 'none' option.
     """
     return {"benchmarks": risk_metrics.benchmark_roster()}
+
+
+class PrepareBenchmarkBody(BaseModel):
+    instrument_id: str = Field(..., min_length=1)
+
+
+@router.post("/api/returns/benchmarks/prepare")
+def prepare_benchmark(body: PrepareBenchmarkBody):
+    """Get a ticker picked from the market search ready to be the benchmark (its price history
+    is fetched now). Returns its picker entry; saving it is `PUT /api/profile`."""
+    from backend.services.benchmark_seed import prepare_custom_benchmark
+
+    try:
+        return prepare_custom_benchmark(body.instrument_id)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 
 
 @router.get("/api/returns")

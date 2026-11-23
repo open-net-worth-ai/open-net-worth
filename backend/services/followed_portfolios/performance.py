@@ -20,7 +20,11 @@ from backend.core.user_time import user_today
 from backend.services import prices
 from backend.services.followed_portfolios import closes_store, copier, share_classes
 from backend.services.followed_portfolios.model import build_model, normalize_symbol
-from backend.services.risk_metrics import BENCHMARK_ROSTER, preferred_benchmark
+from backend.services.risk_metrics import (
+    BENCHMARK_ROSTER,
+    benchmark_instrument,
+    preferred_benchmark,
+)
 
 PERIODS = ("1M", "6M", "12M", "FILING", "ALL")
 _FALLBACK_BENCHMARK = "SPY"
@@ -207,6 +211,19 @@ def closes(symbol: str) -> dict[str, float]:
     return dict(sorted(out.items()))
 
 
+def _benchmark_symbol(key: str) -> str | None:
+    """The quote symbol to fetch for the owner's benchmark: a roster key as it is, a typed-in
+    ticker by its own market listing. A coin is not a yardstick for a stock portfolio."""
+    if key in BENCHMARK_ROSTER:
+        return BENCHMARK_ROSTER[key] if key != "BTC" else None
+    inst = benchmark_instrument(key) or {}
+    if (inst.get("asset_class") or "").lower() == "crypto":
+        return None
+    if (inst.get("price_source") or "").lower() == "yahoo":
+        return inst.get("price_source_id") or None
+    return None
+
+
 def _closes(symbol: str) -> dict[str, float]:
     """``closes``, read from the copy kept on disk when it is fresh enough."""
     kept = closes_store.load(symbol)
@@ -238,9 +255,7 @@ def performance_for(follow: dict, *, every_holding: bool = True, workers: int = 
     follow = share_classes.grouped(follow)
     today = user_today()
     model = build_model(follow, today)
-    key = preferred_benchmark()
-    benchmark = BENCHMARK_ROSTER.get(key) if key != "BTC" else None
-    benchmark = benchmark or _FALLBACK_BENCHMARK
+    benchmark = _benchmark_symbol(preferred_benchmark()) or _FALLBACK_BENCHMARK
     empty = {"benchmark": benchmark, "periods": {}, "trade_returns": {}}
     if not model or not model["holdings"]:
         return empty

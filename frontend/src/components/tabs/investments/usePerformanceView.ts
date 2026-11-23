@@ -72,7 +72,7 @@ export interface PerformanceViewModel {
   period: ReturnPeriod
   setPeriod: (p: ReturnPeriod) => void
   benchKey: string
-  setBenchKey: (k: string) => void
+  setBenchKey: (k: string, added?: BenchmarkRosterItem) => void
 
   // Status
   loading: boolean
@@ -121,13 +121,25 @@ export function usePerformanceView(): PerformanceViewModel {
   const preferred = usePreferredBenchmark()
   const [picked, setPicked] = useState<string | null>(null)
   const benchKey = picked ?? preferred
-  const setBenchKey = useCallback((key: string) => {
-    setPicked(key)
-    persistPreferredBenchmark(key)
-  }, [])
   const [benchmarks, setBenchmarks] = useState<BenchmarkRosterItem[]>(
     () => _rosterCache.get('roster') ?? [],
   )
+  // `added`: a ticker just picked from the market search — it heads the list as "Your benchmark"
+  // (replacing an earlier one), as the server's roster lists it from now on.
+  const setBenchKey = useCallback((key: string, added?: BenchmarkRosterItem) => {
+    setPicked(key)
+    persistPreferredBenchmark(key)
+    if (added) {
+      setBenchmarks((rows) => {
+        const next = [
+          added,
+          ...rows.filter((b) => b.group !== 'Your benchmark' && b.key !== added.key),
+        ]
+        _rosterCache.set('roster', next)
+        return next
+      })
+    }
+  }, [])
 
   const dataKey = `${period}|${benchKey}`
   const [data, setData] = useState<PerfData | null>(() => _dataCache.get(dataKey) ?? null)

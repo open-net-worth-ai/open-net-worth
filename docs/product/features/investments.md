@@ -121,7 +121,15 @@ its shares as a lot, which you correct or remove under **Acquisition lots**.
 | **Equity Compensation** | RSU/ESOW/LTIP grants and vests — see [Equity compensation](equity-compensation.md). |
 
 The benchmark you pick on **Performance** becomes your benchmark everywhere, including Intel's
-briefs.
+briefs. Open the benchmark menu above the chart to choose one: the list is grouped into **US**
+(S&P 500, Nasdaq-100), **World** (FTSE All-World, MSCI ACWI, MSCI World in EUR), **Europe** (DAX,
+EURO STOXX 50, STOXX Europe 600), **Asia & emerging** (Nikkei 225, MSCI Japan, MSCI Emerging
+Markets) and **Crypto** (Bitcoin), each tracked through an ETF. To compare with something else,
+type a name or ticker in the menu's search box and pick a match from **Market**. The app fetches
+its price history and it becomes your benchmark, listed at the top as **Your benchmark**.
+
+Your portfolio and the benchmark are both valued at today's exchange rates on every past day, so
+neither line includes currency moves, and the comparison is like for like.
 
 ## Options
 

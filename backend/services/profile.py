@@ -29,7 +29,8 @@ DEFAULT_PROFILE: dict = {
     "risk_concentration_guideline": 20.0,
     "risk_stress_drop_pct": 30.0,
     # The benchmark every "vs the market" figure compares against — Performance, the Intel
-    # Holdings brief and the watch pulse. A `risk_metrics.BENCHMARK_ROSTER` key.
+    # Holdings brief and the watch pulse. A `risk_metrics.BENCHMARK_ROSTER` key, or a ticker the
+    # owner searched for (`risk_metrics.is_benchmark_key`).
     "preferred_benchmark": "SPY",
     "retirement_target_age": None,
     "date_of_birth": None,

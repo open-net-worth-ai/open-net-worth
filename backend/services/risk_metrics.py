@@ -52,23 +52,65 @@ CANONICAL_BETA_SYMBOL: str = "SPY"  # Beta is always vs this, never the visual b
 # GET /api/returns/benchmarks so the label list is never hard-coded in two places.
 BENCHMARK_ROSTER: dict[str, str] = {
     "SPY": "SPY",  # S&P 500 — market anchor and canonical Beta denominator
-    "VWRA": "VWRA",  # Vanguard FTSE All-World (acc)
     "QQQ": "QQQ",  # Nasdaq-100
+    "VWRA": "VWRA",  # Vanguard FTSE All-World (acc)
     "ACWI": "ACWI",  # MSCI All-Country World
+    "EUNL": "EUNL",  # MSCI World, the EUR (Xetra) listing
+    "EXS1": "EXS1",  # DAX
+    "EXW1": "EXW1",  # EURO STOXX 50
+    "EXSA": "EXSA",  # STOXX Europe 600
+    "1321": "1321",  # Nikkei 225 (Tokyo listing)
+    "EWJ": "EWJ",  # MSCI Japan
+    "EEM": "EEM",  # MSCI Emerging Markets
     "BTC": "BTC",  # crypto-beta reference
     # "" (none) → no visual benchmark; Beta still computed vs the canonical SPY anchor
 }
 
+# Which heading each roster entry sits under in the picker, in picker order.
+_ROSTER_GROUPS: dict[str, tuple[str, ...]] = {
+    "US": ("SPY", "QQQ"),
+    "World": ("VWRA", "ACWI", "EUNL"),
+    "Europe": ("EXS1", "EXW1", "EXSA"),
+    "Asia & emerging": ("1321", "EWJ", "EEM"),
+    "Crypto": ("BTC",),
+}
+
+
+def benchmark_instrument(key: str) -> dict | None:
+    """The instrument a benchmark key names: a roster key, or any ticker symbol the app has an
+    instrument for (a benchmark the owner typed in). None when nothing prices it."""
+    from backend.db.instrument_store import InstrumentStore
+    from backend.services.benchmark_seed import roster_listing
+
+    symbol = BENCHMARK_ROSTER.get(key, key) if key else ""
+    if not symbol:
+        return None
+    store = InstrumentStore()
+    listing = roster_listing(symbol)
+    inst = (store.find_by_source(*listing) if listing else None) or store.find_by_symbol(symbol)
+    return inst if inst and inst.get("price_source_id") else None
+
+
+def is_benchmark_key(key: str | None) -> bool:
+    """A value `preferred_benchmark` may hold: a roster key (or "" for none), or a ticker the app
+    can price — the picker's search finds-or-creates its instrument before saving it."""
+    if key is None or key in BENCHMARK_ROSTER or key == "":
+        return True
+    return benchmark_instrument(key) is not None
+
 
 def preferred_benchmark(profile: dict | None = None) -> str:
-    """The user's benchmark key (profile `preferred_benchmark`, set from the Performance picker),
-    validated against the roster — the ONE benchmark every "vs the market" figure uses."""
+    """The user's benchmark key (profile `preferred_benchmark`, set from the Performance picker):
+    a roster key or a ticker they typed in — the ONE benchmark every "vs the market" figure uses.
+    Falls back to SPY when the stored value no longer names anything the app can price."""
     if profile is None:
         from backend.services.profile import read_profile
 
         profile = read_profile()
     key = (profile or {}).get("preferred_benchmark") or "SPY"
-    return key if BENCHMARK_ROSTER.get(key) else "SPY"
+    if BENCHMARK_ROSTER.get(key):
+        return key
+    return key if benchmark_instrument(key) else "SPY"
 
 
 # Sharpe clamping band: prevents a near-zero vol denominator from producing an absurd ratio.
@@ -80,6 +122,13 @@ _ROSTER_LABELS: dict[str, str] = {
     "VWRA": "VWRA • Vanguard All-World",
     "QQQ": "QQQ • Nasdaq-100",
     "ACWI": "ACWI • MSCI All-Country World",
+    "EUNL": "EUNL • MSCI World (EUR)",
+    "EXS1": "EXS1 • DAX",
+    "EXW1": "EXW1 • EURO STOXX 50",
+    "EXSA": "EXSA • STOXX Europe 600",
+    "1321": "1321 • Nikkei 225",
+    "EWJ": "EWJ • MSCI Japan",
+    "EEM": "EEM • MSCI Emerging Markets",
     "BTC": "BTC • Bitcoin",
     "": "No benchmark",
 }
@@ -248,19 +297,40 @@ def risk_summary(
 
 
 def benchmark_roster() -> list[dict]:
-    """The curated benchmark roster — one entry per key including the empty-key 'none' option.
+    """The curated benchmark roster, grouped by region, then the empty-key 'none' option — and,
+    first, the owner's own typed-in benchmark when they have one, so the picker can name it.
 
     Returned in display order so the FE can render the picker without sorting.
     """
-    order = ["SPY", "VWRA", "QQQ", "ACWI", "BTC", ""]
-    return [
-        {
-            "key": k,
-            "label": _ROSTER_LABELS.get(k, k),
-            "symbol": BENCHMARK_ROSTER.get(k, ""),
-        }
-        for k in order
-    ]
+    out: list[dict] = []
+    current = preferred_benchmark()
+    if current not in BENCHMARK_ROSTER:
+        custom = custom_benchmark_entry(current)
+        if custom:
+            out.append(custom)
+    for group, keys in _ROSTER_GROUPS.items():
+        out.extend(
+            {
+                "key": k,
+                "label": _ROSTER_LABELS.get(k, k),
+                "symbol": BENCHMARK_ROSTER[k],
+                "group": group,
+            }
+            for k in keys
+        )
+    out.append({"key": "", "label": _ROSTER_LABELS[""], "symbol": "", "group": ""})
+    return out
+
+
+def custom_benchmark_entry(key: str) -> dict | None:
+    """A picker entry for a typed-in benchmark: `SYMBOL • Name`, under "Your benchmark"."""
+    inst = benchmark_instrument(key)
+    if not inst:
+        return None
+    symbol = inst.get("symbol") or key
+    name = inst.get("name") or ""
+    label = f"{symbol} • {name}" if name and name != symbol else symbol
+    return {"key": symbol, "label": label, "symbol": symbol, "group": "Your benchmark"}
 
 
 # ── Internal helpers ────────────────────────────────────────────────────────────────
@@ -357,10 +427,9 @@ def _benchmark_daily_returns(
     Returns (dates, daily_returns) or None when the instrument is not found, has no
     price_source_id, or has too few price points — graceful degrade, no synthetic data.
     """
-    from backend.db.instrument_store import InstrumentStore
     from backend.services.returns import benchmark_price_series
 
-    inst = InstrumentStore().find_by_symbol(symbol)
+    inst = benchmark_instrument(symbol)
     if not inst:
         return None
 
