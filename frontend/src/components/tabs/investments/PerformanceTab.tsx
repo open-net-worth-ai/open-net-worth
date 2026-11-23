@@ -220,7 +220,11 @@ export function PerfChart({
 
 // ── StatInfo ──────────────────────────────────────────────────────────────────
 // Inline hover-triggered info tooltip ("italic i" button + popover).
-// Uses .stat-info/.stat-pop classes from design.css (CSS-only hover, no JS).
+// Uses .mk-stat-info/.mk-stat-pop from design.css (CSS shows it on hover/focus).
+
+/** .mk-stat-pop's width, and the gap it keeps from the screen's edges. */
+const STAT_POP_W = 232
+const STAT_POP_EDGE = 8
 
 interface StatInfoProps {
   text: string
@@ -228,9 +232,33 @@ interface StatInfoProps {
 }
 
 function StatInfo({ text, alignRight }: StatInfoProps) {
+  // Placed as it opens, inside the screen: a card's place in the desktop row says nothing once the
+  // cards wrap (on a phone a right-hand card's tooltip ran off the screen, and on a narrow screen
+  // neither side fits an icon mid-row). It opens where the CSS puts it, then shifts just enough.
+  const [left, setLeft] = useState<number | null>(null)
+  const place = (e: React.SyntheticEvent<HTMLElement>) => {
+    const icon = e.currentTarget.getBoundingClientRect()
+    const natural = alignRight ? icon.right + 5 - STAT_POP_W : icon.left - 5
+    const max = window.innerWidth - STAT_POP_EDGE - STAT_POP_W
+    const fitted = Math.max(STAT_POP_EDGE, Math.min(natural, max))
+    setLeft(Math.round(fitted - icon.left))
+  }
   return (
-    <span className="stat-info" tabIndex={0} role="button" aria-label="What does this mean?">
-      i<span className={'stat-pop' + (alignRight ? ' r' : '')}>{text}</span>
+    <span
+      className="mk-stat-info"
+      tabIndex={0}
+      role="button"
+      aria-label="What does this mean?"
+      onPointerEnter={place}
+      onFocus={place}
+    >
+      i
+      <span
+        className={'mk-stat-pop' + (alignRight ? ' r' : '')}
+        style={left === null ? undefined : { left, right: 'auto' }}
+      >
+        {text}
+      </span>
     </span>
   )
 }
