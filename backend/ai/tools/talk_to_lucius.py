@@ -16,7 +16,7 @@ from pydantic import Field
 
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of
-from backend.core import mcp_progress
+from backend.core import mcp_progress, mcp_ui
 from backend.core.audit_context import get_audit_scope
 from backend.core.chat_session import get_session_id
 from backend.core.errors import OpenNetWorthError
@@ -36,9 +36,11 @@ _NOT_MCP = (
 class AskLuciusInput(ToolInput):
     question: Optional[str] = Field(
         default=None,
-        description="What to ask or tell Lucius, in plain words, e.g. 'Should I buy these 289 "
-        "headphones now or wait?' or 'I just bought them on Card B, log it.' Omit it, with "
-        "conversation_id, to check how an earlier ask ended (an approval the user gave or not).",
+        description="What to ask or tell Lucius: the user's own words, as they said them — "
+        "never narrowed or reworded, since a rewrite can change what they asked. E.g. 'Should "
+        "I buy these 289 headphones now or wait?' or 'I just bought them on Card B, log it.' "
+        "Your own reading of it goes in `context`. Omit it, with conversation_id, to check how "
+        "an earlier ask ended (an approval the user gave or not).",
     )
     context: Optional[str] = Field(
         default=None,
@@ -101,8 +103,9 @@ async def talk_to_lucius(input_data: dict):
     except OpenNetWorthError as exc:
         return json.dumps({"error": exc.message or str(exc)}), None
     waiting = app_asks.waiting_approvals(session_id)
-    if waiting and question:
-        await _tell_owner(caller, waiting)
+    elsewhere = [w for w in waiting if not (w["in_chat"] and mcp_ui.supports(caller))]
+    if elsewhere and question:
+        await _tell_owner(caller, elsewhere)
     return json.dumps(result_for(session_id, answer, waiting), ensure_ascii=False), None
 
 
@@ -126,6 +129,8 @@ def result_for(session_id: str, answer: str, waiting: list[dict]) -> dict:
 
 
 async def _tell_owner(caller: str, waiting: list[dict]) -> None:
+    """A notice for the cards the owner can't answer in the app's chat: one the chat shows with
+    buttons is already in front of them, and a notice too reached them twice (2026-11-23)."""
     from backend.ai import app_asks
     from backend.services.notify import notify
 

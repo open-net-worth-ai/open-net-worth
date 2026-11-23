@@ -178,3 +178,74 @@ def test_a_waiting_card_is_not_cancelled_by_a_new_ask(lucius, monkeypatch):
 
 def test_refused_on_the_public_demo():
     assert "talk_to_lucius" in registry._DEMO_REFUSED_TOOLS
+
+
+def test_the_app_is_asked_for_the_users_own_words():
+    """Regression (2026-11-23): Claude reworded "the miles cards and stuff, not these" into
+    "which other cards do they have or are considering", so Lucius answered a narrower question
+    than the owner asked. The schema asks for the words as said; the app's reading goes in context."""
+    from backend.ai.tools.talk_to_lucius import AskLuciusInput
+
+    question = AskLuciusInput.model_fields["question"].description
+    assert "the user's own words, as they said them" in question
+    assert "never narrowed or reworded" in question
+
+
+def test_lucius_speaks_to_the_owner_not_about_them():
+    text = app_asks.message_for("Claude", "which card for my iPhone?", None)["content"]
+    assert 'speak to them as "you"' in text
+
+
+@pytest.fixture
+def told(monkeypatch):
+    sent: list[str] = []
+
+    async def fake_notify(message, title=None):
+        sent.append(message)
+
+    import backend.services.notify as notify_mod
+
+    monkeypatch.setattr(notify_mod, "notify", fake_notify)
+    return sent
+
+
+@pytest.fixture
+def shows_cards():
+    from backend.core import mcp_ui
+
+    mcp_ui.note("oauth:grant1", True)
+    yield
+    mcp_ui.note("oauth:grant1", False)
+
+
+def test_no_notice_for_a_card_the_apps_chat_already_shows(lucius, monkeypatch, told, shows_cards):
+    """Regression (2026-11-23): a web search held for approval was approved on the card in
+    Claude within seconds, yet the owner also got an email and a Telegram message."""
+    checks = iter([[], [{"id": "t1", "what": "Search the web", "in_chat": True}]])
+    monkeypatch.setattr(app_asks, "waiting_approvals", lambda sid: next(checks))
+    result, _ = _ask({"question": "best miles card for an iPhone?"})
+    assert result["status"] == "waiting_for_owner"
+    assert told == []
+
+
+def test_a_notice_for_a_card_only_open_net_worth_can_answer(lucius, monkeypatch, told, shows_cards):
+    waiting = [
+        {"id": "t1", "what": "Search the web", "in_chat": True},
+        {"id": "t2", "what": "Delete 3 transactions", "in_chat": False},
+    ]
+    checks = iter([[], waiting])
+    monkeypatch.setattr(app_asks, "waiting_approvals", lambda sid: next(checks))
+    _ask({"question": "tidy my duplicates"})
+    assert len(told) == 1
+    assert "Delete 3 transactions" in told[0] and "Search the web" not in told[0]
+
+
+def test_the_mcp_server_records_which_callers_show_cards():
+    from backend.core import mcp_ui
+    from backend.mcp import apps
+
+    declared = {"capabilities": {"extensions": {apps.EXTENSION: {"mimeTypes": [apps.UI_MIME]}}}}
+    apps.note_initialize("oauth:grant9", declared)
+    assert mcp_ui.supports("oauth:grant9") and apps.supports_ui("oauth:grant9")
+    apps.note_initialize("oauth:grant9", {"capabilities": {}})
+    assert not mcp_ui.supports("oauth:grant9")

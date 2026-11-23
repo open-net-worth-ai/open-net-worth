@@ -18,6 +18,7 @@ import hashlib
 import json
 from typing import Any, Optional
 
+from backend.core import mcp_ui
 from backend.mcp.adapter import tool_allowed
 
 TALK_TOOL = "talk_to_lucius"
@@ -47,11 +48,10 @@ _ANSWER_DESCRIPTOR = {
 
 EXTENSION = "io.modelcontextprotocol/ui"
 
-# The callers whose ``initialize`` declared MCP Apps support. The server keeps no MCP sessions, so
-# this is per caller (an OAuth grant is one app). A caller that never declared it gets no card, no
-# app-only tool and no card tokens: a client without MCP Apps ignores ``visibility`` and may put a
-# result's ``_meta`` in front of its model, which would hand the model both the tool and the token.
-_ui_callers: set[str] = set()
+# The callers whose ``initialize`` declared MCP Apps support live in ``core.mcp_ui``. A caller
+# that never declared it gets no card, no app-only tool and no card tokens: a client without MCP
+# Apps ignores ``visibility`` and may put a result's ``_meta`` in front of its model, which would
+# hand the model both the tool and the token.
 
 
 def note_initialize(surface: str, params: dict) -> None:
@@ -59,14 +59,11 @@ def note_initialize(surface: str, params: dict) -> None:
     extensions = caps.get("extensions") if isinstance(caps, dict) else None
     ui = extensions.get(EXTENSION) if isinstance(extensions, dict) else None
     mime_types = ui.get("mimeTypes") if isinstance(ui, dict) else None
-    if isinstance(mime_types, list) and UI_MIME in mime_types:
-        _ui_callers.add(surface)
-    else:
-        _ui_callers.discard(surface)
+    mcp_ui.note(surface, isinstance(mime_types, list) and UI_MIME in mime_types)
 
 
 def supports_ui(surface: str) -> bool:
-    return surface in _ui_callers
+    return mcp_ui.supports(surface)
 
 
 def can_talk(scopes: tuple[str, ...]) -> bool:

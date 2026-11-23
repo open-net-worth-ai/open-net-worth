@@ -316,8 +316,9 @@ _"Tell Lucius I bought them on Card B"_.
   chats. When Lucius needs your approval, **a card with Approve and Decline appears right in the
   app's chat** (Claude and ChatGPT show it; only a tap on the card answers it, never the app's
   AI). Anything that deletes, removes or sends something out is approved in Open Net Worth
-  instead: the card says so. In an app that can't show the card, you get a notification and
-  approve in Open Net Worth.
+  instead: the card says so, and you get a notification. In an app that can't show the card, you
+  get a notification and approve in Open Net Worth. A card you can answer right in the app's chat
+  sends no notification.
 - **The app's words are treated as a question, not as orders** to Lucius, and never as your
   approval: a change set to ask needs **you**, even if the app says you agreed.
 - **Progress shows while Lucius works**, in apps that display it.
