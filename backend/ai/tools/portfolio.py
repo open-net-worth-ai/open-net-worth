@@ -330,7 +330,7 @@ def _project_position(row: dict, base: str, rates: dict) -> dict:
 class GetReturnsInput(ToolInput):
     """Schema-of-record for ``get_returns`` (see ``schema_from_model``)."""
 
-    period: Optional[Literal["7D", "1M", "3M", "YTD", "1Y", "ALL"]] = Field(
+    period: Optional[Literal["7D", "1M", "3M", "6M", "YTD", "1Y", "3Y", "5Y", "ALL"]] = Field(
         default=None, description="Return window (default 1Y)"
     )
     benchmark: Optional[str] = Field(
@@ -359,7 +359,7 @@ class GetReturnsInput(ToolInput):
 @tool(
     "get_returns",
     description=(
-        "Investment book performance over calendar days, not today's move (use get_portfolio's `today`). TWR (time-weighted, strips deposit timing — the 'how did investments do' number), MWR/XIRR (personal IRR including deposit timing — only present for spans ≥ 30 days), period dollar gain, and start/end value in the base currency. Periods: 7D|1M|3M|YTD|1Y|ALL (default 1Y). Fresh books are clamped to 'Since <inception>' rather than refusing; check effective_start + label in the payload. annualized=true only at ≥360 days. twr/mwr are null when price history is insufficient (data_quality.sufficient=false) — say so, don't quote a number. Optional benchmark (instrument id or symbol) adds a comparison block with portfolio_twr/benchmark_twr/excess_return (null if benchmark lacks history). The series[] field carries portfolio + benchmark as 0-BASED cumulative return FRACTIONS for charting — the window opens at 0.0 and 0.07 means +7%, NOT an index rebased to 100. Already excludes unvested (vesting_state=unvested) equity-grant units from value, TWR and MWR/XIRR alike — not owned yet, same rule as get_net_worth. EXACT WINDOWS: pass date_from/date_to instead of period for a calendar month or any range. PER HOLDING: by_holding=true adds `holdings` — each investment's gain_base (end − start value, net of its buys and sales) and return_pct (Modified Dietz) over the same window, plus price_change_pct; the holdings' gains add up to period_gain_base."
+        "Investment book performance over calendar days, not today's move (use get_portfolio's `today`). TWR (time-weighted, strips deposit timing — the 'how did investments do' number), MWR/XIRR (personal IRR including deposit timing — only present for spans ≥ 30 days), period dollar gain, and start/end value in the base currency. Periods: 7D|1M|3M|6M|YTD|1Y|3Y|5Y|ALL (default 1Y). Fresh books are clamped to 'Since <inception>' rather than refusing; check effective_start + label in the payload. annualized=true only at ≥360 days. twr/mwr are null when price history is insufficient (data_quality.sufficient=false) — say so, don't quote a number. Optional benchmark (instrument id or symbol) adds a comparison block with portfolio_twr/benchmark_twr/excess_return (null if benchmark lacks history). The series[] field carries portfolio + benchmark as 0-BASED cumulative return FRACTIONS for charting — the window opens at 0.0 and 0.07 means +7%, NOT an index rebased to 100. Already excludes unvested (vesting_state=unvested) equity-grant units from value, TWR and MWR/XIRR alike — not owned yet, same rule as get_net_worth. EXACT WINDOWS: pass date_from/date_to instead of period for a calendar month or any range. PER HOLDING: by_holding=true adds `holdings` — each investment's gain_base (end − start value, net of its buys and sales) and return_pct (Modified Dietz) over the same window, plus price_change_pct; the holdings' gains add up to period_gain_base."
     ),
     input_schema=schema_of(GetReturnsInput, tool_name="get_returns"),
 )
@@ -399,7 +399,7 @@ _MAX_HOLDING_ROWS = 40
 class GetNetWorthHistoryInput(ToolInput):
     """Schema-of-record for ``get_net_worth_history`` (see ``schema_from_model``)."""
 
-    period: Optional[Literal["1M", "3M", "YTD", "1Y", "ALL"]] = Field(
+    period: Optional[Literal["1M", "3M", "6M", "YTD", "1Y", "3Y", "5Y", "ALL"]] = Field(
         default=None, description="History window (default 1Y)"
     )
 
@@ -407,7 +407,7 @@ class GetNetWorthHistoryInput(ToolInput):
 @tool(
     "get_net_worth_history",
     description=(
-        "Get the user's NET WORTH OVER TIME — the monthly reconstructed series (cash + receivables + market positions − liabilities), each point in the base currency. Use for 'how has my net worth changed?'. Each point: {date, net_worth, accounts (cash+settlement_cash+receivable+liabilities, the account-only basis), liabilities (raw-negative), classes (per-asset-class band), unvested_base (unvested equity, see below), market_tracked (whether market value is included yet)}. IMPORTANT: classes.cash is cash on hand (bank/e-wallet); classes.settlement_cash is brokerage/exchange settlement cash (negative when margin is drawn) and belongs to investments, not cash; classes.untracked_holdings is invested with holdings not entered, never cash; classes.fixed_deposit / classes.retirement are locked. unvested_base (unvested RSU/option grant units, vesting_state=unvested) is EXCLUDED from net_worth and every classes band — forfeited if the person leaves the company, so not owned yet; mention it only as a separate, not-yet-owned figure, never as part of net worth. Periods: 1M | 3M | YTD | 1Y | ALL (default 1Y). This is the wealth TRAJECTORY, distinct from get_returns (investment PERFORMANCE/TWR). A young/empty book returns an empty history."
+        "Get the user's NET WORTH OVER TIME — the monthly reconstructed series (cash + receivables + market positions − liabilities), each point in the base currency. Use for 'how has my net worth changed?'. Each point: {date, net_worth, accounts (cash+settlement_cash+receivable+liabilities, the account-only basis), liabilities (raw-negative), classes (per-asset-class band), unvested_base (unvested equity, see below), market_tracked (whether market value is included yet)}. IMPORTANT: classes.cash is cash on hand (bank/e-wallet); classes.settlement_cash is brokerage/exchange settlement cash (negative when margin is drawn) and belongs to investments, not cash; classes.untracked_holdings is invested with holdings not entered, never cash; classes.fixed_deposit / classes.retirement are locked. unvested_base (unvested RSU/option grant units, vesting_state=unvested) is EXCLUDED from net_worth and every classes band — forfeited if the person leaves the company, so not owned yet; mention it only as a separate, not-yet-owned figure, never as part of net worth. Periods: 1M | 3M | 6M | YTD | 1Y | 3Y | 5Y | ALL (default 1Y). This is the wealth TRAJECTORY, distinct from get_returns (investment PERFORMANCE/TWR). A young/empty book returns an empty history."
     ),
     input_schema=schema_of(GetNetWorthHistoryInput, tool_name="get_net_worth_history"),
 )

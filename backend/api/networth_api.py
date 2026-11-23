@@ -1,5 +1,5 @@
 """
-GET /api/net-worth/history?period=1M|3M|YTD|1Y|ALL
+GET /api/net-worth/history?period=1M|3M|6M|YTD|1Y|3Y|5Y|ALL
 
 The net-worth-over-time series for the Overview line chart. Thin over
 `ledger_service.net_worth_history()` (the canonical computed-not-stored, base-correct
@@ -25,7 +25,7 @@ from backend.services import returns as returns_service
 
 router = APIRouter()
 
-_PERIODS = ("1M", "3M", "YTD", "1Y", "ALL")
+_PERIODS = ("1M", "3M", "6M", "YTD", "1Y", "3Y", "5Y", "ALL")
 
 
 @router.get("/api/net-worth/history")

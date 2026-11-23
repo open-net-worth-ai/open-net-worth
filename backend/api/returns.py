@@ -8,7 +8,7 @@ the services layer, never here. Respects the dependency rule: imports only servi
 (api -> services), no store / no FX math directly.
 
 Routes:
-    GET /api/returns?period={7D|1M|3M|YTD|1Y|ALL}[&benchmark=<roster key|id|symbol>][&risk=true]
+    GET /api/returns?period={7D|1M|3M|6M|YTD|1Y|3Y|5Y|ALL}[&benchmark=<roster key|id|symbol>][&risk=true]
         [&band={equity|crypto|commodity|all_assets}]
         Returns the period-returns payload. With `risk=true`, attaches a `risk` block from
         risk_metrics.portfolio_risk(period, benchmark). Existing callers (no `risk` param)
@@ -40,8 +40,11 @@ class Period(str, Enum):
     D7 = "7D"
     M1 = "1M"
     M3 = "3M"
+    M6 = "6M"
     YTD = "YTD"
     Y1 = "1Y"
+    Y3 = "3Y"
+    Y5 = "5Y"
     ALL = "ALL"
 
 

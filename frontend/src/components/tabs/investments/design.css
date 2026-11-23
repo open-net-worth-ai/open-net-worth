@@ -3103,6 +3103,21 @@
   background: var(--selected);
   box-shadow: inset 0 0 0 1px var(--line-strong);
 }
+/* Eight ranges: on a phone they share the row's width instead of overflowing the panel. */
+.mk-seg--periods {
+  max-width: 100%;
+}
+@media (max-width: 640px) {
+  .mk-seg--periods {
+    display: flex;
+    width: 100%;
+  }
+  .mk-seg--periods button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px 0;
+  }
+}
 .mk-chart {
   width: 100%;
   height: 200px;

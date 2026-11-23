@@ -6,6 +6,7 @@ import { LuciusCta } from '../../intro/LuciusCta'
 import { usePerformanceView } from './usePerformanceView'
 import type { PerfStatCard } from './usePerformanceView'
 import type { ReturnPeriod, ReturnSeriesPoint } from '../../../types/portfolio'
+import { PERFORMANCE_PERIODS } from './performancePeriod'
 import { fDate } from '../../../utils/format'
 import './design.css'
 
@@ -84,8 +85,11 @@ export function PerfChart({
     '7D': 7,
     '1M': 30,
     '3M': 91,
+    '6M': 182,
     YTD: 172,
     '1Y': 365,
+    '3Y': 1095,
+    '5Y': 1826,
     ALL: 1095,
   }
   const span = spanDays[period] || 365
@@ -263,7 +267,7 @@ function StatBar({ cards }: StatBarProps) {
 // The Performance sub-tab of Investments. Uses usePerformanceView for all data
 // and renders the exact prototype layout: StatBar → Returns panel → Risk panel.
 
-const PERIODS: ReturnPeriod[] = ['1M', '3M', 'YTD', '1Y', 'ALL']
+const PERIODS = PERFORMANCE_PERIODS
 
 // With nothing held there is no return to show yet, and the useful thing to say is why the
 // screen is worth filling: one return across every broker, measured against the market.
@@ -381,15 +385,16 @@ export function PerformanceTab({
                   ))}
                 </select>
               )}
-              <div className="mk-seg">
+              <div className="mk-seg mk-seg--periods" role="group" aria-label="Range">
                 {PERIODS.map((p) => (
                   <button
                     key={p}
                     type="button"
                     className={period === p ? 'on' : ''}
+                    aria-pressed={period === p}
                     onClick={() => setPeriod(p)}
                   >
-                    {p}
+                    {p === 'ALL' ? 'All' : p}
                   </button>
                 ))}
               </div>

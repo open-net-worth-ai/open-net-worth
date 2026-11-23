@@ -15,25 +15,57 @@ from backend.core.user_time import user_today
 from backend.db import read_cache
 from backend.services import ledger as ledger_service
 
-# History is MONTHLY, so a range is a month count, not a day count. `None` = the full series.
-RANGE_MONTHS: dict[str, int | None] = {"1M": 1, "3M": 3, "6M": 6, "1Y": 12, "All": None}
+# History is MONTHLY, so a range is a month count, not a day count. `None` = the full series;
+# `YTD` = everything since the last point of the previous year. Every range the Dashboard's
+# net-worth chart offers is a key here, in the order it is offered.
+YTD = "YTD"
+RANGE_MONTHS: dict[str, int | None] = {
+    "1M": 1,
+    "3M": 3,
+    "6M": 6,
+    YTD: None,
+    "1Y": 12,
+    "3Y": 36,
+    "5Y": 60,
+    "All": None,
+}
 COMPARISON_MONTHS = 7
 
 
-def _slice(history: list[dict], months: int | None) -> list[dict]:
+def _slice(history: list[dict], months: int | None) -> tuple[list[dict], bool]:
+    """The window's points, and whether the history is SHORTER than the range asked for (the
+    window then starts at the first point instead — never an empty chart)."""
     if months is None:
-        return history
-    return history[max(0, len(history) - (months + 1)) :]
+        return history, False
+    return history[max(0, len(history) - (months + 1)) :], len(history) < months + 1
 
 
-def _range_stats(history: list[dict], months: int | None) -> dict | None:
+def _slice_ytd(history: list[dict]) -> tuple[list[dict], bool]:
+    """From the last point dated before 1 January (the year's opening value) to now."""
+    year_start = user_today().replace(month=1, day=1).isoformat()
+    before = [i for i, p in enumerate(history) if p["date"] < year_start]
+    if not before:
+        return history, bool(history)
+    return history[before[-1] :], False
+
+
+def _range_window(history: list[dict], name: str) -> tuple[list[dict], bool]:
+    if name == YTD:
+        return _slice_ytd(history)
+    return _slice(history, RANGE_MONTHS.get(name))
+
+
+def _range_stats(
+    history: list[dict], months: int | None, *, name: str | None = None
+) -> dict | None:
     """Delta over the range, split into `saved` (the account-only move) and `market`.
 
     `accounts` is the account-only figure `ledger` stamps specifically as "a consistent basis
     for the headline delta" — its move over the range IS the saved component; whatever is left
-    of the net-worth move is the market component.
+    of the net-worth move is the market component. `clamped` = the history starts after the
+    range would, so the window opens at the first point (`from_date`).
     """
-    window = _slice(history, months)
+    window, clamped = _range_window(history, name) if name else _slice(history, months)
     if len(window) < 2:
         return None
     first, last = window[0], window[-1]
@@ -47,6 +79,7 @@ def _range_stats(history: list[dict], months: int | None) -> dict | None:
         "span_months": len(window) - 1,
         "from_date": first["date"],
         "to_date": last["date"],
+        "clamped": clamped,
     }
 
 
@@ -120,7 +153,10 @@ def networth_stats(base: str | None = None) -> dict:
         "base_currency": base,
         "net_worth": net_worth,
         "history": history,
-        "ranges": {name: _range_stats(comparable, months) for name, months in RANGE_MONTHS.items()},
+        "ranges": {
+            name: _range_stats(comparable, months, name=name)
+            for name, months in RANGE_MONTHS.items()
+        },
         "comparison": _range_stats(history, COMPARISON_MONTHS - 1),
         "month_to_date": _month_to_date(history),
         "composition": _composition(history),

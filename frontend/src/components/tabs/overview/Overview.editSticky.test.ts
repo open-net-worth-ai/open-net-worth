@@ -38,9 +38,18 @@ describe('Narrow widget card header', () => {
     const narrow = overviewCss.slice(overviewCss.indexOf('@container ovcard (max-width: 360px)'))
     const head = rule(
       narrow,
-      '.ov-widget-panel.panel\n    > .ui-panel__head:has(.ov-responsive-toolbar > :not(.ov-widget-header-kebab))',
+      '.ov-widget-panel.panel\n    > .ui-panel__head:has(\n      .ov-responsive-toolbar > :not(.ov-widget-header-kebab):not(.ov-header-compact)\n    )',
     )
     expect(head).toContain('flex-wrap: wrap')
+  })
+
+  it('keeps a compact control (the net-worth range menu) on the title row', () => {
+    const narrow = overviewCss.slice(overviewCss.indexOf('@container ovcard (max-width: 360px)'))
+    const toolbar = rule(
+      narrow,
+      '.ov-responsive-toolbar:not(:has(> :not(.ov-widget-header-kebab):not(.ov-header-compact)))',
+    )
+    expect(toolbar).toContain('width: auto')
   })
 })
 

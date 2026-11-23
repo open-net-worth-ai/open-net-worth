@@ -181,6 +181,8 @@ export interface RangeStats {
   span_months: number
   from_date: string
   to_date: string
+  /** The history starts after this range would, so the window opens at `from_date` instead. */
+  clamped?: boolean
 }
 
 export interface NetWorthStats {

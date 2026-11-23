@@ -180,6 +180,12 @@ yet, it shows the latest month that does and says so (*"September. Nothing yet i
   and every past figure is converted again — see [Base currency & FX](../concepts/base-currency-and-fx.md).
 - **The change beside net worth** ("this month", 3M, 1Y) always ends at the net worth shown.
   When live prices arrive after the screen opens, both update together.
+- **Pick the chart's range** from the menu at the top right of the net worth card: 1M, 3M, 6M,
+  YTD, 1Y, 3Y, 5Y or All. The change beside net worth follows it, in money and percent, and the
+  card keeps your pick. YTD measures from your net worth at the end of last year. When your
+  history is shorter than the range, the chart starts at your first month and says so ("since
+  Jun 2024, when your history starts") instead of showing an empty chart. The composition chart
+  always shows your whole history, so it has no range menu.
 - **Retirement accounts count** in net worth. **Unvested** stock isn't counted until it vests.
 - **FIRE projection** says **0 yrs** to independence once your net worth is at or past your FIRE
   number.
