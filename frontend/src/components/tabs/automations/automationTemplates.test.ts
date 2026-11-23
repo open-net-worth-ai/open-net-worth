@@ -37,10 +37,24 @@ describe('automation templates', () => {
     }
   })
 
-  it('lets a report template message the owner without a card', () => {
-    for (const key of ['daily-briefing', 'weekly-report', 'monthly-report']) {
+  it('lets a report or alert template message the owner without a card', () => {
+    for (const key of [
+      'daily-briefing',
+      'weekly-report',
+      'monthly-report',
+      'subscriptions',
+      'pacing',
+      'floor',
+      'large-charge',
+      'new-payee',
+      'drift',
+    ]) {
       expect(allowedTools(key)).toEqual(['telegram_send_message', 'webhook_send_message'])
     }
+  })
+
+  it('leaves the portfolio copier with nothing pre-allowed: it places real orders', () => {
+    expect(allowedTools('copy-followed-portfolio')).toEqual([])
   })
 
   it('never pre-allows a delete, a rewrite, an email or a trade', () => {

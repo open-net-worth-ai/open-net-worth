@@ -32,7 +32,7 @@ const BOOK_FOUND: AutomationPermission = {
   desc: 'Book the transactions it finds, adding a category when none fits.',
   tools: ['add_transactions', 'create_categories'],
 }
-const REPORTS: AutomationPermission[] = [SEND_TO_ME]
+const MESSAGES_ME: AutomationPermission[] = [SEND_TO_ME]
 const BOOKING: AutomationPermission[] = [BOOK_FOUND, SEND_TO_ME]
 
 /** "Recommended": what a new user most likely wants — getting transactions in, then the reports.
@@ -66,7 +66,7 @@ export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
     trigger: { kind: 'schedule', type: 'daily', time: '09:00' },
     // Read-only reports: nothing to approve, and nobody is there at 9am to approve it.
     permission_mode: 'auto',
-    always_allowed: REPORTS,
+    always_allowed: MESSAGES_ME,
   },
   {
     key: 'weekly-report',
@@ -79,7 +79,7 @@ export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
       'in my records.',
     trigger: { kind: 'schedule', type: 'weekly', day: 'mon', time: '08:30' },
     permission_mode: 'auto',
-    always_allowed: REPORTS,
+    always_allowed: MESSAGES_ME,
   },
   {
     key: 'monthly-report',
@@ -92,7 +92,7 @@ export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
       'anything in my records.',
     trigger: { kind: 'schedule', type: 'monthly', day: 1, time: '09:30' },
     permission_mode: 'auto',
-    always_allowed: REPORTS,
+    always_allowed: MESSAGES_ME,
   },
 ]
 
@@ -119,6 +119,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     instructions:
       'List every subscription that renewed at a higher price than the time before, with the old and new amount, plus anything I have not used in 60 days.',
     trigger: { kind: 'schedule', type: 'monthly', day: 1, time: '09:00' },
+    always_allowed: MESSAGES_ME,
   },
   {
     key: 'pacing',
@@ -127,6 +128,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     instructions:
       'Compare each envelope to where it should be this far into the month. Name the two most at risk and the daily amount they need to slow to.',
     trigger: { kind: 'schedule', type: 'weekly', day: 'fri', time: '17:00' },
+    always_allowed: MESSAGES_ME,
   },
   {
     key: 'floor',
@@ -135,6 +137,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     instructions:
       'Project checking forward two weeks using known commitments and typical spending. If the projected low point falls under my floor, warn me with the date and the shortfall.',
     trigger: { kind: 'schedule', type: 'daily', time: '07:00' },
+    always_allowed: MESSAGES_ME,
   },
   {
     key: 'large-charge',
@@ -153,6 +156,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       },
       limit: 'hour',
     },
+    always_allowed: MESSAGES_ME,
   },
   {
     key: 'new-payee',
@@ -161,6 +165,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     instructions:
       'If this transaction is from a payee I have never used before, tell me who they are, what the charge was for if you can tell, and whether the amount is typical for that kind of merchant. Otherwise do nothing.',
     trigger: { kind: 'event', event: 'txn', when: {}, limit: 'each' },
+    always_allowed: MESSAGES_ME,
   },
   {
     key: 'drift',
@@ -169,6 +174,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     instructions:
       'Compare my actual allocation to the target mix. Show the drift per sleeve in percentage points and the trade sizes that would bring it back, but do not place anything.',
     trigger: { kind: 'schedule', type: 'weekly', day: 'mon', time: '09:00' },
+    always_allowed: MESSAGES_ME,
   },
   {
     key: 'copy-followed-portfolio',
