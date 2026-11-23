@@ -197,7 +197,7 @@ export function ChatSection({ toast }: SectionProps) {
           </div>
         </div>
         <Toggle
-          on={suggestions.data?.screen_awareness_default !== false}
+          on={suggestions.data?.screen_awareness_default === true}
           disabled={!suggestions.data}
           onChange={(v) => void putScreenAwarenessDefault(v)}
           label="Screen awareness by default"

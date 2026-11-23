@@ -100,8 +100,8 @@ DEFAULT_PROFILE = {
     "chat_thinking_grouped": False,
     # How much detail Lucius puts in an answer (brief | normal | detailed). None = normal.
     "chat_response_detail": None,
-    # A device with no choice of its own sends the screen with each message. Default ON.
-    "screen_awareness_default": True,
+    # A device with no choice of its own sends the screen with each message. Default OFF.
+    "screen_awareness_default": False,
     "seen_intros": [],
     # Display formats — how amounts and dates are WRITTEN. Purely presentational: they never
     # change a stored value, only how the frontend renders one. `None` means "follow the
