@@ -1790,7 +1790,10 @@
   align-items: center;
   gap: 6px;
 }
-.stat-info {
+/* Prefixed: the Plan tab's stylesheet has its own `.stat-info`/`.stat-pop` (a tooltip that opens
+   ABOVE, `bottom:`). With both loaded the shared names gave this one `top` AND `bottom`, pinning
+   the box to the 15px icon: a one-line box with the text spilling out below it. */
+.mk-stat-info {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -1808,19 +1811,19 @@
   cursor: help;
   flex: none;
 }
-.stat-info:focus-visible {
+.mk-stat-info:focus-visible {
   color: var(--ink);
   border-color: var(--muted);
   outline: none;
 }
 @media (hover: hover) {
-  .stat-info:hover {
+  .mk-stat-info:hover {
     color: var(--ink);
     border-color: var(--muted);
     outline: none;
   }
 }
-.stat-pop {
+.mk-stat-pop {
   position: absolute;
   top: calc(100% + 7px);
   left: -5px;
@@ -1848,21 +1851,23 @@
   z-index: 6;
   pointer-events: none;
 }
-.stat-pop.r {
+.mk-stat-pop.r {
   left: auto;
   right: -5px;
 }
-.stat-pop b {
+.mk-stat-pop b {
   color: var(--ink);
   font-weight: 600;
 }
-.stat-info:focus-visible .stat-pop {
+/* Any focus, not just :focus-visible: a tap focuses the icon but never counts as focus-visible,
+   and a touch screen has no hover, so on a phone the tooltip never opened. */
+.mk-stat-info:focus .mk-stat-pop {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
 }
 @media (hover: hover) {
-  .stat-info:hover .stat-pop {
+  .mk-stat-info:hover .mk-stat-pop {
     opacity: 1;
     visibility: visible;
     transform: translateY(0);
