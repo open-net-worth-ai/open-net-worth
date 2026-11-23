@@ -527,8 +527,14 @@
   }
   .lx-aw-dot {
     flex: none;
-    font-size: 12px;
-    line-height: 1;
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    box-sizing: border-box;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+    background: radial-gradient(circle, currentColor 0 28%, transparent 30%);
+    font-size: 0;
   }
   .lx-aw-sub {
     min-width: 0;
@@ -2644,9 +2650,15 @@
   }
   .lx-scope-ic {
     color: var(--ink);
-    font-size: 12px;
     flex: none;
-    line-height: 1;
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    box-sizing: border-box;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+    background: radial-gradient(circle, currentColor 0 28%, transparent 30%);
+    font-size: 0;
   }
   .lx-scope-txt {
     display: flex;

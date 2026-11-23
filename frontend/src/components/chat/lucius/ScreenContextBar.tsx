@@ -29,10 +29,9 @@ const PEEK_ANCHOR_GAP = 6
 const NOTICE_GAP = 14
 const PEEK_MAX_HEIGHT = 244
 const NOTICE_MS = 4500
-const NOTICE_ON = 'Always send screen context: on. Sent with every message — can use more tokens.'
-const NOTICE_OFF = 'Always send screen context: off. Lucius can still look when you ask.'
+const NOTICE_ON = 'Sent with every message — can use more tokens.'
+const NOTICE_OFF = 'Lucius can still look when you ask.'
 const OFF_SUB = 'Lucius can still look when you ask'
-const ON_SUB = 'Always sent with your message'
 const OFF_TOOLTIP = 'Always send screen context is off — Lucius can still look when you ask.'
 
 export interface ScreenContextBarProps {
@@ -299,9 +298,9 @@ export function ScreenContextBar({
                 (2026-08-06), so the switch is back and the label is just a label again: an
                 on/off state deserves a control that LOOKS like one. */}
             <span className="lx-aw-toggle">
-              <span className="lx-aw-dot">◉</span>
+              <span className="lx-aw-dot" aria-hidden="true" />
               <span className="lx-aw-label">Always send screen context</span>
-              <span className="lx-aw-sub">• {enabled ? ON_SUB + ' • ' + snap.title : OFF_SUB}</span>
+              <span className="lx-aw-sub">• {enabled ? snap.title : OFF_SUB}</span>
             </span>
             {!collapsed && (
               <button
@@ -341,13 +340,13 @@ export function ScreenContextBar({
         </div>
       ) : (
         <div className="lx-scope-row">
-          <span className="lx-scope-ic">◉</span>
+          <span className="lx-scope-ic" aria-hidden="true" />
           <span className="lx-scope-txt">
             <b>Always send screen context</b>
             <span className="lx-scope-sub">
               {enabled ? (
                 <>
-                  {ON_SUB} • {snap.title}
+                  {snap.title}
                   {inView ? ' • ' + inView[1] : ''}
                   {handles.length ? ' • ' + handles.length + ' sources' : ''}
                 </>
