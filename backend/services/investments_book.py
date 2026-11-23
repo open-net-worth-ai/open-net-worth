@@ -230,7 +230,11 @@ def _sections(rows: list[dict], grand: float, targets: dict[str, float]) -> list
 
 
 def _concentration(rows: list[dict], grand: float, guideline_pct: float) -> list[dict]:
-    return concentration_by_name(rows, grand, guideline_pct)[:RISK_LIMIT]
+    from backend.services.concentration_lookthrough import fund_holdings
+
+    return concentration_by_name(rows, grand, guideline_pct, fund_holdings=fund_holdings())[
+        :RISK_LIMIT
+    ]
 
 
 # ── The one authority for book-level figures other screens also show ─────────────────────
@@ -302,7 +306,12 @@ def is_diversified_fund(row: dict) -> bool:
 
 
 def concentration_by_name(
-    rows: list[dict], grand: float, guideline_pct: float, *, names_only: bool = True
+    rows: list[dict],
+    grand: float,
+    guideline_pct: float,
+    *,
+    names_only: bool = True,
+    fund_holdings=None,
 ) -> list[dict]:
     """Single-name exposure, biggest first — the same instrument across accounts counted once.
 
@@ -310,7 +319,19 @@ def concentration_by_name(
     one breach rule: at or above the guideline. A diversified fund is not a name: an all-world
     index ETF at 39% of the book is 39% of the market, not 39% in one company (it was flagged
     "19 points above the guideline, consider trimming"), so it is left out unless `names_only`
-    is False, which is for a caller that wants every holding's weight rather than a breach."""
+    is False, which is for a caller that wants every holding's weight rather than a breach.
+
+    `fund_holdings` (flag `fund_lookthrough`, from `concentration_lookthrough.fund_holdings()`):
+    the breach view also counts the companies inside funds — see `_with_fund_holdings`. None
+    (the flag off) runs exactly `_by_name`, as before."""
+    if fund_holdings is not None and names_only:
+        return _with_fund_holdings(rows, grand, guideline_pct, fund_holdings)
+    return _by_name(rows, grand, guideline_pct, names_only=names_only)
+
+
+def _by_name(
+    rows: list[dict], grand: float, guideline_pct: float, *, names_only: bool
+) -> list[dict]:
     by_name: dict[str, float] = {}
     ids: dict[str, list[str]] = {}
     for r in rows:
@@ -332,6 +353,52 @@ def concentration_by_name(
         }
         for name, value in by_name.items()
     ]
+    ranked.sort(key=lambda r: r["pct"], reverse=True)
+    return ranked
+
+
+def _row_value(r: dict) -> float:
+    return r["value"] if "value" in r else r["base_value"]
+
+
+def _with_fund_holdings(rows: list[dict], grand: float, guideline_pct: float, fh) -> list[dict]:
+    """The breach view with funds looked through: each name is what is held directly PLUS what
+    the book's funds hold of it. Every entry says which part is which (`direct`, `via_funds`), so
+    a name held only through funds is never told to trim a position it doesn't have, and
+    `at_least` marks a figure counted from funds' top holdings only."""
+    from backend.services import concentration_lookthrough as cl
+
+    direct = _by_name(rows, grand, guideline_pct, names_only=True)  # the old breach view
+    via = cl.through_funds(
+        rows, fh, is_fund=is_diversified_fund, symbol_of=book_symbol, value_of=_row_value
+    )
+    entries = {
+        e["name"]: {"value": e["value"], "ids": list(e["instrument_ids"]), "label": e["name"]}
+        for e in direct
+    }
+    for name, v in via.items():
+        entry = entries.setdefault(name, {"value": 0.0, "ids": [], "label": v.label})
+        entry["value"] += v.value
+        for f in v.funds:
+            if f["instrument_id"] and f["instrument_id"] not in entry["ids"]:
+                entry["ids"].append(f["instrument_id"])
+    ranked = []
+    for name, e in entries.items():
+        through = via.get(name)
+        value = e["value"]
+        ranked.append(
+            {
+                "name": name,
+                "value": round(value, 2),
+                "pct": round((value / grand) * 100, 4) if grand else 0.0,
+                "hot": bool(grand) and (value / grand) * 100 >= guideline_pct,
+                "instrument_ids": e["ids"],
+                "label": e["label"],
+                "direct": round(value - (through.value if through else 0.0), 2),
+                "via_funds": through.funds if through else [],
+                "at_least": bool(through) and not fh.complete,
+            }
+        )
     ranked.sort(key=lambda r: r["pct"], reverse=True)
     return ranked
 

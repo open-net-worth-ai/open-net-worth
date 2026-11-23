@@ -103,7 +103,10 @@ def _concentration_narrative(
     at Brokerage total accounts not broken into holdings, which the share leaves out — so the
     share is "of the holdings you've entered", and the sentence says what wasn't counted."""
     of = "of the holdings you've entered" if untracked else "of your investments"
-    share = f"{top['name']} is {top['pct']:.0f}% {of}"
+    at_least = "at least " if top.get("at_least") else ""
+    share = f"{top.get('label') or top['name']} is {at_least}{top['pct']:.0f}% {of}"
+    if top.get("via_funds"):
+        share += ", counting what your funds hold of it"
     whose = "the" if guideline_pct == investments_book.CONCENTRATION_GUIDELINE_PCT else "your"
     text = (
         f"{share}, {over_by:.0f} percentage points over {whose} {guideline_pct:.0f}% "
@@ -122,8 +125,12 @@ def _concentration_signal(
     Reads the ONE concentration authority (`investments_book.concentration_by_name`): the same
     instrument held at several accounts is one name, and the denominator is the invested book —
     exactly what the Risk card and the Intel risk story show."""
+    from backend.services.concentration_lookthrough import fund_holdings
+
     projected, grand = investments_book.project_invested(rows, base)
-    ranked = investments_book.concentration_by_name(projected, grand, concentration_guideline_pct)
+    ranked = investments_book.concentration_by_name(
+        projected, grand, concentration_guideline_pct, fund_holdings=fund_holdings()
+    )
     if not ranked or not ranked[0]["hot"]:
         return None
     top = ranked[0]

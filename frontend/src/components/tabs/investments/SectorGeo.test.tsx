@@ -10,11 +10,15 @@ vi.mock('../../../hooks/serverState/dataQuery', () => ({
   querySource: (...args: unknown[]) => querySource(...args),
 }))
 
+import { overrideFlagsForTests } from '../../../hooks/useFlag'
 import { SectorGeo } from './SectorGeo'
 
+let restoreFlags = overrideFlagsForTests({ fund_lookthrough: false })
 afterEach(() => {
   cleanup()
   querySource.mockReset()
+  restoreFlags()
+  restoreFlags = overrideFlagsForTests({ fund_lookthrough: false })
 })
 
 // One EUR-listed global fund — the browser's old currency guess read it as "Europe 100%".
@@ -88,5 +92,39 @@ describe('SectorGeo — Region reads the server look-through (#210)', () => {
     await screen.findByText('Unmapped')
     expect(regionRows(container)).toEqual(['United States20%', 'Unmapped80%'])
     expect(container.querySelector('.mk-flag')).toBeNull()
+  })
+})
+
+describe('SectorGeo — Sector with funds looked through (flag fund_lookthrough)', () => {
+  const lookedThrough = xray({
+    by_sector: [
+      { name: 'Technology', value_base: 4_000, pct: 40 },
+      { name: 'Health Care', value_base: 3_500, pct: 35 },
+    ],
+    sector_unmapped_pct: 25,
+    sector_unmapped_base: 2_500,
+    sector_coverage: { looked_through: 75, classified: 0, unmapped: 25 },
+    sector_flag: { name: 'Technology', pct: 40, threshold_pct: 30 },
+  })
+
+  it('off: the sector view is each holding’s own sector, as before', () => {
+    querySource.mockResolvedValue(lookedThrough)
+    const { container } = render(<SectorGeo d={D} />)
+    expect(regionRows(container)).toEqual(['Broad market100%'])
+    expect(screen.getByText(/ETFs counted at fund level/)).toBeTruthy()
+  })
+
+  it('on: draws the X-ray’s sectors, its Unmapped share, coverage and the server’s verdict', async () => {
+    restoreFlags()
+    restoreFlags = overrideFlagsForTests({ fund_lookthrough: true })
+    querySource.mockResolvedValue(lookedThrough)
+    const { container } = render(<SectorGeo d={D} />)
+
+    await screen.findByText('Health Care')
+    expect(regionRows(container)).toEqual(['Technology40%', 'Health Care35%', 'Unmapped25%'])
+    expect(screen.getByText(/75% looked through funds/)).toBeTruthy()
+    expect(container.querySelector('.mk-flag')?.textContent).toMatch(
+      /Technology is 40% of your book, counting what your funds hold/,
+    )
   })
 })

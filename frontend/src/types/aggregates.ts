@@ -555,7 +555,17 @@ export interface InvestedBook {
   total_pl_pct: number
   /** `row_key`s of the biggest movers by |day %|, in order. */
   movers: string[]
-  concentration: Array<{ name: string; value: number; pct: number; hot: boolean }>
+  concentration: Array<{
+    name: string
+    value: number
+    pct: number
+    hot: boolean
+    // Flag `fund_lookthrough` only: what the book's funds hold of this name.
+    label?: string
+    direct?: number
+    via_funds?: Array<{ instrument_id: string; symbol: string; value: number }>
+    at_least?: boolean
+  }>
   concentration_guideline_pct: number
   top_name: { name: string; value: number; pct: number; hot: boolean } | null
   /** Drift (pp) at/above which a class is flagged "off target" — the SAME constant

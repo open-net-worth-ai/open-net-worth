@@ -12,6 +12,8 @@ interface RiskRow {
   pct: number
   val: number
   hot: boolean
+  /** Funds whose holdings add to this name (flag `fund_lookthrough`). */
+  viaFunds?: string[]
 }
 
 interface Props {
@@ -149,7 +151,17 @@ export function Risk({ risk, guideline = 20, dropPct = 30, untracked, onSaveSett
           const hot = r.hot
           return (
             <div className="mk-risk-row" key={r.nm}>
-              <span className="mk-risk-nm">{r.nm}</span>
+              <span
+                className="mk-risk-nm"
+                title={
+                  r.viaFunds?.length
+                    ? `Includes what ${r.viaFunds.join(', ')} hold of it (their top 10 holdings)`
+                    : undefined
+                }
+              >
+                {r.nm}
+                {r.viaFunds?.length ? ' ⊕' : null}
+              </span>
               <span className="mk-risk-track">
                 <span
                   className="mk-risk-fill"

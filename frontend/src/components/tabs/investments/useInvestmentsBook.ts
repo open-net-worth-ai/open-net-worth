@@ -95,7 +95,8 @@ export interface DerivedBook extends Book {
   todayPL: number
   todayPct: number
   movers: BookRow[]
-  risk: Array<{ nm: string; pct: number; val: number; hot: boolean }>
+  /** `viaFunds`: the funds whose holdings add to this name (flag `fund_lookthrough`). */
+  risk: Array<{ nm: string; pct: number; val: number; hot: boolean; viaFunds?: string[] }>
   // `cur`/`tgt` are ROUNDED, for display only. `driftPp`/`tradeBase` are the server's unrounded
   // figures (MATH-38) — a caller that sizes a trade off the rounded `cur - tgt` compounds the
   // rounding into real money (book 1,000,000, current 32.6%, target 29.4% → the true trade is
@@ -223,7 +224,13 @@ export function useInvestmentsBook(invRows: ComputedRow[]): DerivedBook {
       pctOfPortfolio: server.pct_of_portfolio,
       portfolioTotal: server.portfolio_total,
       movers: server.movers.map((k) => byKey.get(k)).filter((r): r is BookRow => !!r),
-      risk: server.concentration.map((c) => ({ nm: c.name, pct: c.pct, val: c.value, hot: c.hot })),
+      risk: server.concentration.map((c) => ({
+        nm: c.name,
+        pct: c.pct,
+        val: c.value,
+        hot: c.hot,
+        viaFunds: (c.via_funds ?? []).map((f) => f.symbol),
+      })),
       alloc: server.allocation.map((a) => ({
         cls: a.cls,
         cur: Math.round(a.current_pct),
