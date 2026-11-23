@@ -7,7 +7,7 @@ from the host's result, and really keeps waiting on a parked call for as long as
 approve it.
 
 ``ONW_CLI_LIVE_PARK_WAIT`` (seconds, default 20) is how long the parked call waits before its
-result arrives; measured at 1000 s the same query carried on — docs/ai/CLI_REGRESSION.md.
+result arrives; measured at 1000 s and 3700 s the same query carried on — docs/ai/CLI_REGRESSION.md.
 """
 
 from __future__ import annotations

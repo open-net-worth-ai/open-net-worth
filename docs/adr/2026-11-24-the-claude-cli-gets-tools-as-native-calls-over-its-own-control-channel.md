@@ -94,7 +94,8 @@ to cache and cost $0.1135; it is left out as the one-time cost of any prompt cha
 Native costs about 4% more per run than text at the mean, less than one standard deviation of the
 text path's own run-to-run spread ($0.087-$0.105), and the same per multi-message conversation:
 cost-neutral within noise, not measurably cheaper. It restarts the CLI no more often. A parked call
-survived 1000 s of waiting with the real CLI and the query then finished normally.
+survived 3700 s of waiting with the real CLI (and 1000 s in an earlier probe) and the query then
+finished normally.
 
 ## Consequences
 

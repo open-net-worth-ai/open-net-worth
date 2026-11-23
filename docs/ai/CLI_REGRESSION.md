@@ -45,8 +45,9 @@ value on the SAME process, and a tool loaded after spawn that the model must rea
 `use_tool` while the host sees its real name and the process is not restarted.
 
 Measured with `claude` 2.1.329 driving our own control-channel handler: a parked `tools/call`
-answered 1000 s after it arrived let the same query finish normally (the CLI emits `tool_progress`
-heartbeats meanwhile; it has no tool timeout of its own that we hit). The CLI runs a model's
+answered 1000 s and again 3700 s (an hour) after it arrived let the same query finish normally (the
+CLI emits a `tool_progress` heartbeat every ~30 s meanwhile; it has no tool timeout of its own that
+we hit). Our own idle reaper (30 min) is what ends a parked process first. The CLI runs a model's
 parallel calls one at a time, so only the first `tools/call` is on the wire until it is answered —
 the host collects the whole batch from the `assistant` events instead. `claude` 2.1.329 needs no
 `initialize` request from the host and no `CLAUDE_CODE_ENTRYPOINT`; it asks for `initialize`,
