@@ -492,3 +492,16 @@ def test_a_notification_gets_no_answer_and_an_unknown_method_an_error():
     assert wire.reply({"jsonrpc": "2.0", "method": "notifications/initialized"}, []) is None
     refused = wire.reply({"jsonrpc": "2.0", "id": 5, "method": "resources/list"}, [])
     assert refused is not None and refused["error"]["code"] == -32601
+
+
+async def test_stopping_a_round_kills_its_process_and_leaves_nothing_parked(tmp_path, provider):
+    stream = provider.stream_chat(
+        [_calls(("list_accounts", {}))], tools=[TOOL_A], system="SYS", model="haiku", effort="low"
+    )
+    first = await stream.__anext__()
+    assert first["type"] == "tool_use_start"
+    session = next(iter(cls.pool().all()))
+    await stream.aclose()
+
+    assert cls.pool().all() == [], "a stopped round is not kept"
+    assert session.proc is None or session.proc.returncode is not None
