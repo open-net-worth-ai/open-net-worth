@@ -136,6 +136,16 @@ def test_risk_finding_for_a_name_held_only_through_funds_does_not_say_trim():
     assert "no position of it to trim" in action
 
 
+def test_brief_names_the_two_largest_funds_and_counts_the_rest():
+    assert portfolio_brief._funds_phrase(["ACMI"]) == "ACMI"
+    assert portfolio_brief._funds_phrase(["ACMI", "ACMQ"]) == "ACMI and ACMQ"
+    assert portfolio_brief._funds_phrase(["ACMI", "ACMQ", "ACMW"]) == "ACMI, ACMQ and 1 other fund"
+    assert (
+        portfolio_brief._funds_phrase(["ACMI", "ACMQ", "ACMW", "ACMV", "ACMS"])
+        == "ACMI, ACMQ and 3 other funds"
+    )
+
+
 def test_brief_narrative_counts_what_funds_hold():
     top = {
         "name": "ACMT",

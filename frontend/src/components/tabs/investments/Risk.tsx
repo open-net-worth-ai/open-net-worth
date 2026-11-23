@@ -6,7 +6,8 @@ import { fBase } from '../../../utils/format'
 import { Button, Badge } from '../../ui'
 import type { UntrackedExcluded } from '../../../types/aggregates'
 import { UntrackedNote } from './UntrackedHoldings'
-import { splitLine, type RiskSplit } from './riskSplit'
+import { Tooltip } from '../../ui/Tooltip'
+import { splitDetail, splitLine, type RiskSplit } from './riskSplit'
 
 interface RiskRow {
   nm: string
@@ -151,13 +152,15 @@ export function Risk({ risk, guideline = 20, dropPct = 30, untracked, onSaveSett
           const hot = r.hot
           return (
             <div className="mk-risk-row" key={r.nm}>
-              <span
-                className="mk-risk-nm"
-                title={r.split ? `At least — counted from each fund's top 10 holdings` : undefined}
-              >
-                {r.nm}
-                {r.split ? ' ⊕' : null}
-              </span>
+              {r.split ? (
+                <Tooltip label={splitDetail(r.split)} multiline>
+                  <span className="mk-risk-nm" tabIndex={0}>
+                    {r.nm} ⊕
+                  </span>
+                </Tooltip>
+              ) : (
+                <span className="mk-risk-nm">{r.nm}</span>
+              )}
               <span className="mk-risk-track">
                 <span
                   className="mk-risk-fill"
@@ -173,7 +176,11 @@ export function Risk({ risk, guideline = 20, dropPct = 30, untracked, onSaveSett
               >
                 {Math.round(r.pct)}%
               </span>
-              {r.split && <span className="mk-risk-split">{splitLine(r.split)}</span>}
+              {r.split && (
+                <Tooltip label={splitDetail(r.split)} multiline>
+                  <span className="mk-risk-split">{splitLine(r.split)}</span>
+                </Tooltip>
+              )}
             </div>
           )
         })}

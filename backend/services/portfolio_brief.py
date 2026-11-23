@@ -94,8 +94,15 @@ def _days_until(iso_date: str) -> int:
     return ceil(delta.total_seconds() / 86_400)
 
 
-def _and_list(items: list[str]) -> str:
-    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+_FUNDS_NAMED = 2  # the rest are counted, not named — the Risk card caps its line the same way
+
+
+def _funds_phrase(symbols: list[str]) -> str:
+    """ "ACMI", "ACMI and ACMQ", or "ACMI, ACMQ and 3 other funds" (largest first)."""
+    named, rest = symbols[:_FUNDS_NAMED], len(symbols) - _FUNDS_NAMED
+    if rest > 0:
+        return f"{', '.join(named)} and {rest} other fund{'s' if rest > 1 else ''}"
+    return named[0] if len(named) == 1 else f"{named[0]} and {named[1]}"
 
 
 def _concentration_narrative(
@@ -110,7 +117,9 @@ def _concentration_narrative(
     at_least = "at least " if top.get("at_least") else ""
     share = f"{top.get('label') or top['name']} is {at_least}{top['pct']:.0f}% {of}"
     if top.get("via_funds"):
-        share += f", counting what {_and_list([f['symbol'] for f in top['via_funds']])} hold of it"
+        share += (
+            f", counting what {_funds_phrase([f['symbol'] for f in top['via_funds']])} hold of it"
+        )
     whose = "the" if guideline_pct == investments_book.CONCENTRATION_GUIDELINE_PCT else "your"
     text = (
         f"{share}, {over_by:.0f} percentage points over {whose} {guideline_pct:.0f}% "

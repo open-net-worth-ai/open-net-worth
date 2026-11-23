@@ -144,7 +144,9 @@ and its 10 biggest holdings. It refreshes them about once a month.
   of a company you own directly plus that company inside an index fund are one figure. A name that
   includes fund holdings is marked ⊕, and a line under its bar shows the split — for example
   "19.6% direct · 3.6% via ACMI · 2.6% via ACMQ", or "all via funds: …" for a company you don't
-  hold yourself. The Portfolio brief names the funds too. Because only each fund's top 10
+  hold yourself. The line names the two largest funds and adds up the rest ("+3 more 5.2%");
+  hover the name or the line to see every fund. The Portfolio brief names the funds too
+  ("…counting what ACMI, ACMQ and 3 other funds hold of it"). Because only each fund's top 10
   holdings are known, these figures are a minimum ("at least").
 - A look-through you saved yourself (for example by asking Lucius) always wins over what the
   price source says.
