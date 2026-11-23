@@ -97,6 +97,38 @@ cost-neutral within noise, not measurably cheaper. It restarts the CLI no more o
 survived 3700 s of waiting with the real CLI (and 1000 s in an earlier probe) and the query then
 finished normally.
 
+### Sonnet (added after a hang and a cost gap were found there)
+
+Same harness, `claude_cli:sonnet`, 6 warm pairs, a warm-up run discarded (35 turns each):
+
+| per run | text | native |
+|---|---|---|
+| timed-out / failed turns (all 38 runs on both models) | 0 | 0 |
+| cost, list-equivalent | $1.391 ± 0.062 | $1.449 ± 0.051 (+4%) |
+| CLI model requests | 105.5 | 110.5 |
+| cache read tokens | 4.27M | 4.75M |
+| peak prompt per request | 43.6K | 45.9K |
+| output tokens | 24.4K | 22.1K |
+| calls the CLI refused itself ("No such tool available") | 0 | 3.2 |
+
+Two defects were found here and fixed. (1) A hang: the model called a tool loaded mid-session by its
+own name, the CLI refused it itself and ended that message on `tool_use`, and the round kept that
+stop reason into the next message, closed after its first real call and left the second `tools/call`
+unanswered until the 300 s ceiling. A round now resets its call state at each `message_start`, a
+`tools/call` the host never announced is refused at once, and a CLI heartbeat while it waits on a
+call we hold ends the round or fails fast. (2) A cost gap of +17%: told to "call `use_tool`", Sonnet
+wrote that bare name and the CLI, which names the tool `mcp__lucius__use_tool`, refused it; every
+refusal is a whole extra request. Every sentence addressed to the model now uses the full name,
+loaded tools are announced as ready-made `mcp__lucius__use_tool {...}` call templates (no bare name
+to mistake for a callable), and the tool-calling note says a tool outside the function list is
+never called directly.
+
+What remains is inherent: the tool definitions the CLI sends to the API are about 2.3K tokens larger
+than the text manifest (+5% prompt per request), and Sonnet still calls an unloaded tool by its
+prefixed name 1-2 times a run (the CLI refuses that call before it reaches us, so the host cannot
+map it). Together that is the +4%, inside one standard deviation of the text path's own spread but
+not zero. Haiku is level (cost within 2% on 5 pairs).
+
 ## Consequences
 
 - No new dependency and a few KB of source: the wheel grew by 11.3 KB (17,377,323 → 17,388,866

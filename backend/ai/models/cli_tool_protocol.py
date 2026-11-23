@@ -237,13 +237,34 @@ def render_tool_addendum(tools: list[dict], via_tool: str = "") -> str:
     """
     if not tools:
         return ""
-    intro = (
-        "These tools are now available too. They are not in your function list: call each one "
-        f"through the `{via_tool}` tool, with its exact `name` and its arguments as `args`:"
-        if via_tool
-        else "These tools are now in your Available tools too — call them exactly like the others:"
-    )
+    if via_tool:
+        return "\n".join(
+            [
+                "<tools_added>",
+                "These tools are now available, but they are NOT in your function list: calling "
+                'one by its own name fails with "no such tool". Make each call exactly as the '
+                "templates below show, with the tool's arguments in place of the schema:",
+                *_wrapped_sections(tools, via_tool),
+                "</tools_added>",
+            ]
+        )
+    intro = "These tools are now in your Available tools too — call them exactly like the others:"
     return "\n".join(["<tools_added>", intro, *_tool_sections(tools), "</tools_added>"])
+
+
+def _wrapped_sections(tools: list[dict], via_tool: str) -> list[str]:
+    """Each tool as a ready-made call of ``via_tool``: no bare name to mistake for a callable."""
+    lines: list[str] = []
+    for t in tools:
+        name = t.get("name") or ""
+        if not name:
+            continue
+        template = {"name": name, "args": t.get("input_schema") or {}}
+        lines.append(f"\n{(t.get('description') or '').strip()}\n")
+        lines.append(
+            f"{via_tool} " + json.dumps(template, ensure_ascii=False, separators=(",", ":"))
+        )
+    return lines
 
 
 def _tool_sections(tools: list[dict]) -> list[str]:

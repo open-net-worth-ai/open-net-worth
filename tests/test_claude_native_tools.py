@@ -316,9 +316,10 @@ async def test_a_tool_loaded_mid_session_is_reachable_without_a_restart(tmp_path
     # find_tools ran; the next round offers the newly loaded tool as well.
     second = await _round(provider, messages + _after(first), [FIND, TOOL_A, TOOL_B])
     answered = "".join(e.get("text", "") for e in second if e["type"] == "text_delta")
-    assert "<tools_added>" in answered and "### get_spending_summary" in answered
-    assert "`use_tool`" in answered, "the model is told how to call it"
-    assert "### list_accounts" not in answered, "a tool the process already has is not re-sent"
+    assert "<tools_added>" in answered and '"name":"get_spending_summary"' in answered
+    assert "### get_spending_summary" not in answered, "no bare heading to mistake for a callable"
+    assert "mcp__lucius__use_tool" in answered, "the model is told how to call it"
+    assert "list_accounts" not in answered, "a tool the process already has is not re-sent"
 
     followup = [
         *messages,
@@ -549,3 +550,26 @@ async def test_a_call_the_host_never_saw_is_refused_not_waited_on(tmp_path, prov
     assert "toolu_stray" not in session.waiting, "answered at once, with an error"
     sent = [r["msg"] for r in _rows(tmp_path, "received.jsonl")]
     assert first[-1]["type"] == "done" and sent
+
+
+def test_every_sentence_that_names_the_wrapper_uses_the_name_the_cli_knows():
+    """Sonnet follows our text literally: told "call `use_tool`", it wrote that bare name, the CLI
+    answered "No such tool available: use_tool" itself, and the model repeated the call with the
+    right name — one more full request per occurrence (+17% cost). The CLI's name for the tool is
+    `mcp__lucius__use_tool`."""
+    import re
+
+    from backend.ai.models import claude_native_round as rnd
+    from backend.ai.models import claude_native_wire as wire
+    from backend.ai.models.cli_tool_protocol import render_tool_addendum
+
+    bare = re.compile(r"(?<!mcp__lucius__)\buse_tool\b")
+    spoken = [
+        rnd.instructions("SYS"),
+        render_tool_addendum([TOOL_B], via_tool=wire.CALLABLE),
+        *(t["description"] for t in wire.tool_payload([TOOL_A])),
+    ]
+    for text in spoken:
+        assert not bare.search(text), text
+    assert wire.CALLABLE in spoken[0] and wire.CALLABLE in spoken[1]
+    assert "find_tools" in spoken[0], "told to load a tool before calling it"

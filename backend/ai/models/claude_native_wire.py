@@ -25,11 +25,16 @@ PREFIX = f"mcp__{SERVER}__"
 # tool list never changes during a live session, so a later `find_tools` load cannot add a tool to
 # it — the model is told, in the conversation, to call the new tool by name through this one.
 USE_TOOL = "use_tool"
+# What the MODEL must write: the CLI names an MCP tool `mcp__<server>__<tool>` and answers any other
+# spelling ("No such tool available: use_tool") itself, costing a whole retried request. Every
+# sentence addressed to the model names the wrapper this way.
+CALLABLE = PREFIX + USE_TOOL
 
 _USE_TOOL_DESCRIPTION = (
-    "Call a tool that was announced to you inside a <tools_added> block of the conversation. "
-    "Pass its exact `name` and its arguments object as `args`. Tools you were given directly "
-    "are called by their own name, never through this one."
+    "Call a Lucius tool that is not in your function list: one announced in a <tools_added> block "
+    "of the conversation, or any other tool you know by its exact name. Pass that `name` and its "
+    "arguments object as `args`. Tools in your function list are called by their own name, "
+    "never through this one."
 )
 _USE_TOOL_SCHEMA = {
     "type": "object",

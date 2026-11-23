@@ -159,8 +159,9 @@ so there is no half-written text to leak. Lucius still runs every tool itself: a
 permissions and Auto mode work exactly as before, and Claude Code gets none of its own tools
 (no files, no shell, no web).
 
-It costs about the same as the text version: in our testing with Haiku, 35 chat turns cost
-$0.099 against $0.100 with the setting off, and Claude Code is restarted no more often. Lucius
+It costs about the same as the text version: in our testing, 35 chat turns cost the same with
+Haiku and about 4% more with Sonnet than with the setting off, and Claude Code is restarted no
+more often. Lucius
 keeps one Claude Code process open while it works through a reply's tool calls, including while
 an approval card waits for you, and tools it loads mid-chat are reached without a restart. If you
 walk away from an approval card for a very long time, the reply simply restarts from the
