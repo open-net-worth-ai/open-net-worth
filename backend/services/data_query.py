@@ -142,6 +142,12 @@ def _investments_brief(p: dict) -> Any:
     return portfolio_brief.compute_brief()
 
 
+def _portfolio_xray(p: dict) -> Any:
+    from backend.services import xray
+
+    return xray.portfolio_xray()
+
+
 def _reports_rollup(p: dict) -> Any:
     from backend.services import reports_rollup
 
@@ -249,6 +255,8 @@ SOURCES: dict[str, Source] = {
     "planning_summary": Source(_planning_summary, {"ym": _month}),
     # GET /api/investments/brief
     "investments_brief": Source(_investments_brief, {}),
+    # GET /api/portfolio/xray
+    "portfolio_xray": Source(_portfolio_xray, {}),
     # GET /api/reports/rollup?months=&merchant_limit=&period=&tag=&category=
     "reports_rollup": Source(_reports_rollup, _REPORT_PARAMS),
     # GET /api/cashflow/flow?month=&compact=&period=&tag=&category=

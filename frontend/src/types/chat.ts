@@ -729,12 +729,15 @@ export type VisualBlock =
       labels: string[]
       series: { name: string; values: (number | null)[] }[]
       targets?: (number | null)[] | null
+      /** What the server left out of THIS chart ("Largest 12 of 32"), drawn under it. */
+      note?: string | null
     }
   | {
       type: 'timeline'
       format?: VisualFormat | null
       currency?: string | null
       items: { date: string; label: string; value?: number | null }[]
+      note?: string | null
     }
 
 /** The resolved spec `show_visual` returns (backend ai/visual_spec.py) — live `visual` SSE event

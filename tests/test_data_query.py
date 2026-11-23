@@ -108,6 +108,7 @@ _PARITY = [
     ("commitments_coverage", {"months": 12}, "/api/commitments/coverage?months=12"),
     ("planning_summary", {"ym": "2026-11"}, "/api/planning/summary?ym=2026-11"),
     ("investments_brief", {}, "/api/investments/brief"),
+    ("portfolio_xray", {}, "/api/portfolio/xray"),
     (
         "reports_rollup",
         {"months": 6, "merchant_limit": 10},

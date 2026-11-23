@@ -150,6 +150,30 @@ def test_intl_fund_msci_in_name():
     assert result["region"] == "Global"
 
 
+def test_intl_fund_hint_is_a_whole_word_not_a_substring():
+    """ "EM" inside "Semiconductor" is not Emerging Markets: a US-listed fund stays US."""
+    result = svc._classify_heuristic(
+        _inst("equity", asset_subclass="etf", symbol="ACMS", name="ACME Semiconductor ETF")
+    )
+    assert result["region"] == "United States"
+
+
+@pytest.mark.parametrize(
+    "symbol,name",
+    [
+        ("ACXU", "ACME Total International Stock ETF"),
+        ("ACEF", "ACME MSCI EAFE ETF"),
+        ("ACWX", "ACME FTSE All-World ex-US ETF"),
+    ],
+)
+def test_intl_fund_ex_us_is_global_ex_us(symbol, name):
+    """ex-US wins over WORLD: an all-world ex-US fund holds no US."""
+    result = svc._classify_heuristic(
+        _inst("equity", asset_subclass="etf", symbol=symbol, name=name)
+    )
+    assert result["region"] == "Global ex-US"
+
+
 def test_intl_fund_not_detected_for_plain_stock():
     """A plain stock (not a fund subclass) with 'WORLD' in name doesn't trigger intl detection."""
     result = svc._classify_heuristic(

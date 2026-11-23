@@ -129,7 +129,12 @@ export function InlineVisual({ visual, draft }: { visual: VisualSpec; draft?: bo
       {!draft && <VisualMenu title={visual.title} drawingOnly={blocks.length === 0} />}
       {visual.title && <h4 className="ivis-title">{visual.title}</h4>}
       {blocks.map((b, i) => (
-        <Guard key={i}>{renderBlock(b, i)}</Guard>
+        <Guard key={i}>
+          {renderBlock(b, i)}
+          {'note' in b && typeof b.note === 'string' && b.note && (
+            <p className="ivis-caption ivis-block-note">{b.note}</p>
+          )}
+        </Guard>
       ))}
       {code && (
         <Guard>

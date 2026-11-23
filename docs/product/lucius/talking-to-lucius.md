@@ -136,7 +136,8 @@ the picture for you:
   is never mistaken for your plan. To try other numbers yourself, open it in **Plan › Outlook**
   from the chip under the reply.
 - **Projection — not booked** marks a cash-flow forecast.
-- **Largest 6 of 35** means he kept the biggest rows and left the smallest out.
+- **Largest 6 of 35**, right under a chart, means that chart kept its biggest rows and left the
+  smallest out.
 
 To keep a chart, point at it and open the **⋯** menu in its top-right corner: **Copy as image**
 puts a PNG on your clipboard, ready to paste; **Download as SVG** and **Download as PNG** save it
