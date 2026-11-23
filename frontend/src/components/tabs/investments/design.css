@@ -804,7 +804,7 @@
 }
 .mk-risk-row {
   display: grid;
-  grid-template-columns: 56px 1fr 38px;
+  grid-template-columns: 66px 1fr 38px;
   align-items: center;
   gap: 9px;
   font-size: 12.5px;
@@ -814,6 +814,15 @@
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Fund look-through: how much of the name is held directly and inside which funds. */
+.mk-risk-split {
+  grid-column: 2 / 4;
+  margin-top: -5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 .mk-risk-track {
   position: relative;

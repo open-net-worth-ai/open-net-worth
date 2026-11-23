@@ -361,6 +361,10 @@ def _row_value(r: dict) -> float:
     return r["value"] if "value" in r else r["base_value"]
 
 
+def _pct_of(value: float, grand: float) -> float:
+    return round((value / grand) * 100, 4) if grand else 0.0
+
+
 def _with_fund_holdings(rows: list[dict], grand: float, guideline_pct: float, fh) -> list[dict]:
     """The breach view with funds looked through: each name is what is held directly PLUS what
     the book's funds hold of it. Every entry says which part is which (`direct`, `via_funds`), so
@@ -386,6 +390,7 @@ def _with_fund_holdings(rows: list[dict], grand: float, guideline_pct: float, fh
     for name, e in entries.items():
         through = via.get(name)
         value = e["value"]
+        direct_value = value - (through.value if through else 0.0)
         ranked.append(
             {
                 "name": name,
@@ -394,8 +399,12 @@ def _with_fund_holdings(rows: list[dict], grand: float, guideline_pct: float, fh
                 "hot": bool(grand) and (value / grand) * 100 >= guideline_pct,
                 "instrument_ids": e["ids"],
                 "label": e["label"],
-                "direct": round(value - (through.value if through else 0.0), 2),
-                "via_funds": through.funds if through else [],
+                "direct": round(direct_value, 2),
+                "direct_pct": _pct_of(direct_value, grand),
+                "via_funds": [
+                    {**f, "pct": _pct_of(f["value"], grand)}
+                    for f in (through.funds if through else [])
+                ],
                 "at_least": bool(through) and not fh.complete,
             }
         )

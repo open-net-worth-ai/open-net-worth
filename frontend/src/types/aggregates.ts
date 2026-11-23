@@ -563,7 +563,8 @@ export interface InvestedBook {
     // Flag `fund_lookthrough` only: what the book's funds hold of this name.
     label?: string
     direct?: number
-    via_funds?: Array<{ instrument_id: string; symbol: string; value: number }>
+    direct_pct?: number
+    via_funds?: Array<{ instrument_id: string; symbol: string; value: number; pct: number }>
     at_least?: boolean
   }>
   concentration_guideline_pct: number

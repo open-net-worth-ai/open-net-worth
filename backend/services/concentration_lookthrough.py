@@ -98,11 +98,16 @@ def through_funds(
             via = out.setdefault(name, _Via(label=h.get("name") or h["symbol"]))
             slice_value = fund_value * float(h["weight"])
             via.value += slice_value
-            via.funds.append(
-                {
-                    "instrument_id": r.get("instrument_id") or "",
-                    "symbol": symbol_of(r),
-                    "value": round(slice_value, 2),
-                }
-            )
+            _add_fund_slice(via, r.get("instrument_id") or "", symbol_of(r), slice_value)
+    for via in out.values():
+        via.funds.sort(key=lambda f: f["value"], reverse=True)
     return out
+
+
+def _add_fund_slice(via: _Via, instrument_id: str, symbol: str, value: float) -> None:
+    """One entry per fund: the same fund held in two accounts is one slice, not two."""
+    for f in via.funds:
+        if f["instrument_id"] == instrument_id and f["symbol"] == symbol:
+            f["value"] = round(f["value"] + value, 2)
+            return
+    via.funds.append({"instrument_id": instrument_id, "symbol": symbol, "value": round(value, 2)})

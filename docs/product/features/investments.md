@@ -141,9 +141,11 @@ and its 10 biggest holdings. It refreshes them about once a month.
   technology through ETFs says so. A line under the bars says how much of your book was looked
   through, how much is placed by each holding's own sector, and how much couldn't be placed.
 - **Concentration & risk** counts a company you hold inside your funds toward that company: shares
-  of a company you own directly plus that company inside an index fund are one figure. A name that includes fund holdings
-  is marked ⊕; hover it to see which funds. Because only each fund's top 10 holdings are known,
-  these figures are a minimum ("at least").
+  of a company you own directly plus that company inside an index fund are one figure. A name that
+  includes fund holdings is marked ⊕, and a line under its bar shows the split — for example
+  "19.6% direct · 3.6% via ACMI · 2.6% via ACMQ", or "all via funds: …" for a company you don't
+  hold yourself. The Portfolio brief names the funds too. Because only each fund's top 10
+  holdings are known, these figures are a minimum ("at least").
 - A look-through you saved yourself (for example by asking Lucius) always wins over what the
   price source says.
 - Leveraged and inverse funds aren't looked through: what they hold doesn't say which way they

@@ -64,6 +64,26 @@ def test_a_company_held_directly_and_inside_funds_is_one_name():
     assert "ACMI" not in got and "ACMQ" not in got  # a fund is still not a name
 
 
+def test_each_entry_says_how_much_is_direct_and_inside_which_fund():
+    rows = [_stock("ACMT", 800), _fund("ACMI", 5000), _fund("ACMQ", 2000)]
+    acmt = _by_name(book.concentration_by_name(rows, GRAND, 20.0, fund_holdings=FH))["ACMT"]
+    assert acmt["direct_pct"] == pytest.approx(8.0)
+    # largest slice first; the parts add up to the headline
+    assert [(f["symbol"], f["pct"]) for f in acmt["via_funds"]] == [
+        ("ACMI", pytest.approx(3.5)),
+        ("ACMQ", pytest.approx(1.8)),
+    ]
+    assert acmt["direct_pct"] + sum(f["pct"] for f in acmt["via_funds"]) == pytest.approx(
+        acmt["pct"]
+    )
+
+
+def test_one_fund_held_in_two_accounts_is_one_slice():
+    rows = [_fund("ACMI", 3000), _fund("ACMI", 2000)]
+    acmt = _by_name(book.concentration_by_name(rows, GRAND, 20.0, fund_holdings=FH))["ACMT"]
+    assert [(f["symbol"], f["value"]) for f in acmt["via_funds"]] == [("ACMI", 350.0)]
+
+
 def test_a_fund_inside_a_fund_is_never_a_name():
     got = _by_name(book.concentration_by_name([_fund("ACMI", 5000)], GRAND, 20.0, fund_holdings=FH))
     assert "ACMX" not in got
@@ -122,10 +142,12 @@ def test_brief_narrative_counts_what_funds_hold():
         "label": "ACME Tech Corp",
         "pct": 22.0,
         "at_least": True,
-        "via_funds": [{"symbol": "ACMI", "value": 1.0}],
+        "via_funds": [{"symbol": "ACMI", "value": 1.0}, {"symbol": "ACMQ", "value": 1.0}],
     }
     text = portfolio_brief._concentration_narrative(top, 2.0, 20.0)
-    assert text.startswith("ACME Tech Corp is at least 22% of your investments, counting what")
+    assert text.startswith(
+        "ACME Tech Corp is at least 22% of your investments, counting what ACMI and ACMQ hold of it"
+    )
 
 
 # ── one answer: every breach caller asks with the same holdings ─────────────────────────

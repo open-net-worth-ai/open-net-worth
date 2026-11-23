@@ -94,6 +94,10 @@ def _days_until(iso_date: str) -> int:
     return ceil(delta.total_seconds() / 86_400)
 
 
+def _and_list(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
 def _concentration_narrative(
     top: dict, over_by: float, guideline_pct: float, *, untracked: str | None = None
 ) -> str:
@@ -106,7 +110,7 @@ def _concentration_narrative(
     at_least = "at least " if top.get("at_least") else ""
     share = f"{top.get('label') or top['name']} is {at_least}{top['pct']:.0f}% {of}"
     if top.get("via_funds"):
-        share += ", counting what your funds hold of it"
+        share += f", counting what {_and_list([f['symbol'] for f in top['via_funds']])} hold of it"
     whose = "the" if guideline_pct == investments_book.CONCENTRATION_GUIDELINE_PCT else "your"
     text = (
         f"{share}, {over_by:.0f} percentage points over {whose} {guideline_pct:.0f}% "

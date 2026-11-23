@@ -23,6 +23,7 @@
 import { useMemo } from 'react'
 import type { ComputedRow } from '../../../types/portfolio'
 import type { InvestedBookRow, UntrackedExcluded } from '../../../types/aggregates'
+import type { RiskSplit } from './riskSplit'
 import { usePortfolioAnalytics } from '../../../hooks/serverState'
 import {
   ASSET_CLASS_COLOR,
@@ -95,8 +96,8 @@ export interface DerivedBook extends Book {
   todayPL: number
   todayPct: number
   movers: BookRow[]
-  /** `viaFunds`: the funds whose holdings add to this name (flag `fund_lookthrough`). */
-  risk: Array<{ nm: string; pct: number; val: number; hot: boolean; viaFunds?: string[] }>
+  /** `split`: how much is held directly and inside which funds (flag `fund_lookthrough`). */
+  risk: Array<{ nm: string; pct: number; val: number; hot: boolean; split?: RiskSplit }>
   // `cur`/`tgt` are ROUNDED, for display only. `driftPp`/`tradeBase` are the server's unrounded
   // figures (MATH-38) — a caller that sizes a trade off the rounded `cur - tgt` compounds the
   // rounding into real money (book 1,000,000, current 32.6%, target 29.4% → the true trade is
@@ -229,7 +230,12 @@ export function useInvestmentsBook(invRows: ComputedRow[]): DerivedBook {
         pct: c.pct,
         val: c.value,
         hot: c.hot,
-        viaFunds: (c.via_funds ?? []).map((f) => f.symbol),
+        split: c.via_funds?.length
+          ? {
+              directPct: c.direct_pct ?? 0,
+              funds: c.via_funds.map((f) => ({ symbol: f.symbol, pct: f.pct })),
+            }
+          : undefined,
       })),
       alloc: server.allocation.map((a) => ({
         cls: a.cls,

@@ -6,14 +6,14 @@ import { fBase } from '../../../utils/format'
 import { Button, Badge } from '../../ui'
 import type { UntrackedExcluded } from '../../../types/aggregates'
 import { UntrackedNote } from './UntrackedHoldings'
+import { splitLine, type RiskSplit } from './riskSplit'
 
 interface RiskRow {
   nm: string
   pct: number
   val: number
   hot: boolean
-  /** Funds whose holdings add to this name (flag `fund_lookthrough`). */
-  viaFunds?: string[]
+  split?: RiskSplit
 }
 
 interface Props {
@@ -153,14 +153,10 @@ export function Risk({ risk, guideline = 20, dropPct = 30, untracked, onSaveSett
             <div className="mk-risk-row" key={r.nm}>
               <span
                 className="mk-risk-nm"
-                title={
-                  r.viaFunds?.length
-                    ? `Includes what ${r.viaFunds.join(', ')} hold of it (their top 10 holdings)`
-                    : undefined
-                }
+                title={r.split ? `At least — counted from each fund's top 10 holdings` : undefined}
               >
                 {r.nm}
-                {r.viaFunds?.length ? ' ⊕' : null}
+                {r.split ? ' ⊕' : null}
               </span>
               <span className="mk-risk-track">
                 <span
@@ -177,6 +173,7 @@ export function Risk({ risk, guideline = 20, dropPct = 30, untracked, onSaveSett
               >
                 {Math.round(r.pct)}%
               </span>
+              {r.split && <span className="mk-risk-split">{splitLine(r.split)}</span>}
             </div>
           )
         })}
