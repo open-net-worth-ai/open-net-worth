@@ -92,6 +92,9 @@ Rules enforced server-side (each failure returns an error the model can fix):
   noted "Largest N of M" — nothing is summed into an "Other". A timeline keeps its first 20
   by date, noted "First 20 of M". These notes are the block's own `note`, drawn under that
   block, never in the visual's `caption` (which can't say which chart it means);
+- a series whose field holds no number in any row is refused, naming the numeric fields the
+  rows do have; a breakdown left with no rows (all zero or missing) is refused — never an
+  empty axis;
 - `format: "percent"` is a fraction (0.12 = 12%); a value beyond ±10 (±1,000%) is refused as
   already in points — use `percent_points` (12 = 12%);
 - a reference to `simulate_retirement` adds a server-written caption naming every lever the

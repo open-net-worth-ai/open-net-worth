@@ -737,3 +737,49 @@ def test_a_drawing_tells_a_channel_where_to_see_it():
         "Where it went",
         "(A drawing — open the chat in the app to see it.)",
     ]
+
+
+def test_a_series_reading_no_numbers_is_refused_naming_the_fields_that_have_them():
+    rows = [{"name": "Card A", "balance": -1200.0}, {"name": "Loan B", "balance": -400000.0}]
+    history = [_use("n1", "get_net_worth", {}), _res("n1", {"accounts": rows})]
+    token = visual_sources.bind(history)
+    try:
+        with pytest.raises(visual_spec.VisualSpecError, match="'balance_base'.*balance\\)"):
+            visual_spec.resolve(
+                {
+                    "blocks": [
+                        {
+                            "type": "chart",
+                            "kind": "bar",
+                            "rows": {"tool": "get_net_worth", "path": "accounts"},
+                            "label": "name",
+                            "series": [{"field": "balance_base", "name": "Debt"}],
+                        }
+                    ]
+                }
+            )
+    finally:
+        visual_sources.reset(token)
+
+
+def test_a_breakdown_of_only_zeros_is_refused_not_drawn_empty():
+    rows = [{"name": "Card A", "balance": 0.0}, {"name": "Card B", "balance": 0}]
+    history = [_use("n1", "get_net_worth", {}), _res("n1", {"accounts": rows})]
+    token = visual_sources.bind(history)
+    try:
+        with pytest.raises(visual_spec.VisualSpecError, match="nothing to draw"):
+            visual_spec.resolve(
+                {
+                    "blocks": [
+                        {
+                            "type": "chart",
+                            "kind": "bar",
+                            "rows": {"tool": "get_net_worth", "path": "accounts"},
+                            "label": "name",
+                            "series": [{"field": "balance", "name": "Debt"}],
+                        }
+                    ]
+                }
+            )
+    finally:
+        visual_sources.reset(token)

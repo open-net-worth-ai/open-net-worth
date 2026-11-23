@@ -255,7 +255,9 @@ def _chart(block: dict, used: list[ToolCall], notes: list[str]) -> dict:
         if not block.get("target"):
             raise VisualSpecError("a progress chart needs 'target' (the field holding the goal)")
         targets = [_number(_field(r, block["target"], "target"), "target") for r in rows]
-    for s in series:
+    for s, s_in in zip(series, series_in):
+        if all(v is None for v in s["values"]):
+            raise VisualSpecError(_no_values(s["name"], s_in.get("field"), rows))
         _check_percent(fmt, s["values"], f"series {s['name']}")
     _check_percent(fmt, targets or [], "target")
     chart = {
@@ -270,7 +272,25 @@ def _chart(block: dict, used: list[ToolCall], notes: list[str]) -> dict:
     if kind != "line":
         top = block.get("top")
         _keep_largest(chart, min(int(top), MAX_ROWS[kind]) if top else MAX_ROWS[kind], notes)
+        if not chart["labels"]:
+            raise VisualSpecError(
+                f"every {kind} value is zero or missing — there is nothing to draw"
+            )
     return chart
+
+
+def _no_values(name: str, field: Any, rows: list[dict]) -> str:
+    """A series that read nothing would draw an empty axis; say which fields DO hold numbers."""
+    numeric = sorted(
+        {
+            k
+            for r in rows[:20]
+            for k, v in r.items()
+            if isinstance(v, (int, float)) and not isinstance(v, bool)
+        }
+    )
+    have = ", ".join(numeric[:12]) or "none"
+    return f"series {name}: field {field!r} has no number in any row (numeric fields: {have})"
 
 
 def _timeline(block: dict, used: list[ToolCall], notes: list[str]) -> dict:
