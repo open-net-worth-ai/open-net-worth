@@ -37,15 +37,28 @@ import { OvChart, areaFill, axes, legend, moneyTip, resolveColor, withAlpha } fr
 import { BreakdownBody, type BreakdownRow } from '../Breakdown'
 import type { Breakdown, RangeStats } from '../../../../types/aggregates'
 import { vizOf } from '../vizModel'
+import { ChartToggleMenu } from '../ChartToggleMenu'
+import { DEFAULT_NET_WORTH_RANGE, NET_WORTH_RANGES } from './netWorthRanges'
 
-// Range labels the picker offers. The month counts themselves live on the SERVER
-// (services/overview/history.py::RANGE_MONTHS) — these keys just name which precomputed
-// range to read, so a range can never be sliced two different ways.
-const RANGE_KEYS = ['1M', '3M', '6M', '1Y', 'All'] as const
+const RANGE_KEYS = NET_WORTH_RANGES
+const DEFAULT_RANGE = DEFAULT_NET_WORTH_RANGE
+/** Ranges long enough that the axis reads better as months than as days. */
+const SHORT_RANGES = new Set(['1M', '3M', '6M'])
 
-function attribLabel(range: string, spanMonths: number): string {
-  if (range === 'All') return spanMonths <= 0 ? 'tracked' : `${spanMonths}mo`
-  return `${spanMonths}mo`
+function rangeKey(range: string): string {
+  return (RANGE_KEYS as readonly string[]).includes(range) ? range : DEFAULT_RANGE
+}
+
+/** What the headline's change covers: "over 3 months", "this year", or — when the history is
+ *  shorter than the range, or the range is All — "since Mar 2025". */
+function attribLabel(range: string, stats: RangeStats): string {
+  const since = `since ${monthYearLabel(stats.from_date)}`
+  if (stats.clamped) return `${since}, when your history starts`
+  if (range === 'All') return since
+  if (range === 'YTD') return 'this year'
+  const m = stats.span_months
+  if (m % 12 === 0) return `over ${m / 12} ${m === 12 ? 'year' : 'years'}`
+  return `over ${m} ${m === 1 ? 'month' : 'months'}`
 }
 
 function fSigned(n: number): string {
@@ -59,8 +72,7 @@ function monthYearLabel(iso: string): string {
 /** The server's precomputed stats for a named range — never a client-side slice + subtract. */
 function useRangeStats(range: string): RangeStats | null {
   const { stats: networth } = useNetWorthSeries()
-  const key = (RANGE_KEYS as readonly string[]).includes(range) ? range : '3M'
-  return networth?.ranges?.[key] ?? null
+  return networth?.ranges?.[rangeKey(range)] ?? null
 }
 
 /** The 7-month comparison the composition mode's delta chip shows. */
@@ -138,7 +150,9 @@ function Headline({
         <span className={'ov-delta-chip money' + (pos ? ' pos' : ' neg')}>
           {pos ? '↑' : '↓'} {fPct(trend.pct != null ? Math.abs(trend.pct) : 0)}
         </span>
-        <span className="ov-hero-attrib">{attribLabel(range, trend.span_months)}</span>
+        <span className="ov-hero-attrib">
+          <Money as="span">{fSigned(trend.delta)}</Money> {attribLabel(range, trend)}
+        </span>
       </>
     )
   }
@@ -447,7 +461,7 @@ function NetWorthChartBody({ mode, range }: { mode: 'trend' | 'comp'; range: str
   const slice = windowed.length >= 2 ? windowed : comparable
   const pos = (rangeStats?.delta ?? 0) >= 0
   const color = resolveColor(pos ? 'var(--good)' : 'var(--bad)')
-  const long = range === '1Y' || range === 'All'
+  const long = !SHORT_RANGES.has(rangeKey(range))
   return (
     <OvChart
       sig={
@@ -495,12 +509,9 @@ function NetWorthChartBody({ mode, range }: { mode: 'trend' | 'comp'; range: str
               },
             },
           },
-          // axes()'s x/y overrides merge at the SCALE level (siblings of
-          // `ticks`/`grid`, e.g. `stacked`), not inside `ticks` — so a tick
-          // COUNT override isn't expressible here without touching
-          // charts.tsx (out of scope); the shared default (maxTicksLimit 8)
-          // applies, which is close enough to the prototype's 6.
-          scales: axes(),
+          // Labels stay level: on a narrow card Chart.js drops some instead of tilting them all
+          // (month labels on a 3Y/5Y range otherwise ran diagonally across a phone card).
+          scales: axes({ xTicks: { maxRotation: 0, autoSkipPadding: 14 } }),
         },
       }}
       minHeight={120}
@@ -510,7 +521,33 @@ function NetWorthChartBody({ mode, range }: { mode: 'trend' | 'comp'; range: str
 
 // ── the three net-worth defIds ──────────────────────────────────────────────
 
-const Hero: ComponentType<WidgetContentProps> = ({ instance, def, onNavigate }) => {
+/** The range on the card itself — the same `range` setting the widget's editor shows, saved
+ *  with the widget the moment it is picked. A compact menu, like the chart-type toggle: eight
+ *  options as buttons would wrap the header on a narrow card. */
+function RangePicker({
+  instance,
+  onPatch,
+  range,
+}: {
+  instance: WidgetContentProps['instance']
+  onPatch: WidgetContentProps['onPatch']
+  range: string
+}) {
+  // `ov-header-compact`: small enough to stay on the title's row on a phone, where a wider
+  // header control drops to a row of its own.
+  return (
+    <span className="ov-header-compact">
+      <ChartToggleMenu
+        ariaLabel="Range"
+        value={range}
+        options={RANGE_KEYS.map((k) => ({ value: k, label: k }))}
+        onChange={(next) => onPatch({ config: { ...instance.config, range: next } })}
+      />
+    </span>
+  )
+}
+
+const Hero: ComponentType<WidgetContentProps> = ({ instance, def, onNavigate, onPatch }) => {
   const chosen = vizOf(instance, def) || 'full'
   const { history, loading } = useNetWorthSeries()
   // A monthly series needs two months before there is a line to draw. Until then the
@@ -518,9 +555,17 @@ const Hero: ComponentType<WidgetContentProps> = ({ instance, def, onNavigate }) 
   const heroViz = chosen === 'full' && !loading && history.length < 2 ? 'numbers' : chosen
   useFitContentWhen(heroViz === 'numbers' && instance.heightMode !== 'fixed')
   const mode: 'trend' | 'comp' = instance.config?.chart === 'Composition' ? 'comp' : 'trend'
-  const range = (instance.config?.range as string) || '3M'
+  const range = rangeKey(instance.config?.range as string)
+  // The composition chart always shows the whole series, so it has no range to pick.
+  const picker =
+    mode === 'trend' ? <RangePicker instance={instance} onPatch={onPatch} range={range} /> : null
   return (
-    <WidgetShell title={instance.title} base={def.title} fill={heroViz !== 'numbers'}>
+    <WidgetShell
+      title={instance.title}
+      base={def.title}
+      fill={heroViz !== 'numbers'}
+      actions={picker}
+    >
       <div className="ov-hero">
         {heroViz !== 'chart' && <Headline mode={mode} range={range} inline />}
         {heroViz !== 'numbers' && <NetWorthChartBody mode={mode} range={range} />}
@@ -539,11 +584,13 @@ const NetWorthNumbers: ComponentType<WidgetContentProps> = ({ instance, def, onN
   </WidgetShell>
 )
 
-const NetWorthChart: ComponentType<WidgetContentProps> = ({ instance, def }) => {
+const NetWorthChart: ComponentType<WidgetContentProps> = ({ instance, def, onPatch }) => {
   const mode = (vizOf(instance, def) || 'trend') as 'trend' | 'comp'
-  const range = (instance.config?.range as string) || '3M'
+  const range = rangeKey(instance.config?.range as string)
+  const picker =
+    mode === 'trend' ? <RangePicker instance={instance} onPatch={onPatch} range={range} /> : null
   return (
-    <WidgetShell title={instance.title} base={def.title} fill>
+    <WidgetShell title={instance.title} base={def.title} fill actions={picker}>
       <div className="ov-hero">
         <NetWorthChartBody mode={mode} range={range} />
       </div>

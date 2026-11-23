@@ -8,7 +8,7 @@ the services layer, never here. Respects the dependency rule: imports only servi
 (api -> services), no store / no FX math directly.
 
 Routes:
-    GET /api/returns?period={7D|1M|3M|YTD|1Y|ALL}[&benchmark=<roster key|id|symbol>][&risk=true]
+    GET /api/returns?period={7D|1M|3M|6M|YTD|1Y|3Y|5Y|ALL}[&benchmark=<roster key|id|symbol>][&risk=true]
         [&band={equity|crypto|commodity|all_assets}]
         Returns the period-returns payload. With `risk=true`, attaches a `risk` block from
         risk_metrics.portfolio_risk(period, benchmark). Existing callers (no `risk` param)
@@ -28,8 +28,10 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
+from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.services import returns as returns_service
 from backend.services import risk_metrics
 
@@ -40,8 +42,11 @@ class Period(str, Enum):
     D7 = "7D"
     M1 = "1M"
     M3 = "3M"
+    M6 = "6M"
     YTD = "YTD"
     Y1 = "1Y"
+    Y3 = "3Y"
+    Y5 = "5Y"
     ALL = "ALL"
 
 
@@ -62,6 +67,22 @@ def get_benchmarks():
     Returns [{key, label, symbol}] in display order, including the empty-key 'none' option.
     """
     return {"benchmarks": risk_metrics.benchmark_roster()}
+
+
+class PrepareBenchmarkBody(BaseModel):
+    instrument_id: str = Field(..., min_length=1)
+
+
+@router.post("/api/returns/benchmarks/prepare")
+def prepare_benchmark(body: PrepareBenchmarkBody):
+    """Get a ticker picked from the market search ready to be the benchmark (its price history
+    is fetched now). Returns its picker entry; saving it is `PUT /api/profile`."""
+    from backend.services.benchmark_seed import prepare_custom_benchmark
+
+    try:
+        return prepare_custom_benchmark(body.instrument_id)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 
 
 @router.get("/api/returns")

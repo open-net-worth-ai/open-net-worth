@@ -14,6 +14,7 @@ import type {
 } from '../../../types/portfolio'
 import { fBase, fPct } from '../../../utils/format'
 import { ViewCache } from './viewCache'
+import { rememberPerformancePeriod, rememberedPerformancePeriod } from './performancePeriod'
 
 // The picked benchmark is the ONE "vs the market" index: saved to the profile so the Intel
 // Holdings brief and the watch pulse (and their server-side stories) compare against it too.
@@ -71,7 +72,7 @@ export interface PerformanceViewModel {
   period: ReturnPeriod
   setPeriod: (p: ReturnPeriod) => void
   benchKey: string
-  setBenchKey: (k: string) => void
+  setBenchKey: (k: string, added?: BenchmarkRosterItem) => void
 
   // Status
   loading: boolean
@@ -110,19 +111,35 @@ function tone(v: number | null | undefined): 'pos' | 'neg' | undefined {
 }
 
 export function usePerformanceView(): PerformanceViewModel {
-  const [period, setPeriod] = useState<ReturnPeriod>('1Y')
+  const [period, setPeriodState] = useState<ReturnPeriod>(rememberedPerformancePeriod)
+  const setPeriod = useCallback((p: ReturnPeriod) => {
+    setPeriodState(p)
+    rememberPerformancePeriod(p)
+  }, [])
   // The benchmark is the profile's `preferred_benchmark`; `picked` is this view's explicit
   // choice, shown at once while the save lands. Only an explicit pick is written back.
   const preferred = usePreferredBenchmark()
   const [picked, setPicked] = useState<string | null>(null)
   const benchKey = picked ?? preferred
-  const setBenchKey = useCallback((key: string) => {
-    setPicked(key)
-    persistPreferredBenchmark(key)
-  }, [])
   const [benchmarks, setBenchmarks] = useState<BenchmarkRosterItem[]>(
     () => _rosterCache.get('roster') ?? [],
   )
+  // `added`: a ticker just picked from the market search — it heads the list as "Your benchmark"
+  // (replacing an earlier one), as the server's roster lists it from now on.
+  const setBenchKey = useCallback((key: string, added?: BenchmarkRosterItem) => {
+    setPicked(key)
+    persistPreferredBenchmark(key)
+    if (added) {
+      setBenchmarks((rows) => {
+        const next = [
+          added,
+          ...rows.filter((b) => b.group !== 'Your benchmark' && b.key !== added.key),
+        ]
+        _rosterCache.set('roster', next)
+        return next
+      })
+    }
+  }, [])
 
   const dataKey = `${period}|${benchKey}`
   const [data, setData] = useState<PerfData | null>(() => _dataCache.get(dataKey) ?? null)

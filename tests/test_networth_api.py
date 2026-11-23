@@ -93,7 +93,7 @@ def test_period_window_is_inclusive_and_monotone(client):
 
 
 def test_unknown_period_falls_back_to_1y(client):
-    r = client.get("/api/net-worth/history", params={"period": "5Y"})
+    r = client.get("/api/net-worth/history", params={"period": "10Y"})
     assert r.status_code == 200  # never 422 — defensive fallback, not an enum gate
     assert r.json()["period"] == "1Y"
 

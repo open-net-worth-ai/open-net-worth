@@ -88,11 +88,10 @@ def watched_items(
 def benchmark_quote_symbol() -> tuple[str, str]:
     """(display key, Yahoo quote symbol) for the user's preferred benchmark — the one the
     Performance picker sets, so "ahead of VWRA" here matches the Performance chart."""
-    from backend.db.instrument_store import InstrumentStore
-    from backend.services.risk_metrics import preferred_benchmark
+    from backend.services.risk_metrics import benchmark_instrument, preferred_benchmark
 
     key = preferred_benchmark()
-    inst = InstrumentStore().find_by_symbol(key) or {}
+    inst = benchmark_instrument(key) or {}
     return key, watch_context.yahoo_symbol(key, _ROSTER_CLASS.get(key), inst)
 
 

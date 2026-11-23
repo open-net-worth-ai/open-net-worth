@@ -59,7 +59,7 @@ export function useMarketSearch(query: string, enabled: boolean) {
   return { results: query.trim() ? results : [], loading: query.trim() ? loading : false }
 }
 
-async function resolveMarket(result: MarketResult): Promise<PickedInstrument | null> {
+export async function resolveMarket(result: MarketResult): Promise<PickedInstrument | null> {
   const res = await authFetch('/api/intel/assets/resolve', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

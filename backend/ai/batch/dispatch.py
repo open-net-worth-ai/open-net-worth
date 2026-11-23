@@ -43,15 +43,27 @@ _ADAPTERS = {
 _REAL_HANDLE_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
-def _active_adapter_key() -> str:
+def _active_adapter_key(requests: list[BatchRequest]) -> str:
     from backend.db.model_config_store import ModelConfigStore
 
-    inst = ModelConfigStore().resolved()
+    store = ModelConfigStore()
+    # A request pinned to ANOTHER provider can't ride the default's batch API (wrong
+    # endpoint, key and model namespace); the sync fallback resolves its ref instead.
+    if any(_pinned_elsewhere(store, r.model) for r in requests):
+        return routing.SYNC_ADAPTER_KEY
+    inst = store.resolved()
     return routing.resolve_adapter_key(inst["provider"], inst.get("base_url") or "")
 
 
+def _pinned_elsewhere(store, model: str) -> bool:
+    if ":" not in (model or ""):
+        return False
+    resolved = store.resolve_override(model)
+    return bool(resolved) and resolved["provider_key"] not in (None, store.default_provider_key())
+
+
 async def _submit(task: str, requests: list[BatchRequest]) -> str:
-    adapter_key = _active_adapter_key()
+    adapter_key = _active_adapter_key(requests)
     adapter = _ADAPTERS.get(adapter_key)
     if adapter is None:
         return await sync_fallback_submit(requests)

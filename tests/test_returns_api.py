@@ -120,7 +120,7 @@ def test_returns_each_period_enum_200(client, period):
 
 def test_returns_bad_period_422(client):
     c, _ = client
-    r = c.get("/api/returns", params={"period": "5Y"})
+    r = c.get("/api/returns", params={"period": "10Y"})
     assert r.status_code == 422
 
 
@@ -309,15 +309,29 @@ def test_returns_no_benchmark_omits_comparison(bench_client):
 
 
 def test_get_benchmarks_200(real_client):
-    """GET /api/returns/benchmarks → 200, exactly 6 roster entries."""
+    """GET /api/returns/benchmarks → 200, the twelve roster entries plus 'none'."""
     r = real_client.get("/api/returns/benchmarks")
     assert r.status_code == 200
     body = r.json()
     assert "benchmarks" in body
     entries = body["benchmarks"]
-    assert len(entries) == 6
+    assert len(entries) == 13
     keys = {e["key"] for e in entries}
-    assert keys == {"SPY", "VWRA", "QQQ", "ACWI", "BTC", ""}
+    assert keys == {
+        "SPY",
+        "QQQ",
+        "VWRA",
+        "ACWI",
+        "EUNL",
+        "EXS1",
+        "EXW1",
+        "EXSA",
+        "1321",
+        "EWJ",
+        "EEM",
+        "BTC",
+        "",
+    }
     for e in entries:
         assert "key" in e
         assert "label" in e
@@ -429,5 +443,5 @@ def test_returns_roster_key_resolves_for_benchmark(bench_client):
 
 def test_returns_risk_true_bad_period_422(real_client):
     """Bad period with risk=true still → 422 (enum validation)."""
-    r = real_client.get("/api/returns", params={"period": "5Y", "risk": "true"})
+    r = real_client.get("/api/returns", params={"period": "10Y", "risk": "true"})
     assert r.status_code == 422

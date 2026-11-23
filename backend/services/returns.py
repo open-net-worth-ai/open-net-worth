@@ -58,7 +58,7 @@ from backend.services import returns_owned_assets as owned_assets
 _log = logging.getLogger(__name__)
 
 # Standard period windows exposed by the UI toggle / API enum. 7D added in Phase 4.
-PERIODS = ("7D", "1M", "3M", "YTD", "1Y", "ALL")
+PERIODS = ("7D", "1M", "3M", "6M", "YTD", "1Y", "3Y", "5Y", "ALL")
 
 # A window needs at least this many distinct value points to chain-link a meaningful TWR /
 # solve a stable XIRR. Below it we return null rather than a fabricated number.
@@ -112,9 +112,9 @@ def resolve_period(period: str, today: date | None = None) -> tuple[str, str]:
     """Resolve a period enum to an inclusive (start, end) ISO date pair (end = today).
 
     7D     → today minus 7 days.
-    1M/3M  → today minus 1/3 calendar months (day clamped to month length).
-    YTD    → Jan 1 of the current year.
-    1Y     → today minus 1 year (Feb-29 clamps to Feb-28).
+    1M/3M/6M → today minus 1/3/6 calendar months (day clamped to month length).
+    YTD      → Jan 1 of the current year.
+    1Y/3Y/5Y → today minus 1/3/5 years (Feb-29 clamps to Feb-28).
     ALL    → the earliest recorded price-history date (or, if none yet, today).
     Unknown period defaults to 1Y (the API validates the enum upstream; this is defensive).
     """
@@ -127,6 +127,12 @@ def resolve_period(period: str, today: date | None = None) -> tuple[str, str]:
         start = _shift_months(today, 1)
     elif p == "3M":
         start = _shift_months(today, 3)
+    elif p == "6M":
+        start = _shift_months(today, 6)
+    elif p == "3Y":
+        start = _shift_years(today, 3)
+    elif p == "5Y":
+        start = _shift_years(today, 5)
     elif p == "YTD":
         start = date(today.year, 1, 1)
     elif p == "ALL":
@@ -216,8 +222,11 @@ def _period_label(period: str, effective_start: str, requested_start: str) -> st
         "7D": "Last 7 days",
         "1M": "Last 1 month",
         "3M": "Last 3 months",
+        "6M": "Last 6 months",
         "YTD": "Year to date",
         "1Y": "Last 1 year",
+        "3Y": "Last 3 years",
+        "5Y": "Last 5 years",
         "ALL": "All time",
     }
     return labels.get(period.upper(), period.upper())
@@ -682,11 +691,14 @@ def _resolve_benchmark_instrument(ref: str) -> dict | None:
     """
     if not ref:
         return None
+    from backend.services.risk_metrics import benchmark_instrument
+
     store = InstrumentStore()
     inst = store.find_by_id(ref)
     if inst:
         return inst
-    return store.find_by_symbol(ref)
+    # A roster key resolves by its own listing first (see risk_metrics.benchmark_instrument).
+    return benchmark_instrument(ref) or store.find_by_symbol(ref)
 
 
 def benchmark_price_series(price_source_id: str, start: str, end: str) -> list[dict]:

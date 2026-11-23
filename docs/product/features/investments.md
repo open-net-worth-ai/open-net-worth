@@ -114,14 +114,22 @@ its shares as a lot, which you correct or remove under **Acquisition lots**.
 | **Holdings** | One row per holding: value, weight, profit/loss, price and today's move. Filter by asset class or account, group by class, account or currency, and click a row to open the asset's page (chart, news, and **Position** with every lot). |
 | **Watchlists** | The tickers on your [Intel](intel.md) watchlists, as cards or a table. |
 | **Analysis** | **Allocation** (it becomes **Allocation vs target**, with target markers and drift, once you set a mix with **Set targets**; until then it shows no target), **Sector & geography** (its **Region** view looks through a fund: once a fund's breakdown is saved, for example by asking Lucius to set its regions, the fund is spread across those regions instead of being placed where it is listed; a holding the app can't place shows as **Unmapped**), **Concentration & risk** (set your **Single-name guideline** under **Risk settings**; a diversified fund such as an all-world index ETF is not one company, so it is never flagged; the **20%** guideline is a default, and the Dashboard's note states the share instead of telling you to trim) and **Rebalancing**, which proposes trades toward your target. **Place with Lucius** opens the chat with those trades typed in (nothing is sent until you send it); Lucius can place them through a connected brokerage, asking you to confirm each order, or you can place them yourself. On a wide screen this sits beside Holdings instead of being a separate tab. |
-| **Performance** | **TWR** (time-weighted — your investment choices alone), **MWR** (money-weighted — includes when you added or withdrew money) and **Period gain**, with a chart you can compare against a benchmark. |
+| **Performance** | **TWR** (time-weighted — your investment choices alone), **MWR** (money-weighted — includes when you added or withdrew money) and **Period gain**, with a chart you can compare against a benchmark. Pick the range above the chart (1M, 3M, 6M, YTD, 1Y, 3Y, 5Y or All); this device remembers it. Returns over a year or more are annualized. When your price history is shorter than the range, the figures cover what there is and say since when. |
 | **Income** | Recent dividends and interest, where your income comes from, whether it's growing, and **Upcoming payments**. |
 | **Activity** | Every buy, sale, dividend and transfer, filterable by type and date range, with search. |
 | **Options** | Option contracts you've written or bought (see below). |
 | **Equity Compensation** | RSU/ESOW/LTIP grants and vests — see [Equity compensation](equity-compensation.md). |
 
 The benchmark you pick on **Performance** becomes your benchmark everywhere, including Intel's
-briefs.
+briefs. Open the benchmark menu above the chart to choose one: the list is grouped into **US**
+(S&P 500, Nasdaq-100), **World** (FTSE All-World, MSCI ACWI, MSCI World in EUR), **Europe** (DAX,
+EURO STOXX 50, STOXX Europe 600), **Asia & emerging** (Nikkei 225, MSCI Japan, MSCI Emerging
+Markets) and **Crypto** (Bitcoin), each tracked through an ETF. To compare with something else,
+type a name or ticker in the menu's search box and pick a match from **Market**. The app fetches
+its price history and it becomes your benchmark, listed at the top as **Your benchmark**.
+
+Your portfolio and the benchmark are both valued at today's exchange rates on every past day, so
+neither line includes currency moves, and the comparison is like for like.
 
 ## Options
 

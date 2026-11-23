@@ -60,7 +60,12 @@ BASE_DIR = Path(__file__).parent.parent
 
 
 def _intel_model() -> str:
-    """Task-assigned model (Settings > AI Model > Task models) or the instance default."""
+    """Task-assigned model (Settings > AI Model > Task models) or the instance default.
+
+    A model on the default's own provider is returned bare, so it can ride that provider's
+    batch API. Any other provider keeps its "provider_key:model_id" ref: a bare id runs on
+    the DEFAULT provider — with the Claude Code CLI as default that was `claude --model
+    <someone else's id>`, which failed every scan with zero stories."""
     from backend.db.model_config_store import ModelConfigStore
 
     store = ModelConfigStore()
@@ -68,7 +73,11 @@ def _intel_model() -> str:
     if not override:
         return ""
     resolved = store.resolve_override(override)
-    return resolved["model"] if resolved else ""
+    if not resolved:
+        return ""
+    if resolved["provider_key"] in (None, store.default_provider_key()):
+        return resolved["model"]
+    return override
 
 
 # Cap intel output to reduce token burn (was 4000 → burned 284K tokens/4d).

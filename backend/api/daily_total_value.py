@@ -5,7 +5,7 @@ Thin router over services.daily_total_value: validate enum → call ONE service 
 Mirrors api/returns.py in structure (no business logic here).
 
 Routes:
-    GET /api/portfolio/total-value?period={7D|1M|3M|YTD|1Y|ALL}  → total_value_series(...)
+    GET /api/portfolio/total-value?period={7D|1M|3M|6M|YTD|1Y|3Y|5Y|ALL}  → total_value_series(...)
     GET /api/portfolio/sparkline?days=30                          → sparkline_series(...)
 
 Bad period → 422 (FastAPI enum). Empty book → 200 with series:[], has_real_daily_history:false
@@ -28,8 +28,11 @@ class Period(str, Enum):
     D7 = "7D"
     M1 = "1M"
     M3 = "3M"
+    M6 = "6M"
     YTD = "YTD"
     Y1 = "1Y"
+    Y3 = "3Y"
+    Y5 = "5Y"
     ALL = "ALL"
 
 

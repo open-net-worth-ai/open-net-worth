@@ -393,15 +393,29 @@ def test_bond_damping_near_flat_series():
 # ── Benchmark roster ──────────────────────────────────────────────────────────────
 
 
-def test_benchmark_roster_has_exactly_six_entries():
+def test_benchmark_roster_has_twelve_benchmarks_and_none():
     roster = benchmark_roster()
-    assert len(roster) == 6
+    assert len(roster) == 13
 
 
 def test_benchmark_roster_keys():
     roster = benchmark_roster()
     keys = {e["key"] for e in roster}
-    assert keys == {"SPY", "VWRA", "QQQ", "ACWI", "BTC", ""}
+    assert keys == {
+        "SPY",
+        "QQQ",
+        "VWRA",
+        "ACWI",
+        "EUNL",
+        "EXS1",
+        "EXW1",
+        "EXSA",
+        "1321",
+        "EWJ",
+        "EEM",
+        "BTC",
+        "",
+    }
 
 
 def test_benchmark_roster_spy_symbol_matches_canonical():

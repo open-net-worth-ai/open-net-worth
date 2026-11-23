@@ -79,6 +79,20 @@
 .ov-delta-chip {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  /* The arrow and the percent are one figure: never split across lines, never squeezed. */
+  flex: none;
+  white-space: nowrap;
+}
+
+/* A phone card is too narrow for "+S$1,234 since Mar 2025, when your history starts" on one
+   line: there the note may take a second line instead of being cut off mid-word. */
+@media (max-width: 640px) {
+  .ov-hero-delta .ov-hero-attrib {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
 }
 
 .ov-delta-chip.pos {

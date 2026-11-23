@@ -6,6 +6,8 @@ import { LuciusCta } from '../../intro/LuciusCta'
 import { usePerformanceView } from './usePerformanceView'
 import type { PerfStatCard } from './usePerformanceView'
 import type { ReturnPeriod, ReturnSeriesPoint } from '../../../types/portfolio'
+import { PERFORMANCE_PERIODS } from './performancePeriod'
+import { BenchmarkPicker } from './BenchmarkPicker'
 import { fDate } from '../../../utils/format'
 import './design.css'
 
@@ -84,8 +86,11 @@ export function PerfChart({
     '7D': 7,
     '1M': 30,
     '3M': 91,
+    '6M': 182,
     YTD: 172,
     '1Y': 365,
+    '3Y': 1095,
+    '5Y': 1826,
     ALL: 1095,
   }
   const span = spanDays[period] || 365
@@ -216,7 +221,11 @@ export function PerfChart({
 
 // ── StatInfo ──────────────────────────────────────────────────────────────────
 // Inline hover-triggered info tooltip ("italic i" button + popover).
-// Uses .stat-info/.stat-pop classes from design.css (CSS-only hover, no JS).
+// Uses .mk-stat-info/.mk-stat-pop from design.css (CSS shows it on hover/focus).
+
+/** .mk-stat-pop's width, and the gap it keeps from the screen's edges. */
+const STAT_POP_W = 232
+const STAT_POP_EDGE = 8
 
 interface StatInfoProps {
   text: string
@@ -224,9 +233,33 @@ interface StatInfoProps {
 }
 
 function StatInfo({ text, alignRight }: StatInfoProps) {
+  // Placed as it opens, inside the screen: a card's place in the desktop row says nothing once the
+  // cards wrap (on a phone a right-hand card's tooltip ran off the screen, and on a narrow screen
+  // neither side fits an icon mid-row). It opens where the CSS puts it, then shifts just enough.
+  const [left, setLeft] = useState<number | null>(null)
+  const place = (e: React.SyntheticEvent<HTMLElement>) => {
+    const icon = e.currentTarget.getBoundingClientRect()
+    const natural = alignRight ? icon.right + 5 - STAT_POP_W : icon.left - 5
+    const max = window.innerWidth - STAT_POP_EDGE - STAT_POP_W
+    const fitted = Math.max(STAT_POP_EDGE, Math.min(natural, max))
+    setLeft(Math.round(fitted - icon.left))
+  }
   return (
-    <span className="stat-info" tabIndex={0} role="button" aria-label="What does this mean?">
-      i<span className={'stat-pop' + (alignRight ? ' r' : '')}>{text}</span>
+    <span
+      className="mk-stat-info"
+      tabIndex={0}
+      role="button"
+      aria-label="What does this mean?"
+      onPointerEnter={place}
+      onFocus={place}
+    >
+      i
+      <span
+        className={'mk-stat-pop' + (alignRight ? ' r' : '')}
+        style={left === null ? undefined : { left, right: 'auto' }}
+      >
+        {text}
+      </span>
     </span>
   )
 }
@@ -263,7 +296,7 @@ function StatBar({ cards }: StatBarProps) {
 // The Performance sub-tab of Investments. Uses usePerformanceView for all data
 // and renders the exact prototype layout: StatBar → Returns panel → Risk panel.
 
-const PERIODS: ReturnPeriod[] = ['1M', '3M', 'YTD', '1Y', 'ALL']
+const PERIODS = PERFORMANCE_PERIODS
 
 // With nothing held there is no return to show yet, and the useful thing to say is why the
 // screen is worth filling: one return across every broker, measured against the market.
@@ -368,28 +401,18 @@ export function PerformanceTab({
               <span className="mk-panel-title">Returns &amp; performance</span>
               <span className="mk-panel-spacer" />
               {benchmarks.length > 0 && (
-                <select
-                  className="mk-toolsel"
-                  value={benchKey}
-                  onChange={(e) => setBenchKey(e.target.value)}
-                  aria-label="Compare against a benchmark"
-                >
-                  {benchmarks.map((b) => (
-                    <option key={b.key || 'none'} value={b.key}>
-                      {b.key ? 'vs ' + b.label : b.label}
-                    </option>
-                  ))}
-                </select>
+                <BenchmarkPicker value={benchKey} roster={benchmarks} onPick={setBenchKey} />
               )}
-              <div className="mk-seg">
+              <div className="mk-seg mk-seg--periods" role="group" aria-label="Range">
                 {PERIODS.map((p) => (
                   <button
                     key={p}
                     type="button"
                     className={period === p ? 'on' : ''}
+                    aria-pressed={period === p}
                     onClick={() => setPeriod(p)}
                   >
-                    {p}
+                    {p === 'ALL' ? 'All' : p}
                   </button>
                 ))}
               </div>

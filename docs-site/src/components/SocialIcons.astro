@@ -1,0 +1,10 @@
+---
+// The header's right side: a Private Cloud link before Starlight's own social icons. Not in the
+// copy of these docs built into the app itself (EMBED_IN_APP), where it would only lead away.
+import Default from '@astrojs/starlight/components/SocialIcons.astro';
+
+const embed = process.env.EMBED_IN_APP === '1';
+---
+
+{!embed && <a class="onw-header-link" href="https://cloud.opennetworth.ai">Private Cloud</a>}
+<Default />

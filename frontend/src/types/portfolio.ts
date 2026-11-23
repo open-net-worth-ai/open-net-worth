@@ -299,7 +299,7 @@ export interface IncomeForecast {
 //    0.0 at the window open for both; null benchmark = no benchmark or insufficient history.
 //  * data_quality gains inception, effective_start, tiers (per-instrument accuracy),
 //    has_unrecorded_risk, fx_approximate from the portfolio_history primitive.
-export type ReturnPeriod = '7D' | '1M' | '3M' | 'YTD' | '1Y' | 'ALL'
+export type ReturnPeriod = '7D' | '1M' | '3M' | '6M' | 'YTD' | '1Y' | '3Y' | '5Y' | 'ALL'
 
 // Both `portfolio` and `benchmark` are 0-based cumulative return fractions:
 // 0.0 at the window open, 0.15 = +15%, -0.08 = -8%. The chart renders them as %.
@@ -390,6 +390,9 @@ export interface BenchmarkRosterItem {
   key: string // roster key (e.g. "SPY") or "" for "no benchmark"
   label: string // display label (e.g. "SPY • S&P 500")
   symbol: string // raw ticker symbol (same as key for these instruments)
+  /** Picker heading: "US", "World", "Europe", "Asia & emerging", "Crypto", or "Your benchmark"
+   *  for a ticker the owner searched for; "" for "No benchmark". */
+  group?: string
 }
 
 // ── Risk-adjusted metrics block (GET /api/returns?risk=true) ─────────────────
