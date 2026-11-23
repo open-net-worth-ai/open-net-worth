@@ -11,13 +11,15 @@ keywords: [install, setup, requirements, desktop app, download, macOS, Windows, 
 
 # Installing Open Net Worth
 
-There are three ways to run Open Net Worth. Pick one:
+There are three ways to run Open Net Worth yourself. Pick one:
 
 | | Best for | You need |
 |---|---|---|
 | **[A. Desktop app](#option-a-desktop-app-recommended)** (recommended) | Using it on your own computer | Nothing else — it bundles everything |
 | **[B. Server with `onw`](#option-b-run-it-as-a-server)** | An always-on machine you open from a browser or from the desktop app on other devices | A terminal |
 | **[C. Docker](#option-c-docker)** | A home server or NAS that already runs Docker | Docker with Compose |
+
+Or skip installing: with **[Private Cloud](https://cloud.opennetworth.ai)** your agent runs in the cloud, always on, and we keep it running for you.
 
 All three keep your data in one folder, `~/.open-net-worth/`, outside the app itself. Updating
 or reinstalling the app never touches it. There is no account to create and no `.env` file to
