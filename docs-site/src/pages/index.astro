@@ -53,30 +53,33 @@ const primaryCtaHref = gettingStartedDoc ? `/${gettingStartedDoc}/` : '/';
 >
   <p class="docs-lede">
     Install it, understand the model behind it, and see what the assistant can do on your
-    behalf — on a machine you control.
+    behalf: on your computer, your own server, or our Private Cloud.
   </p>
 
-  <!-- Hero card: prose left, a concrete artifact right. The install command is the
-       most useful thing this page can hand someone in the first five seconds. -->
-  <section class="docs-hero">
-    <div class="docs-hero__copy">
-      <h2>Run it in one command</h2>
-      <p>
-        Install it, start it, and open the app. No configuration file, no account, no cloud —
-        your data stays in a folder you pick.
-      </p>
+  <!-- Three ways to run it, side by side. Private Cloud is the path for everyone who won't open
+       a terminal; the install command lives on the Installation page "Install" opens. -->
+  <section class="docs-ways" aria-label="Ways to run Open Net Worth">
+    <article class="docs-way">
+      <h2>Desktop app</h2>
+      <p>On your computer. Everything bundled, nothing to set up.</p>
       <div class="docs-hero__ctas">
-        <a class="docs-btn docs-btn--primary" href={primaryCtaHref}>Get started</a>
-        <a class="docs-btn" href="/getting-started/installation/">Installation</a>
+        <a class="docs-btn" href="/getting-started/installation/#option-a-desktop-app-recommended">Download</a>
       </div>
-    </div>
-    <div class="docs-hero__code">
-      <div class="docs-hero__codebar"><span>bash</span></div>
-      <pre><code><span class="c-dim">$</span> curl -fsSL <span class="c-url">…/open-net-worth-releases/…/install-server.sh</span> | sh
-<span class="c-dim">$</span> onw start --open
-
-<span class="c-ok">→ http://localhost:8080</span></code></pre>
-    </div>
+    </article>
+    <article class="docs-way">
+      <h2>Your own server</h2>
+      <p>One command on a machine you control.</p>
+      <div class="docs-hero__ctas">
+        <a class="docs-btn" href={primaryCtaHref}>Install</a>
+      </div>
+    </article>
+    <article class="docs-way docs-way--featured">
+      <h2>Private Cloud</h2>
+      <p>Your agent in the cloud, always on. We run it for you.</p>
+      <div class="docs-hero__ctas">
+        <a class="docs-btn docs-btn--primary" href="https://cloud.opennetworth.ai">Deploy Lucius</a>
+      </div>
+    </article>
   </section>
 
   <p class="docs-eyebrow">Browse the docs</p>
