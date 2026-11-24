@@ -4200,3 +4200,10 @@
 .onw-settings .rd-set-body .mcp-cred .rd-field > .rd-help {
   margin-top: 0;
 }
+
+.onw-settings .rd-prov-name--zr {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
