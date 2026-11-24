@@ -124,7 +124,8 @@ Lucius books purchases, refunds, money received and transfers between your own a
 right direction. It logs only money that has actually moved: nothing for one-time codes,
 promotions or statements, nor for a payment that is still waiting on you (approve, confirm,
 verify, "tap to proceed") or that was declined, failed or cancelled. When such a payment does
-go through, your bank sends a separate alert, and that one is logged.
+go through, your bank sends a separate alert, and that one is logged. A card charge your bank
+calls authorised or pending is a real purchase and is logged right away.
 
 1. On the setup page (or **Settings → Phone shortcuts** on the iPhone), install **Log Finance
    Notifications** and paste the same setup code.

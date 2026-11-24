@@ -292,3 +292,6 @@ def test_a_payment_approval_prompt_is_not_booked():
         assert word in prompt
     assert "declined, failed, cancelled or blocked" in prompt
     assert "that alert is the one to book" in prompt
+    # A bank that alerts only at authorisation sends nothing at settlement, so skipping a
+    # pending charge would lose the purchase for good.
+    assert "authorised or pending HAS moved: book it" in prompt
