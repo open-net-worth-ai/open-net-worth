@@ -36,6 +36,12 @@ export function VisualDrawing({
   const frame = useRef<HTMLIFrameElement>(null)
   const renderedDoc = useRef<string | null>(null)
   const loaderReady = useRef(false)
+  // Whether the height the frame reports may make it SHORTER. Not while the drawing is being
+  // written or swapped in: writing the finished drawing over the draft first empties the page
+  // (a 0 report), and its scripts and CDN libraries draw after that, so the frame used to drop
+  // to its 160px default and grow back — the chart visibly collapsed and re-expanded (owner
+  // report, 2026-11-24). Only the FINISHED drawing's own load lets it shrink to its true size.
+  const settled = useRef(false)
   const [height, setHeight] = useState(0)
   // The app's font, packed for the frame; null until fetched (once per page).
   const [fontFaces, setFontFaces] = useState<string | null>(null)
@@ -69,7 +75,8 @@ export function VisualDrawing({
       if (e.source !== frame.current?.contentWindow) return
       const data = e.data as { type?: string; height?: unknown } | null
       if (data?.type === MSG_HEIGHT && typeof data.height === 'number' && data.height >= 0) {
-        setHeight(data.height)
+        const next = data.height
+        setHeight((prev) => (next === 0 || (!settled.current && next < prev) ? prev : next))
       }
     }
     window.addEventListener('message', onMessage)
@@ -83,6 +90,7 @@ export function VisualDrawing({
     if (!win || !doc || !loaderReady.current) return
     if (renderedDoc.current !== doc) {
       renderedDoc.current = doc
+      settled.current = false
       win.postMessage({ type: MSG_RENDER, html: doc }, '*')
     }
     if (draft) win.postMessage({ type: MSG_DRAFT, html: code }, '*')
@@ -109,6 +117,8 @@ export function VisualDrawing({
       loaderReady.current = true
       render()
     } else {
+      // The finished drawing has loaded (a draft's empty page loads too, and must not count).
+      if (!draft) settled.current = true
       frame.current?.contentWindow?.postMessage({ type: MSG_MEASURE }, '*')
     }
   }
@@ -121,7 +131,9 @@ export function VisualDrawing({
       sandbox={SANDBOX}
       src={FRAME_URL}
       onLoad={onLoad}
-      style={height ? { height } : undefined}
+      // A draft starts at 0 and only grows; a finished drawing keeps the CSS default until it
+      // reports, so a reopened transcript does not flash empty.
+      style={height || draft ? { height } : undefined}
     />
   )
 }
