@@ -4593,9 +4593,10 @@ async def _run_turn(
             _read_profile_for_injection().get("chat_multi_turn_enabled", False)
         )
 
-        # Corrections spent this turn on a round that produced nothing actionable — see
-        # ai/turn_completion.py. Per TURN, not per round: a model that keeps writing its
-        # calls as prose gets a bounded number of chances across the whole turn.
+        # Corrections spent on CONSECUTIVE rounds that produced nothing actionable — see
+        # ai/turn_completion.py. A tool call that succeeds resets it: a model that stalls,
+        # recovers and later stalls again is making progress and gets fresh chances, while
+        # one that will not comply still stops after MAX_COMPLETION_NUDGES in a row.
         _completion_nudges = 0
         # Whether any round of this turn has shown the reader text yet.
         _turn_had_text = False
@@ -5228,6 +5229,7 @@ async def _run_turn(
                                             tool_name,
                                             text_result[:120],
                                         )
+                                        _completion_nudges = 0
                             except Exception as exc:
                                 logger.exception("tool_exception %s", tool_name)
                                 text_result = json.dumps({"error": str(exc)})
