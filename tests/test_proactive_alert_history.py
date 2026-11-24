@@ -130,3 +130,25 @@ def test_a_harness_note_never_names_a_conversation():
         )
         == "what should I do?"
     )
+
+
+@pytest.mark.asyncio
+async def test_an_alert_reaches_a_conversation_already_cached_in_memory(db_isolated):
+    """Live 2026-11-24: a Telegram conversation stayed in ``SESSIONS`` from yesterday's turn.
+    The 12:02 briefing was appended to the DB only, so the next turn read the stale cached
+    list — the model answered "yes, I transferred" about an old receipt — and that turn's
+    save diffed the stale list against the DB and TRUNCATED the briefing away."""
+    sid = "sess-cached"
+    assistant.save_session_durable(sid, [{"role": "user", "content": "hi"}])
+    _, cached = assistant.get_or_create_session(sid)  # an earlier turn cached it
+
+    await assistant.record_proactive_message(sid, "Your card bill is due 30 Nov.")
+
+    _, history = assistant.get_or_create_session(sid)  # the next turn
+    assert history is cached, "the turn's live list keeps its identity"
+    assert history[-1]["content"] == "Your card bill is due 30 Nov."
+
+    history.append({"role": "user", "content": "Yah"})
+    assistant._save_session(sid, history)
+    stored = [m["content"] for m in assistant._load_session(sid) or []]
+    assert stored == ["hi", "Your card bill is due 30 Nov.", "Yah"]

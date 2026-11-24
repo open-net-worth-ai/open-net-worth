@@ -744,6 +744,36 @@ async def test_a_real_turn_sends_resolved_content_but_durably_saves_the_ref(_tur
     ), "the durable transcript must never hold the expanded attachment text"
 
 
+async def test_a_later_turn_never_resends_an_earlier_turns_resolved_attachment(_turn_isolation):
+    """Live 2026-11-24: a receipt photo sent on Telegram the day before was re-sent as a real
+    image on EVERY later turn, because the conversation stayed cached in ``SESSIONS`` with the
+    turn's dispatch-resolved content still swapped in. Over the Claude CLI the whole history
+    goes as one fresh user message, so the model kept answering "the photo you just sent".
+    An older turn's attachment must reach the provider as the short stub, never expanded."""
+    import backend.ai.assistant as assistant
+    from backend.ai.attachments import build_user_content
+    from backend.services import attachments as svc
+
+    session_id = "sess-stale-resolve"
+    assistant.get_or_create_session(session_id)
+    ref = svc.create_attachment(_entry(), filename="bank.csv")
+    content = await build_user_content("please import this", [ref], session_id=session_id)
+
+    provider = _RecordingProvider()
+    for turn in ([{"role": "user", "content": content}], [{"role": "user", "content": "Yah"}]):
+        events = [
+            e
+            async for e in assistant.run(
+                session_id, turn, system="SYS", model_context=_model_context(provider)
+            )
+        ]
+        assert any(e.get("type") == "turn_done" for e in events), events
+
+    second_request = repr(provider.calls[-1])
+    assert "Date,Amount" not in second_request, "the earlier turn's attachment was re-expanded"
+    assert "bank.csv" in second_request, "the earlier attachment is still named as a stub"
+
+
 # ── Checkpoint + export wiring ────────────────────────────────────────────────
 
 

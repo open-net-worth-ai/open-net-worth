@@ -667,6 +667,16 @@ def _apply_durable_overrides(history: List[dict]) -> List[dict]:
     return out
 
 
+def _revert_durable_overrides_in_place(history: List[dict]) -> None:
+    """Put an EARLIER turn's dispatch-resolved content back to its durable form, in the live
+    list. ``_apply_durable_overrides`` reverts only the copy it saves, so a conversation that
+    stays cached in ``SESSIONS`` kept the expanded photo and re-sent it on every later turn —
+    over a CLI, as if the person had just sent it (2026-11-24)."""
+    for i, entry in enumerate(history):
+        if isinstance(entry, dict) and _DURABLE_OVERRIDE_KEY in entry:
+            history[i] = _apply_durable_overrides([entry])[0]
+
+
 def save_session_durable(session_id: str, history: List[dict]) -> None:
     """Atomically persist one transcript; raise unless the write durably lands.
 
@@ -846,6 +856,13 @@ async def record_proactive_message(
                     }
                 ],
             )
+            # A conversation an earlier turn left in ``SESSIONS`` is never re-read from the
+            # DB, so the next turn would run on a list without the alert — and its save,
+            # which diffs that list against the stored rows, would delete the alert
+            # (2026-11-24). Re-sync in place: the lock means no turn holds the list now.
+            cached = SESSIONS.get(session_id)
+            if cached is not None:
+                cached[:] = _store().get_transcript(session_id) or cached
     except Exception:
         logger.exception("could not record proactive message for %s", session_id)
 
@@ -3963,6 +3980,8 @@ async def _run_turn(
 
     # For logging and cost-tracking use the bare model id.
     _, history = get_or_create_session(session_id)
+    if new_messages:  # a resume (no new messages) still needs its own turn's resolved content
+        _revert_durable_overrides_in_place(history)
     # show_visual copies its figures out of this conversation's tool results — bind the LIVE
     # list so results from earlier rounds of this same turn are visible to it. Never reset:
     # the next turn rebinds before any tool runs.
