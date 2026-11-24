@@ -378,6 +378,8 @@ export interface RuleMatch {
 
 export interface RulePreviewResponse {
   total: number
+  /** Matches the Rule would actually change (not skipped, not already as it says). */
+  changeable: number
   matches: RuleMatch[]
 }
 
@@ -418,6 +420,21 @@ export function applyRule(rule: RuleBody, transactionIds: string[]): Promise<Rul
   return postJson<RuleApplyResult>('/api/automations/rules/apply', {
     rule,
     transaction_ids: transactionIds,
+  })
+}
+
+/** Applies the Rule to EVERY transaction it matches today, past the preview's first page.
+ * `excludeIds` are rows the owner unticked; `expectedTotal` is the preview's count — the server
+ * refuses (409) if the matches moved since, so nothing unseen is written. */
+export function applyRuleToAll(
+  rule: RuleBody,
+  excludeIds: string[],
+  expectedTotal: number,
+): Promise<RuleApplyResult> {
+  return postJson<RuleApplyResult>('/api/automations/rules/apply-all', {
+    rule,
+    exclude_ids: excludeIds,
+    expected_total: expectedTotal,
   })
 }
 

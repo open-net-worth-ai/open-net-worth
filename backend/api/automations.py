@@ -75,6 +75,12 @@ class RuleApply(BaseModel):
     transaction_ids: list[str] = Field(max_length=rule_apply.MAX_TRANSACTIONS)
 
 
+class RuleApplyAll(BaseModel):
+    rule: RuleBody
+    exclude_ids: list[str] = Field(default_factory=list, max_length=rule_apply.MAX_TRANSACTIONS)
+    expected_total: Optional[int] = Field(default=None, ge=0)
+
+
 class RuleRun(BaseModel):
     transaction_ids: list[str] = Field(max_length=rule_apply.MAX_TRANSACTIONS)
 
@@ -218,6 +224,19 @@ def apply_rule(body: RuleApply):
         rule = body.rule.model_dump()
         return _checkpointed(
             "Apply a rule", lambda: rule_apply.apply_rule(rule, body.transaction_ids)
+        )
+    except Exception as exc:
+        _raise_http(exc)
+
+
+@router.post("/api/automations/rules/apply-all", dependencies=[Depends(_ui_audit_scope)])
+def apply_rule_to_all(body: RuleApplyAll):
+    try:
+        rule_apply.require_rules_enabled()
+        rule = body.rule.model_dump()
+        return _checkpointed(
+            "Apply a rule to every match",
+            lambda: rule_apply.apply_rule_to_matches(rule, body.exclude_ids, body.expected_total),
         )
     except Exception as exc:
         _raise_http(exc)
