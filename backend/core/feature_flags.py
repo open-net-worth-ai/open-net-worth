@@ -69,6 +69,22 @@ class Flag:
 # (``tests/flags.py``) on top of these.
 FLAGS: tuple[Flag, ...] = (
     Flag(
+        name="claude_cli_native_tools",
+        title="Native tool calls on the Claude Code CLI",
+        description=(
+            "With Lucius on the Claude Code CLI, Lucius's tools are handed to Claude Code as "
+            "real tool calls instead of text the model has to write out, so leftover fragments "
+            "of a half-written call can no longer show up in a reply. Lucius still runs every "
+            "tool itself: approvals and permissions are unchanged. Off: tools are described in "
+            "text, as before."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 24),
+        remove_by=date(2027, 2, 28),
+        kind="release",
+    ),
+    Flag(
         name="claude_cli_stable_tool_prompt",
         title="Stable tool prompt on the Claude Code CLI",
         description=(

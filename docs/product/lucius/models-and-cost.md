@@ -150,6 +150,23 @@ ever stops seeing a tool it just loaded, turn off **Settings → Developer → E
 claude_cli_stable_tool_prompt**; each tool load then restarts the CLI with the full tool list,
 as before.
 
+**Claude Code CLI: tools as real tool calls (experimental).** By default Lucius describes its
+tools to the Claude Code CLI in text and the model writes each call out as text, which a small
+model such as Haiku sometimes writes half-finished, so a stray fragment (a cut-off name, a
+`">`, a bare `Assistant`) can show up in a reply. Turn on **Settings → Developer → Experimental →
+claude_cli_native_tools** and Lucius instead hands its tools to Claude Code as real tool calls,
+so there is no half-written text to leak. Lucius still runs every tool itself: approvals,
+permissions and Auto mode work exactly as before, and Claude Code gets none of its own tools
+(no files, no shell, no web).
+
+It costs about the same as the text version: in our testing, 35 chat turns cost the same with
+Haiku and about 4% more with Sonnet than with the setting off, and Claude Code is restarted no
+more often. Lucius
+keeps one Claude Code process open while it works through a reply's tool calls, including while
+an approval card waits for you, and tools it loads mid-chat are reached without a restart. If you
+walk away from an approval card for a very long time, the reply simply restarts from the
+conversation when you answer. Off: nothing changes.
+
 To cut costs: turn off **Follow-up suggestions** in **Settings → Chat** (that stops a
 model call per reply), route background tasks to a cheaper model, and use **Low** effort for
 simple chats.

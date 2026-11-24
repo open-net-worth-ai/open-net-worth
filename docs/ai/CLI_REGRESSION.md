@@ -36,6 +36,23 @@ default is already the newest).
 - **Reasoning text.** Codex reasoning parts must not fuse (`****`) and, when more than one part
   streams, are newline-separated. A turn that streams a single part warns "not exercised".
 
+### Native tool calls (flag `claude_cli_native_tools`)
+
+`tests/cli_live/test_claude_native_live.py` runs through `ClaudeCliProvider` with the flag on (the
+owner's own `claude`): the synthetic `get_secret_number` round trip, a parked call that waits
+`ONW_CLI_LIVE_PARK_WAIT` seconds (default 20) for its result and must be answered by the host's
+value on the SAME process, and a tool loaded after spawn that the model must reach through
+`use_tool` while the host sees its real name and the process is not restarted.
+
+Measured with `claude` 2.1.329 driving our own control-channel handler: a parked `tools/call`
+answered 1000 s and again 3700 s (an hour) after it arrived let the same query finish normally (the
+CLI emits a `tool_progress` heartbeat every ~30 s meanwhile; it has no tool timeout of its own that
+we hit). Our own idle reaper (30 min) is what ends a parked process first. The CLI runs a model's
+parallel calls one at a time, so only the first `tools/call` is on the wire until it is answered —
+the host collects the whole batch from the `assistant` events instead. `claude` 2.1.329 needs no
+`initialize` request from the host and no `CLAUDE_CODE_ENTRYPOINT`; it asks for `initialize`,
+`notifications/initialized` and `tools/list` itself.
+
 ### Snapshots
 
 `tests/cli_live/snapshots/codex-features.json` (the whole `codex features list`, under our

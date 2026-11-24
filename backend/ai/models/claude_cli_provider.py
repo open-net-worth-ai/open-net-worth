@@ -47,6 +47,7 @@ import os
 import shutil
 import tempfile
 import time
+from contextlib import aclosing
 from itertools import chain
 from typing import AsyncGenerator, List, Optional
 
@@ -519,6 +520,20 @@ class ClaudeCliProvider(AIProvider):
         model: str,
         effort: str = "medium",
     ) -> AsyncGenerator[dict, None]:
+        # THE seam for `claude_cli_native_tools`: the tools become real tool calls of a live
+        # process. It needs a live process to park a call on, so with sessions off (or no tool
+        # to offer) the text protocol below is what runs, untouched.
+        if tools and claude_live_session.sessions_enabled() and _native_tools():
+            from . import claude_native_round
+
+            # `aclosing`: a stopped turn closes this generator, and the round's own cleanup
+            # (retiring a half-read process) must run now, not whenever the inner one is collected.
+            async with aclosing(
+                claude_native_round.stream_round(self, messages, tools, system, model, effort)
+            ) as round_events:
+                async for event in round_events:
+                    yield event
+            return
         full_system = (system or "") + render_tool_manifest(tools or [])
         argv = self._argv(model, full_system, effort=effort)
         no_thinking = _no_thinking(effort)
@@ -1325,6 +1340,14 @@ def _stable_tool_prompt() -> bool:
         return enabled("claude_cli_stable_tool_prompt")
     except Exception as exc:  # an unreadable flag is the old path, never a failed turn
         log.warning("claude_cli: could not read claude_cli_stable_tool_prompt (%s)", exc)
+        return False
+
+
+def _native_tools() -> bool:
+    try:
+        return enabled("claude_cli_native_tools")
+    except Exception as exc:  # an unreadable flag is the old path, never a failed turn
+        log.warning("claude_cli: could not read claude_cli_native_tools (%s)", exc)
         return False
 
 

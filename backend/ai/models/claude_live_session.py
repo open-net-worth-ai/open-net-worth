@@ -155,10 +155,22 @@ async def acquire(
     messages: list[dict],
     key_argv: Optional[list[str]] = None,
     accepts: "Optional[Callable[[LiveSession], bool]]" = None,
+    session_cls: "type[LiveSession]" = LiveSession,
+    render_full: "Optional[cli_live_session.RenderFull]" = None,
+    fresh: bool = False,
 ) -> "tuple[LiveSession, str, list[dict], bool]":
     """Get a session for this turn — see :func:`cli_live_session.acquire`."""
     return await cli_live_session.acquire(
-        pool(), LiveSession, "onw-claude-cli-", argv, env, messages, key_argv, accepts=accepts
+        pool(),
+        session_cls,
+        "onw-claude-cli-",
+        argv,
+        env,
+        messages,
+        key_argv,
+        render_full=render_full or cli_live_session.flatten_messages_with_images,
+        fresh=fresh,
+        accepts=accepts,
     )
 
 

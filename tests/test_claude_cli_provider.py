@@ -36,6 +36,9 @@ from backend.core.errors import (
 from backend.db.model_telemetry_store import ModelTelemetryStore
 from tests.fake_exe import python_cli
 
+# The text protocol's own suite: it pins `claude_cli_native_tools` off, whatever the default.
+pytestmark = pytest.mark.flags(claude_cli_native_tools=False)
+
 
 def _spy_on_telemetry(monkeypatch) -> list[tuple[str, bool]]:
     """Capture every `ModelTelemetryStore.record_sample(model, error=...)` call without

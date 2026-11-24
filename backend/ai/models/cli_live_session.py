@@ -162,6 +162,11 @@ class LiveSession:
         """True for the event that ends one turn (the process stays up after it)."""
         raise NotImplementedError
 
+    async def intercept(self, event: dict) -> bool:
+        """True when the transport answered ``event`` itself, so ``events`` does not yield it
+        (a control request the child is waiting on). Most transports have none."""
+        return False
+
     async def _how_it_ended(self, proc: Optional[asyncio.subprocess.Process]) -> str:
         """``was stopped by SIGKILL (…)`` once the child is gone; a silent death says nothing
         else, so this is the one fact that names the cause."""
@@ -281,6 +286,8 @@ class LiveSession:
                 continue
             if not self.cli_version and event.get("type") == "system":
                 self.cli_version = str(event.get("claude_code_version") or "")
+            if await self.intercept(event):
+                continue
             yield event
             if self.is_final(event):
                 self.turns += 1
