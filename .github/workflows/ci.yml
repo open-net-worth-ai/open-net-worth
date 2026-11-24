@@ -226,6 +226,12 @@ jobs:
           tests/test_claude_*.py tests/test_cli_*.py tests/test_tool_text_*.py
           tests/test_turn_completion_gate.py tests/test_live_stream_*.py
 
+      # docs/FEATURE_FLAGS.md rule 3: token_context_window defaults OFF (ADR 2026-11-24), so the
+      # `test` job proves the off path; the turn, fold and caching suites run again with it ON.
+      # Remove with the flag.
+      - name: pytest (token_context_window on)
+        run: python3 -m pytest -q -m "not integration" -n auto --flag token_context_window=on $(cat tests/token_context_window_on_files.txt)
+
   # --- test-windows: the backend imports and the Windows-ported areas pass on windows-latest.
   # The focused list is every area with platform-specific code (locks, process trees, anchored
   # directory access, the sandbox, autostart, self-upgrade, instance claim, desktop bootstrap). The full suite

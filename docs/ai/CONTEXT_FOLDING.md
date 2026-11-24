@@ -9,7 +9,31 @@ summary plus a verbatim ledger of every real user message — never truncated, n
 silently. "Compacting" is the user-facing name for this (progress bar, status line); "fold" is
 the code/RFC name for the same mechanism. All backend logic lives in `backend/ai/assistant.py`.
 
-## Sliding window + trigger
+## Token window (flag `token_context_window`, default off)
+
+With the flag on, `ai/context_window.py` decides the window and the message-count rules below
+do not run (ADR `2026-11-24-the-context-window-starts-where-the-fold-ends-and-moves-on-token-pressure`):
+
+- The window start IS the trusted fold's `folded_through_idx` — no second number, so nothing
+  falls between the window and the summary. A fold is trusted when its index is within the
+  history and its `boundary_digest` (hash of the last folded message) still matches, so a
+  rewind below the fold is never summarised from stale text.
+- A turn folds only when its prompt (overhead from the last provider-reported prompt + byte/4
+  estimate of what would be sent) passes `min(55% of the window, 160K)`, and then cuts to
+  `min(30%, 90K)`, so folds are far apart and the cache and a reused CLI session survive.
+- Never folded: the last 20 messages, the last two exchanges, this turn. Cuts land on real
+  user messages only (never between a tool call and its result). A fold that frees less than
+  `max(4K, 10% of the window)` is skipped. Long ranges fold in steps of ≤240K chars; a failed
+  step leaves the start where the last good step put it.
+- `_token_window_turn` (assistant.py) runs it and emits the same `compacting_*` events.
+- Evaluate on real data, read-only, aggregates only:
+  `python -m backend.scripts.eval_context_window --db ~/.open-net-worth/data/onw.db`.
+
+**Known flag-off bug, kept as is:** after the first fold, every later slide of the count window
+moves past `folded_through_idx` unless token pressure forces a re-fold, so ten messages at a
+time are sent in neither form. The flag is the fix.
+
+## Sliding window + trigger (flag off)
 
 - `MAX_HISTORY_MESSAGES = 60` — the verbatim window kept in every turn, unconditionally, no
   matter tool, size, or repetition. `_WINDOW_SLIDE_CHUNK = 10` — the window start only advances

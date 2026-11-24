@@ -337,6 +337,22 @@ FLAGS: tuple[Flag, ...] = (
         remove_by=date(2027, 2, 28),
         kind="kill_switch",
     ),
+    Flag(
+        name="token_context_window",
+        title="Compact Lucius conversations by size, not message count",
+        description=(
+            "Lucius keeps the whole conversation word for word until it really fills a large "
+            "share of the model's context window, then summarizes the oldest part in one go. "
+            "A long chat of short messages is no longer compacted every few turns, and no "
+            "earlier message is ever dropped without a summary covering it. Off: the last 60 "
+            "messages are kept and older ones are compacted, as before."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 24),
+        remove_by=date(2027, 3, 1),
+        kind="release",
+    ),
 )
 
 

@@ -3763,6 +3763,93 @@ def _extract_turn_fold_result(session_id: str) -> tuple[Optional[str], Optional[
     return summary, verbatim
 
 
+def _last_measured_prompt(session_id: str, model: str, base_url: str) -> tuple[Optional[int], int]:
+    """The previous turn's largest request as the provider reported it, and the context
+    window to measure it against (the provider's own figure wins over the table)."""
+    from backend.ai.models.price_map import max_input_tokens
+    from backend.services.cost import session_chat_records
+
+    try:
+        rows = session_chat_records(session_id)
+    except Exception:
+        rows = []
+    last = rows[-1] if rows else {}
+    window = _positive_int(last.get("context_window")) if last.get("model") == model else None
+    return _positive_int(last.get("peak_prompt_tokens")), window or max_input_tokens(
+        model, base_url
+    )
+
+
+async def _token_window_turn(
+    session_id: str,
+    history: list[dict],
+    turn_start: int,
+    model: str,
+    base_url: str,
+    out: dict,
+    *,
+    resumed: bool = False,
+) -> AsyncGenerator[dict, None]:
+    """Flag ``token_context_window``: this turn's window start, fold summary and verbatim
+    ledger, folding first when the prompt is over the trigger. Fills ``out`` with
+    ``start``/``summary``/``verbatim``; yields the compacting events.
+
+    The start is always where the trusted fold ends (``context_window.trusted_start``), so
+    the window and the summary meet exactly. A fold that fails, step by step, leaves the
+    start at the last step that succeeded — never past what a summary covers.
+
+    A ``resumed`` turn (continuing after an approval) never folds: it is the same logical
+    turn, whose window was settled when it began, and the last measured prompt already
+    includes its own rounds — planning again would count them twice.
+    """
+    from backend.ai import context_window as cw
+    from backend.ai.memory import _conversation_text
+
+    fold_data = _load_fold(session_id)
+    trusted = fold_data if cw.trusted_start(fold_data, history) else None
+    if resumed:
+        start = cw.trusted_start(fold_data, history)
+        out["start"] = start
+        out["summary"] = (trusted or {}).get("summary") if start else None
+        out["verbatim"] = (trusted or {}).get("verbatim_user_messages") if start else None
+        return
+    measured, window = _last_measured_prompt(session_id, model, base_url)
+    plan = cw.plan_window(
+        history, fold_data, turn_start=turn_start, window_tokens=window, measured_prompt=measured
+    )
+    start = plan.start
+    if plan.fold_to is not None:
+        logger.info(
+            "token_window fold  session=%s  prompt~%d  trigger=%d  window=%d  %d→%d",
+            session_id[:8],
+            plan.prompt_tokens,
+            plan.budget.trigger,
+            plan.budget.window,
+            start,
+            plan.fold_to,
+        )
+        yield {"type": "compacting_start"}
+        try:
+            for step in cw.fold_steps(history, start, plan.fold_to, _conversation_text):
+                before = _load_fold(session_id)
+                async for ev in _generate_fold_summary(session_id, list(history), step, trusted):
+                    yield ev
+                saved = _load_fold(session_id)
+                # Success is a NEW record ending at this step — a stale, untrusted fold that
+                # happens to end at the same index is not this step's work.
+                if not saved or saved == before or saved.get("folded_through_idx") != step:
+                    break  # this step failed: keep the window where the last one left it
+                saved["boundary_digest"] = cw.boundary_digest(history, step)
+                _save_fold(session_id, saved)
+                trusted, start = saved, step
+        except Exception:
+            logger.exception("token_window fold failed (non-fatal)  session=%s", session_id[:8])
+        yield {"type": "compacting_done"}
+    out["start"] = start
+    out["summary"] = (trusted or {}).get("summary") if start else None
+    out["verbatim"] = (trusted or {}).get("verbatim_user_messages") if start else None
+
+
 def _extract_user_preview(new_messages: list[dict], limit: int = 120) -> str:
     """Short text preview of the user message that opened a turn — labels the checkpoint.
 
@@ -4396,40 +4483,61 @@ async def _run_turn(
         if turn_context and new_messages:
             history[turn_ctx_idx] = _inject_turn_context(history[turn_ctx_idx], turn_context)
 
-        # Pin window_start for the whole turn so a mid-turn chunk-boundary crossing can't
-        # retroactively shift the prefix bytes between round-trips (Problem 2 fix).
-        _turn_window_start = _compute_turn_prefix_state(history)
+        # ONE switch point for flag ``token_context_window``: the window starts where the
+        # fold ends and moves on token pressure (ai/context_window.py). Off: the
+        # message-count window below, untouched.
+        from backend.services.feature_flags import enabled as _flag_enabled
 
-        # Resolve the fold sidecar for this turn — synchronously ensuring fold has
-        # actually covered window_start first (2026-08-27; see
-        # _resolve_turn_fold_state's own docstring for why this is now awaited here
-        # rather than fired post-turn). Pinned for the whole turn so a mid-turn re-fold
-        # can never alter the prefix between round-trips.
-        #
-        # A cheap pre-check (no LLM call) decides whether _stream_turn_fold_update is
-        # actually about to make the slow real one, so the "compacting" signal below
-        # only fires when the turn is genuinely paying that latency — not on every
-        # ordinary turn once a session happens to be long. Redundant with the same
-        # check made again inside _maybe_update_fold itself; both reads are cheap DB
-        # lookups, only _generate_fold_summary's LLM call is not.
-        _turn_fold_data_precheck = _load_fold(session_id) if _turn_window_start > 0 else None
-        _turn_needs_fold_now = _turn_window_start > 0 and _should_refold(
-            session_id,
-            bare_model,
-            _turn_base_url,
-            _turn_window_start,
-            _turn_fold_data_precheck,
-            history,
-        )
-        if _turn_needs_fold_now:
-            yield {"type": "compacting_start"}
-            async for _fold_progress_ev in _stream_turn_fold_update(
-                session_id, list(history), _turn_window_start, bare_model, _turn_base_url
+        _token_window = _flag_enabled("token_context_window")
+        if _token_window:
+            _tw: dict = {}
+            async for _tw_ev in _token_window_turn(
+                session_id,
+                history,
+                _provider_turn_start,
+                bare_model,
+                _turn_base_url,
+                _tw,
+                resumed=resume_turn_start is not None,
             ):
-                yield _fold_progress_ev
-        _turn_fold_summary, _turn_fold_verbatim = _extract_turn_fold_result(session_id)
-        if _turn_needs_fold_now:
-            yield {"type": "compacting_done"}
+                yield _tw_ev
+            _turn_window_start = _tw["start"]
+            _turn_fold_summary, _turn_fold_verbatim = _tw["summary"], _tw["verbatim"]
+        else:
+            # Pin window_start for the whole turn so a mid-turn chunk-boundary crossing can't
+            # retroactively shift the prefix bytes between round-trips (Problem 2 fix).
+            _turn_window_start = _compute_turn_prefix_state(history)
+
+            # Resolve the fold sidecar for this turn — synchronously ensuring fold has
+            # actually covered window_start first (2026-08-27; see
+            # _resolve_turn_fold_state's own docstring for why this is now awaited here
+            # rather than fired post-turn). Pinned for the whole turn so a mid-turn re-fold
+            # can never alter the prefix between round-trips.
+            #
+            # A cheap pre-check (no LLM call) decides whether _stream_turn_fold_update is
+            # actually about to make the slow real one, so the "compacting" signal below
+            # only fires when the turn is genuinely paying that latency — not on every
+            # ordinary turn once a session happens to be long. Redundant with the same
+            # check made again inside _maybe_update_fold itself; both reads are cheap DB
+            # lookups, only _generate_fold_summary's LLM call is not.
+            _turn_fold_data_precheck = _load_fold(session_id) if _turn_window_start > 0 else None
+            _turn_needs_fold_now = _turn_window_start > 0 and _should_refold(
+                session_id,
+                bare_model,
+                _turn_base_url,
+                _turn_window_start,
+                _turn_fold_data_precheck,
+                history,
+            )
+            if _turn_needs_fold_now:
+                yield {"type": "compacting_start"}
+                async for _fold_progress_ev in _stream_turn_fold_update(
+                    session_id, list(history), _turn_window_start, bare_model, _turn_base_url
+                ):
+                    yield _fold_progress_ev
+            _turn_fold_summary, _turn_fold_verbatim = _extract_turn_fold_result(session_id)
+            if _turn_needs_fold_now:
+                yield {"type": "compacting_done"}
 
         # ── Turn checkpoint: capture pre-write state of any data file this turn edits, so
         #    the whole turn can be rolled back. anchor = history length before this turn's
