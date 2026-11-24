@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from backend.core.errors import ValidationError
@@ -20,6 +22,11 @@ def test_create_stamps_id_created_at_and_uppercases_ticker(store):
     assert a["ticker"] == "AAPL"  # uppercased
     assert a["op"] == ">=" and a["value"] == 150.0 and a["note"] == "trim"
     assert isinstance(a["value"], float)  # always float → stable monitor cache key
+
+
+def test_new_alert_id_is_short_prefixed_hex(store):
+    a = store.create({"ticker": "ACME", "op": ">=", "value": 10})
+    assert re.fullmatch(r"alrt_[0-9a-f]{12}", a["id"])
 
 
 def test_value_is_coerced_to_float(store):

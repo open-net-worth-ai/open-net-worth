@@ -1048,13 +1048,15 @@ intel_stories = Table(
 # (ADR 2026-08-28-sourced-and-corroborated-intel-signal-updates) are STABLE STRING IDS the
 # model itself references across turns (`_find_timeline_entry(timeline, entry_id)`). So this
 # table carries BOTH: a DB-assigned `seq` (ordering, race-free, session_messages' own
-# reasoning verbatim) AND the existing `uuid4().hex` `id` (business identity, UNIQUE-indexed,
+# reasoning verbatim) AND the timeline entry `id` (`tle_<12 hex>`, older rows `uuid4().hex`) (business identity, UNIQUE-indexed,
 # what a `duplicate_of_id` reference resolves against).
 signal_timeline_entries = Table(
     "signal_timeline_entries",
     metadata,
     Column("seq", Integer, primary_key=True, autoincrement=True),  # SQLite rowid alias
-    Column("id", Text, nullable=False),  # business identity — uuid4().hex, UNIQUE below
+    Column(
+        "id", Text, nullable=False
+    ),  # business identity — tle_<12 hex> (older rows uuid4().hex), UNIQUE below
     Column("signal_id", Text, ForeignKey("intel_stories.id", ondelete="CASCADE"), nullable=False),
     Column("date", Text, nullable=False),
     Column("title", Text, nullable=False, server_default=text("''")),

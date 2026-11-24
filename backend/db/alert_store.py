@@ -28,10 +28,10 @@ PLAN 4D TASK 2: DB-backed (Tier-1, book-scoped, table ``alerts``) via
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 
 from backend.core.errors import ValidationError
+from backend.core.ids import new_id
 
 # Import order is LOAD-BEARING (backend.db.tables <-> backend.db.payload_store is a genuine
 # two-way reference — see tables.py's own docstring on its late `payload_table`/
@@ -197,7 +197,7 @@ class AlertStore(BookPayloadTableStore):
         # silently fall back — same convention as on_trigger/cooldown_minutes below.
         kind = norm_kind(alert["kind"] if "kind" in alert else "price")
         row = {
-            "id": str(uuid.uuid4()),
+            "id": new_id("alrt"),
             "ticker": ticker,
             "instrument_id": instrument_id,
             "op": norm_op(alert.get("op", "")),

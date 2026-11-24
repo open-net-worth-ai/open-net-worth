@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 import pytest
@@ -68,6 +69,14 @@ def test_a_material_move_raises_one_story_with_fit_and_watch_flags(db_isolated):
     assert "Up 8.0% today" in story["label"]
     assert "35%" in story["portfolio_impact"]
     assert "not held" in story["current_summary"]
+    assert re.fullmatch(r"story_[0-9a-f]{12}", story["id"])
+
+
+def test_intel_agent_timeline_entry_gets_a_short_id():
+    from backend.monitoring.intel_agent import _timeline_event
+
+    entry = _timeline_event({"title": "ACME update"})
+    assert re.fullmatch(r"tle_[0-9a-f]{12}", entry["id"])
 
 
 def test_summary_adds_the_findings_the_headline_leaves_out(db_isolated):

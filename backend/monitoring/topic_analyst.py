@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from uuid import uuid4
 
+from backend.core.ids import new_id
 from backend.monitoring.analyst_prompt import entry_title, source_dicts
 from backend.monitoring.text_sanitize import sanitize_untrusted_text
 
@@ -110,7 +110,7 @@ def create_topic_spike_signal(
         "action_items": actions,
         "timeline": [
             {
-                "id": uuid4().hex,
+                "id": new_id("tle"),
                 "date": now,
                 "title": entry_title(parsed, "New development"),
                 "summary": why,

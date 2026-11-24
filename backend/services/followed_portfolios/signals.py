@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import datetime, timezone
 
+from backend.core.ids import new_id
 from backend.db.intel_stories_store import IntelStoriesStore
 from backend.services.intel_stories import apply_story_change
 
@@ -47,7 +47,7 @@ def emit_new_filing_story(follow: dict, model: dict) -> bool:
         )
         apply_story_change(
             {
-                "id": str(uuid.uuid4()),
+                "id": new_id("story"),
                 "type": "topic",
                 "label": f"{follow['name']} {what}",
                 "ticker": "",

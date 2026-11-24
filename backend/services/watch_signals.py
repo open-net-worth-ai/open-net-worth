@@ -13,9 +13,9 @@ nothing per run. Dependency rule: services/db/core only.
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import datetime
 
+from backend.core.ids import new_id
 from backend.services import investment_theses, watch_context
 from backend.services import watch_rules as rules
 from backend.services.fx_cache import load_fx_cache
@@ -198,7 +198,7 @@ def _upsert(existing: dict | None, story: dict, now_iso: str) -> None:
     from backend.services.intel_stories import apply_story_change
 
     if existing is None:
-        apply_story_change({**story, "id": str(uuid.uuid4()), "created_at": now_iso})
+        apply_story_change({**story, "id": new_id("story"), "created_at": now_iso})
         return
     merged = {**existing, **story}
     new_kinds = set(story["watch_kinds"]) - set(existing.get("watch_kinds") or [])
