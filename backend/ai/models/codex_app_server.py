@@ -491,25 +491,25 @@ class AppServerClient:
     def _release(self, thread_id: str) -> None:
         self._queues.pop(thread_id, None)
         self._released.append(thread_id)
+        # A finished thread is never resumed (a new round starts a fresh thread), but the
+        # app-server keeps every thread loaded until its last subscriber leaves: without this
+        # one long-lived child grew ~2 MB per turn, for good — 7 GB on a heavy user's NAS.
+        self._send_nowait("thread/unsubscribe", {"threadId": thread_id})
+
+    def _send_nowait(self, method: str, params: dict) -> None:
+        """A best-effort request that cannot block or raise. The reply is ignored."""
+        self._next_id += 1
+        try:
+            self._write({"jsonrpc": "2.0", "id": self._next_id, "method": method, "params": params})
+        except ExternalServiceError:
+            pass
 
     def _interrupt_nowait(self, thread_id: str, turn_id: str) -> None:
         """Best-effort ``turn/interrupt`` that cannot block or raise — for an exit path
         (timeout, error, cancelled consumer) that must not leave the model running on the
         operator's account. The reply is ignored."""
-        if not turn_id:
-            return
-        self._next_id += 1
-        try:
-            self._write(
-                {
-                    "jsonrpc": "2.0",
-                    "id": self._next_id,
-                    "method": "turn/interrupt",
-                    "params": {"threadId": thread_id, "turnId": turn_id},
-                }
-            )
-        except ExternalServiceError:
-            pass
+        if turn_id:
+            self._send_nowait("turn/interrupt", {"threadId": thread_id, "turnId": turn_id})
 
     async def _interrupt(self, thread_id: str, captured: "_CapturedCalls") -> None:
         """End the turn the model is blocked in: its calls are already ours to run."""
