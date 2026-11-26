@@ -52,6 +52,7 @@ import { PortfolioProvider, usePortfolioContext } from './state/portfolio'
 import { TickerStrip } from './components/TickerStrip'
 import { Tooltip } from './components/ui/Tooltip'
 import { DesktopNavControls } from './components/DesktopNavControls'
+import { SetupNudgeCard } from './components/setupNudges/SetupNudgeCard'
 import { useHistoryNav } from './hooks/useHistoryNav'
 import { useScrollMemory } from './hooks/useScrollMemory'
 import { useSidebarPeek } from './hooks/useSidebarPeek'
@@ -252,6 +253,7 @@ const ICON_PROPS = NAV_ICON_PROPS
 // content area left over after the expanded nav + the docked Lucius panel would
 // drop below MIN_CONTENT_W.
 const NAV_EXPANDED_W = 200 // .sidebar.expanded width
+const NAV_COLLAPSED_W = 52 // .sidebar width
 const CHAT_DOCK_W = 400 // --chat-width default the .app-shell reserves when docked
 const NAV_DRAWER_BP = 768 // ≤ this the nav is an off-canvas drawer (no inline width)
 const MIN_CONTENT_W = 1200 // min content width before collapsing; tuned so a
@@ -1478,6 +1480,17 @@ function RouterShellInner() {
                 >
                   {sidebarBody}
                 </nav>
+                {/* Setup nudges (Telegram, Gmail, briefings): a card floating over the page beside
+                  the rail, on every screen — never part of the rail itself. On a phone it sits
+                  above the tab bar, and never over Lucius, whose composer lives there. */}
+                {!isMobile && !onboarding && (
+                  <SetupNudgeCard
+                    left={(sidebarExpanded ? NAV_EXPANDED_W : NAV_COLLAPSED_W) + 12}
+                  />
+                )}
+                {isMobile && !onboarding && !phoneLucius && !mobileMoreOpen && (
+                  <SetupNudgeCard mobile />
+                )}
 
                 {/* .app-main is the full-width column beside the sidebar: the topbar spans it,
                   and .app-layout beneath is the CAPPED reading band (and, on mobile, the
