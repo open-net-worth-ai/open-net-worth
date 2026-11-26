@@ -16,10 +16,18 @@ import {
 /** How long a screen has to start its own intro or tour before the nudge may claim the visit. */
 export const NUDGE_SETTLE_MS = 4000
 
+// The claim outlives the card: on a phone it unmounts on the Lucius tab, and a remount that
+// forgot it had already taken this visit's turn would wait behind its own claim for good.
+let claimedThisVisit = false
+/** Tests only: a new visit. */
+export function resetNudgeClaimForTests(): void {
+  claimedThisVisit = false
+}
+
 export function useGuideTurn(want: boolean): boolean {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const touring = useTourShowing()
-  const [claimed, setClaimed] = useState(false)
+  const [claimed, setClaimed] = useState(() => claimedThisVisit)
   // Until claimed, every new screen starts the wait again; then the visit is the nudge's.
   useEffect(() => {
     if (!want || claimed || touring) return
@@ -28,6 +36,7 @@ export function useGuideTurn(want: boolean): boolean {
       if (Date.now() - arrived < NUDGE_SETTLE_MS) return
       if (inFirstRun() || modalOpen() || guidesHeld() || guidedThisVisit()) return
       markGuided()
+      claimedThisVisit = true
       setClaimed(true)
     }, 700)
     return () => clearInterval(timer)

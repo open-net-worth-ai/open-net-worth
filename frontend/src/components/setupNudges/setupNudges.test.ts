@@ -72,6 +72,11 @@ describe('eligibleNudges — each case follows its own status', () => {
     expect(tg.body).toContain('on Telegram')
   })
 
+  it("the owner's own morning briefing counts as a daily briefing", () => {
+    const mine = auto('Morning briefing', 'Summarise what moved since yesterday')
+    expect(eligibleNudges([], [mine]).map((n) => n.case)).not.toContain('daily-briefing')
+  })
+
   it('a completed Automation does not count as set up', () => {
     const done = { ...auto('Daily briefing'), status: 'completed' } as Automation
     expect(eligibleNudges([], [done]).map((n) => n.case)).toContain('daily-briefing')

@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { guidedThisVisit, markGuided, resetGuidedForTests, tourShowing } from '../intro/tourTarget'
-import { NUDGE_SETTLE_MS, useGuideTurn } from './useGuideTurn'
+import { NUDGE_SETTLE_MS, resetNudgeClaimForTests, useGuideTurn } from './useGuideTurn'
 
 vi.mock('@tanstack/react-router', () => ({
   useRouterState: () => '/budget',
@@ -21,6 +21,7 @@ describe('useGuideTurn — the nudge keeps the one-guide-per-visit rule', () => 
   beforeEach(() => {
     vi.useFakeTimers()
     resetGuidedForTests()
+    resetNudgeClaimForTests()
   })
   afterEach(() => {
     cleanup()
@@ -67,6 +68,15 @@ describe('useGuideTurn — the nudge keeps the one-guide-per-visit rule', () => 
     dialog.remove()
     wait(800)
     expect(result.current).toBe(true)
+  })
+
+  it('comes straight back after it was unmounted mid-visit (the phone hides it on Lucius)', () => {
+    const first = renderHook(() => useGuideTurn(true))
+    wait(NUDGE_SETTLE_MS + 800)
+    expect(first.result.current).toBe(true)
+    first.unmount()
+    const again = renderHook(() => useGuideTurn(true))
+    expect(again.result.current).toBe(true)
   })
 
   it('claims nothing when there is no nudge to show', () => {

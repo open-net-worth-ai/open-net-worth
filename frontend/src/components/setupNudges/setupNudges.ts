@@ -84,13 +84,15 @@ function health(connectors: readonly Connector[], kind: string): Health {
 /** Whether an Automation made from the template (or written by hand to do the same job)
  *  exists. Templates leave no marker on the row, so this reads the job's own words: every
  *  report template names its skill in the instructions, and the name is the template's. */
-function hasAutomation(automations: readonly Automation[], phrase: string): boolean {
-  const p = phrase.toLowerCase()
-  return automations.some(
-    (a) =>
-      a.status !== 'completed' &&
-      (a.name.toLowerCase().includes(p) || a.instructions.toLowerCase().includes(p)),
-  )
+/** Any live Automation whose name or instructions carries one of `phrases` — an owner's own
+ *  "Morning briefing" is a daily briefing as much as the template's "Daily briefing" is. */
+function hasAutomation(automations: readonly Automation[], ...phrases: string[]): boolean {
+  const ps = phrases.map((p) => p.toLowerCase())
+  return automations.some((a) => {
+    if (a.status === 'completed') return false
+    const text = `${a.name}\n${a.instructions}`.toLowerCase()
+    return ps.some((p) => text.includes(p))
+  })
 }
 
 const tg = (label: string): NudgeAction => ({ label, to: '/connectors?connector=telegram' })
@@ -138,7 +140,7 @@ export function eligibleNudges(
       body: 'Connect Gmail and Lucius logs bank, card and trade emails, and flags bills and failed payments.',
       primary: mail('Connect Gmail'),
     })
-  if (!hasAutomation(automations, 'daily briefing'))
+  if (!hasAutomation(automations, 'daily briefing', 'morning briefing'))
     out.push({
       case: 'daily-briefing',
       title: 'Get a morning briefing',
