@@ -149,6 +149,9 @@ export {
   CalendarClock,
   // ── Copy Trading: the activity period picker ──
   CalendarDays,
+  // ── Setup nudge pictures ──
+  CalendarRange,
+  Mail,
   // ── Vault (Lucius tab) ──
   FolderLock,
   FolderMinus,

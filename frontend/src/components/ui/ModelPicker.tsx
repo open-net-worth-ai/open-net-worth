@@ -495,7 +495,8 @@ export function ModelPicker(props: ModelPickerProps) {
                   OpenRouter one, billed three different ways. Repeating the provider under a
                   provider header would be pure noise on ~300 rows. */}
               {row.provider && <em className="mp-opt-prov">{row.provider}</em>}
-              {isZeroRetentionProvider(row.model?.provider_key) &&
+              {row.model &&
+                isZeroRetentionProvider(row.model.provider_key) &&
                 zeroRetentionCaveat(row.model.id) && (
                   <em className="mp-opt-note">{zeroRetentionCaveat(row.model.id)}</em>
                 )}
