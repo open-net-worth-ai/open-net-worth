@@ -38,14 +38,25 @@ function useSetupNudge(): { nudge: Nudge | null; touch: (c: NudgeCase) => void }
   const [touched, setTouched] = useState<NudgeCase | null>(null)
 
   const nudge = useMemo(() => {
-    if (!profile.data || !setup.data || !connectors.data || !automations.data) return null
+    // A failed connectors read reads as an empty list, which would offer every connector
+    // as missing; an error hides the card the same way an unfinished read does.
+    if (connectors.initialLoading || connectors.error != null) return null
+    if (!profile.data || !setup.data || !automations.data) return null
     if (profile.data.is_demo || setup.data.is_fresh) return null
     const seen = (profile.data.seen_intros as string[] | undefined) ?? []
     const eligible = eligibleNudges(connectors.connectors, automations.data.automations)
     const doneAt = setup.data.onboarding_completed_at ?? null
     const pick = pickNudge(eligible, seen, new Date(), doneAt)
     return pick && pick.case !== touched ? pick : null
-  }, [profile.data, setup.data, connectors.data, connectors.connectors, automations.data, touched])
+  }, [
+    profile.data,
+    setup.data,
+    connectors.initialLoading,
+    connectors.error,
+    connectors.connectors,
+    automations.data,
+    touched,
+  ])
 
   const touch = useCallback((c: NudgeCase) => {
     setTouched(c)
