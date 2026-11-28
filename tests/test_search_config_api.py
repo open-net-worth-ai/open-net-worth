@@ -39,6 +39,7 @@ def test_status_default(client):
         "serper",
         "google_pse",
         "firecrawl",
+        "youcom",
     ]
     by_id = {p["id"]: p for p in body["providers"]}
     # DuckDuckGo: key-free, enabled-by-default.
@@ -49,8 +50,29 @@ def test_status_default(client):
     assert all(
         p["has_key"] is False and p["enabled"] is False
         for p in body["providers"]
-        if p["id"] != "duckduckgo"
+        if p["id"] not in ("duckduckgo", "youcom")
     )
+    # You.com: key-free (optional key), but off until the user turns it on.
+    assert by_id["youcom"]["needs_api_key"] is False
+    assert by_id["youcom"]["optional_api_key"] is True
+    assert by_id["youcom"]["enabled"] is False
+    assert by_id["youcom"]["key_saved"] is False
+
+
+def test_youcom_enable_without_key_becomes_default(client):
+    body = client.put("/api/search/config/youcom", json={"enabled": True}).json()
+    by_id = {p["id"]: p for p in body["providers"]}
+    assert by_id["youcom"]["enabled"] is True and by_id["youcom"]["has_key"] is True
+    # Turned on by the user, so it wins over the zero-config DuckDuckGo default.
+    assert body["default_provider"] == "youcom"
+
+
+def test_youcom_optional_key_is_saved_write_only(client):
+    body = client.put("/api/search/config/youcom", json={"api_key": "ydc-secret"}).json()
+    by_id = {p["id"]: p for p in body["providers"]}
+    assert by_id["youcom"]["enabled"] is True
+    assert by_id["youcom"]["key_saved"] is True
+    assert "ydc-secret" not in json.dumps(body)
 
 
 def test_put_provider_key_write_only_and_auto_enables(client):

@@ -605,6 +605,22 @@ export const CATALOG: CatalogEntry[] = [
     popular: false,
     tools: ['firecrawl_search', 'firecrawl_fetch_page'],
   },
+  {
+    id: 'web_search:youcom',
+    name: 'You.com',
+    families: ['Web'],
+    categories: ['Web search'],
+    icon: 'search',
+    hue: 'var(--warn)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:youcom"]`.
+    publisher: 'You.com',
+    verification: 'unverified',
+    homepageUrl: 'https://you.com/',
+    privacyUrl: 'https://you.com/privacy',
+    mcp: false,
+    popular: false,
+    tools: ['youcom_search', 'youcom_fetch_page'],
+  },
 
   // ── MCP (third-party — someone else's code, over a transport we don't own) ────
   //

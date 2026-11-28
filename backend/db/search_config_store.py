@@ -110,6 +110,17 @@ PROVIDER_CATALOG: list = [
         "native_fetch": True,
         "extra_fields": [],
     },
+    {
+        "id": "youcom",
+        "label": "You.com",
+        "hint": "Web and news results with page snippets. An API key raises the daily limit.",
+        "docs_url": "https://you.com/platform",
+        "needs_api_key": False,
+        "optional_api_key": True,
+        "enabled_by_default": False,
+        "native_fetch": False,
+        "extra_fields": [],
+    },
 ]
 
 _CATALOG_BY_ID = {p["id"]: p for p in PROVIDER_CATALOG}
@@ -125,6 +136,16 @@ def _row_id(provider_id: str) -> str:
 
 def _needs_key(provider_id: str) -> bool:
     return bool(_CATALOG_BY_ID.get(provider_id, {}).get("needs_api_key", True))
+
+
+def _enabled_by_default(provider_id: str) -> bool:
+    return bool(_CATALOG_BY_ID.get(provider_id, {}).get("enabled_by_default", True))
+
+
+def _opted_in(provider_id: str) -> bool:
+    """A provider the user had to set up or turn on themselves (a keyed one, or a key-free one
+    that is off by default). Preferred over the zero-config default when nothing is selected."""
+    return _needs_key(provider_id) or not _enabled_by_default(provider_id)
 
 
 def _required_extra_keys(provider_id: str) -> list:
@@ -158,7 +179,11 @@ def _is_enabled(provider_id: str, pcfg: dict) -> bool:
     the provider has no row."""
     if "enabled" in pcfg:
         return bool(pcfg["enabled"])
-    return not _needs_key(provider_id) and not _required_extra_keys(provider_id)
+    return (
+        not _needs_key(provider_id)
+        and not _required_extra_keys(provider_id)
+        and _enabled_by_default(provider_id)
+    )
 
 
 def _runtime(provider_id: str, pcfg: dict) -> dict:
@@ -190,7 +215,7 @@ def _resolve_default(cfg: dict) -> Optional[str]:
     if default in usable:
         return default
     for pid in usable:
-        if _needs_key(pid):
+        if _opted_in(pid):
             return pid
     return usable[0] if usable else None
 
@@ -203,6 +228,7 @@ def _public_provider(provider_id: str, pcfg: dict, default: Optional[str]) -> di
         "hint": entry.get("hint", ""),
         "docs_url": entry.get("docs_url", ""),
         "needs_api_key": entry.get("needs_api_key", True),
+        "optional_api_key": entry.get("optional_api_key", False),
         "native_fetch": entry.get("native_fetch", False),
         "extra_fields": [
             {
@@ -215,6 +241,8 @@ def _public_provider(provider_id: str, pcfg: dict, default: Optional[str]) -> di
         ],
         "enabled": _is_enabled(provider_id, pcfg),
         "has_key": _has_key(provider_id, pcfg),
+        # Whether a key is actually stored (``has_key`` is True for a key-free provider).
+        "key_saved": bool(_runtime(provider_id, pcfg)["api_key"]),
         "is_active": default == provider_id,
     }
 

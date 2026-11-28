@@ -22,6 +22,7 @@ from backend.ai.search.google_pse_provider import GooglePseProvider
 from backend.ai.search.perplexity_provider import PerplexityProvider
 from backend.ai.search.serper_provider import SerperProvider
 from backend.ai.search.tavily_provider import TavilyProvider
+from backend.ai.search.youcom_provider import YouComProvider
 from backend.db.search_config_store import SearchConfigStore
 
 # ── registry ───────────────────────────────────────────────────────────────────
@@ -170,6 +171,69 @@ def test_serper_request_shape_and_mapping(monkeypatch):
     assert captured["json"] == {"q": "q", "num": 5}
     assert rows[0]["url"] == "https://s.example"
     assert rows[0]["content"] == "sn"
+
+
+_YOUCOM_PAYLOAD = {
+    "results": {
+        "web": [
+            {
+                "url": "https://y.example",
+                "title": "YT",
+                "description": "yd",
+                "snippets": ["one", "two", "three"],
+                "page_age": "2026-11-14T10:00:00",
+            },
+            {"url": "", "title": "no link", "description": "dropped"},
+            {"url": "https://bare.example", "title": None, "description": None},
+        ],
+        "news": [{"url": "https://n.example", "title": "NT", "description": "nd"}],
+    }
+}
+_YOUCOM_UA = "youdotcom-integration/open-net-worth-ai-open-net-worth"
+
+
+def test_youcom_keyless_request_shape_and_mapping(monkeypatch):
+    captured: dict = {}
+    _stub_client(monkeypatch, "backend.ai.search.youcom_provider", captured, _YOUCOM_PAYLOAD)
+    rows = asyncio.run(YouComProvider().search("q", max_results=5))
+    assert captured["url"] == "https://api.you.com/v1/agents/search"
+    assert captured["params"] == {"query": "q", "count": 5}
+    assert captured["headers"]["User-Agent"] == _YOUCOM_UA
+    assert "X-API-Key" not in captured["headers"]
+    assert [r["url"] for r in rows] == [
+        "https://y.example",
+        "https://bare.example",
+        "https://n.example",
+    ]
+    assert rows[0]["content"] == "one two"
+    assert rows[0]["published_date"] == "2026-11-14T10:00:00"
+    assert rows[1]["title"] == "" and rows[1]["content"] == "" and rows[1]["published_date"] == ""
+    assert rows[2]["content"] == "nd"
+
+
+def test_youcom_keyless_count_capped_at_50(monkeypatch):
+    captured: dict = {}
+    _stub_client(monkeypatch, "backend.ai.search.youcom_provider", captured, {"results": {}})
+    assert asyncio.run(YouComProvider(api_key="  ").search("q", max_results=500)) == []
+    assert captured["params"]["count"] == 50
+
+
+def test_youcom_keyed_request_shape(monkeypatch):
+    captured: dict = {}
+    _stub_client(monkeypatch, "backend.ai.search.youcom_provider", captured, _YOUCOM_PAYLOAD)
+    rows = asyncio.run(YouComProvider(api_key="yk").search("q", max_results=150))
+    assert captured["url"] == "https://ydc-index.io/v1/search"
+    assert captured["json"] == {"query": "q", "count": 100}
+    assert captured["headers"]["X-API-Key"] == "yk"
+    assert captured["headers"]["User-Agent"] == _YOUCOM_UA
+    assert len(rows) == 3
+
+
+def test_youcom_news_rows_first(monkeypatch):
+    captured: dict = {}
+    _stub_client(monkeypatch, "backend.ai.search.youcom_provider", captured, _YOUCOM_PAYLOAD)
+    rows = asyncio.run(YouComProvider().search_news("q", max_results=2))
+    assert [r["url"] for r in rows] == ["https://n.example", "https://y.example"]
 
 
 # ── Perplexity mapping (existing, kept) ──────────────────────────────────────────
