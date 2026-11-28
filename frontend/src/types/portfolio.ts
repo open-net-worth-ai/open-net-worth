@@ -326,7 +326,7 @@ export interface PortfolioReturns {
   annualized: boolean // true iff effective span ≥ 360 days
   base_currency: string
   // Fractions (not %); the UI multiplies by 100. null = not enough history.
-  twr: { period_return: number; annualized: number } | null
+  twr: { period_return: number; annualized: number | null } | null
   // null for spans < 30 days or insufficient history; card hidden when null.
   // period_return is de-annualized for spans < 360d: (1+xirr)^(span/365)−1.
   // annualized=true only when the span is ≥ 360 days (xirr == period_return in that case).
@@ -346,6 +346,10 @@ export interface PortfolioReturns {
     has_unrecorded_risk: boolean // any contributing instrument has undated lots
     fx_approximate: boolean // any contributing instrument uses non-base currency
     tiers: Record<string, 'exact' | 'approximate'> // per-instrument accuracy
+    // Holdings valued without a recorded price on some days: at their manual mark, or at
+    // what their lots cost (bought before the price feed's history starts).
+    fallback_priced?: FallbackPriced[]
+    fallback_share?: number // largest share of one day's value that came from fallbacks
   }
   // Present only when ?benchmark= was passed (P2-INV4). null = the benchmark couldn't be
   // resolved or lacks enough price history over the window — render "no benchmark" gracefully.
@@ -359,7 +363,7 @@ export interface PortfolioReturns {
 export interface BenchmarkReturn {
   symbol: string
   instrument_id: string
-  twr: { period_return: number; annualized: number } | null
+  twr: { period_return: number; annualized: number | null } | null
   data_quality: {
     market_since: string | null
     value_points: number
@@ -500,4 +504,13 @@ export interface Property {
   subtitle: string
   currency: string
   schedule: ScheduleItem[]
+}
+
+export interface FallbackPriced {
+  instrument_id: string
+  symbol: string
+  name: string
+  source: 'manual' | 'cost'
+  from: string
+  to: string
 }

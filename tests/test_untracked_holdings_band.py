@@ -44,6 +44,12 @@ def offline(book, monkeypatch):
     )
     monkeypatch.setattr(rebalance_service, "base_currency", lambda: "USD")
     monkeypatch.setattr(portfolio_rows, "base_currency", lambda: "USD")
+    # The history values the book's USD holding too (in the default SGD base it would need
+    # a USD rate this offline book doesn't have).
+    from backend.services import portfolio_history
+
+    monkeypatch.setattr(ledger_service, "base_currency", lambda: "USD")
+    monkeypatch.setattr(portfolio_history, "base_currency", lambda: "USD")
     return book
 
 

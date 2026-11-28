@@ -123,6 +123,7 @@ export function PerformanceTab({
     series,
     hasBenchmark,
     benchLabel,
+    fallbackNote,
     risk,
   } = vm
 
@@ -229,6 +230,7 @@ export function PerformanceTab({
                   </span>
                 )}
               </div>
+              {fallbackNote && <p className="inc-chart-cap">{fallbackNote}</p>}
             </div>
           </div>
 

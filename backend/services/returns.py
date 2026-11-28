@@ -509,7 +509,14 @@ def _subperiod_return(v_prev: float, v_now: float, net_added: float) -> float | 
     """
     if v_prev <= 0:
         return None
-    return (v_now - net_added) / v_prev - 1.0
+    r = (v_now - net_added) / v_prev - 1.0
+    # A holding can lose at most everything: below -100% means the value series is
+    # missing something the flows paid for (a holding with no price), not a market move.
+    # Chaining it would flip the TWR's sign and annualising it gives a complex number
+    # (issue #231's /api/returns 500), so the sub-period is skipped like a zero base.
+    if r < -1.0:
+        return None
+    return r
 
 
 def _twr_path(
@@ -575,12 +582,20 @@ def twr(series: list[dict], flows: list[tuple[str, float]], annualize: bool) -> 
     chain_minus_one = path[-1][1]  # cumulative return at the last point
     chain = 1.0 + chain_minus_one
     period_return = round(chain_minus_one, 6)
-    ann = period_return
+    ann: float | None = period_return
     if annualize and span_days > 0:
         years = span_days / _DAYS_PER_YEAR
         if years > 0:
-            ann = round(chain ** (1.0 / years) - 1.0, 6)
-    return {"period_return": period_return, "annualized": round(ann, 6)}
+            ann = _annualize(chain, years)
+    return {"period_return": period_return, "annualized": ann}
+
+
+def _annualize(growth: float, years: float) -> float | None:
+    """``growth ** (1/years) - 1`` — None when ``growth <= 0``: a total loss or worse has
+    no annual rate, and a negative base to a fractional power is a complex number."""
+    if growth <= 0 or years <= 0:
+        return None
+    return round(growth ** (1.0 / years) - 1.0, 6)
 
 
 # ── MWR / XIRR (money-weighted internal rate of return) ────────────────────────────
@@ -790,16 +805,15 @@ def _compute_benchmark_twr(
         start_price = float(series[0]["price"])
         end_price = float(series[-1]["price"])
         period_return = round(end_price / start_price - 1.0, 6)
-        ann = period_return
+        ann: float | None = period_return
         if annualize:
             try:
                 span_days = (date.fromisoformat(end) - date.fromisoformat(start)).days
             except (ValueError, TypeError):
                 span_days = 0
             if span_days > 0:
-                years = span_days / _DAYS_PER_YEAR
-                ann = round((1.0 + period_return) ** (1.0 / years) - 1.0, 6)
-        twr_block = {"period_return": period_return, "annualized": round(ann, 6)}
+                ann = _annualize(1.0 + period_return, span_days / _DAYS_PER_YEAR)
+        twr_block = {"period_return": period_return, "annualized": ann}
 
     data_quality = {
         "market_since": market_since,
@@ -1032,7 +1046,9 @@ def portfolio_returns(
 
     # ── Effective window clamping ──────────────────────────────────────────────────
     market_since = PriceHistoryStore().earliest_date()
-    inception = ph.inception_date()
+    # The oldest dated lot counts, not only the first transaction: lots imported without
+    # a ledger transaction still have their real purchase dates (issue #231).
+    inception = ph.history_start()
     effective_start = _effective_window(requested_start, end, inception, market_since)
     label = _period_label(period, effective_start, requested_start)
 
@@ -1145,6 +1161,10 @@ def portfolio_returns(
             "has_unrecorded_risk": dq_prim.get("has_unrecorded_risk", False),
             "fx_approximate": dq_prim.get("fx_approximate", False),
             "tiers": dq_prim.get("tiers") or {},
+            # Holdings valued at a manual mark or at cost on days with no recorded price
+            # (portfolio_history.portfolio_value_series; issue #231).
+            "fallback_priced": dq_prim.get("fallback_priced") or [],
+            "fallback_share": dq_prim.get("fallback_share") or 0.0,
         },
     }
 

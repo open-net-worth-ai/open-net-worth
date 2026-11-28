@@ -4773,6 +4773,33 @@ def _locked_row_value(row: dict, as_of_prices: dict[str, float], base: str) -> f
     return row_base_value(row, base, price=price)
 
 
+def _rows_path_price(
+    row: dict,
+    as_of: str,
+    as_of_prices: dict[str, float],
+    position_starts: dict[str, str] | None,
+) -> float | None:
+    """A rows-path holding's price on ``as_of``: its recorded price on/before that day,
+    else (with ``position_starts``) its manual mark from its first dated lot on — the same
+    rule as ``historical_marks.manual_mark`` for lot-backed holdings. A position with no
+    dated lot starts at ``position_starts[""]`` (the first transaction). None = absent."""
+    price = as_of_prices.get(row.get("price_source_id"))
+    if price is not None or position_starts is None:
+        return price
+    manual = (row.get("price_source") or "").lower() == "manual"
+    if not (manual or not row.get("price_source_id")):
+        return None
+    # No dated lot: held since tracking began, like an undated lot on the lot-backed path.
+    start = position_starts.get(row.get("position_id") or "") or position_starts.get("")
+    if start and as_of < start:
+        return None
+    try:
+        mark = float(row.get("price") or 0)
+    except (TypeError, ValueError):
+        return None
+    return mark if mark > 0 else None
+
+
 def _breakdown_as_of(
     as_of: str,
     as_of_prices: dict[str, float],
@@ -4790,6 +4817,7 @@ def _breakdown_as_of(
     rates: dict | None = None,
     market_fx_approximate: bool = False,
     untracked: frozenset[str] | None = None,
+    position_starts: dict[str, str] | None = None,
 ) -> dict:
     """Net worth at a historical date, decomposed into positive asset-class bands plus a
     (raw-negative) liabilities figure — the data behind the stacked area chart.
@@ -4820,6 +4848,11 @@ def _breakdown_as_of(
     decision 6) — property/commodity/other_asset, folded into ``classes`` the same way as
     ``market_overlay``. The caller supplies the AS-OF value (``net_worth_history`` re-derives
     it per point with ``as_of=<point date>`` — a manual asset's marks ARE its price series).
+
+    ``position_starts`` (``portfolio_history.position_start_dates``): when provided, a
+    rows-path holding with no recorded price on ``as_of`` (a manually priced bond: it has no
+    ``price_source_id``, so no history) counts at its manual mark from its first dated lot
+    on — never absent (issue #231). Without it such a row is absent, as before.
 
     ``market_overlay``: when provided (by ``net_worth_history``), supplies reconstructed
     per-band values for the lot-backed bands (equity/crypto/commodity) from the Phase 1
@@ -4891,7 +4924,7 @@ def _breakdown_as_of(
                 band = _MARKET_BAND.get(row.get("asset_class"))
                 if not band or band in _LOT_BACKED_BANDS:
                     continue  # skip unmapped classes and lot-backed bands (property only)
-                price = as_of_prices.get(row.get("price_source_id"))
+                price = _rows_path_price(row, as_of, as_of_prices, position_starts)
                 if price is not None:
                     val = row_base_value(row, base, price=price)
                     classes[band] = classes.get(band, 0.0) + val
@@ -4911,7 +4944,7 @@ def _breakdown_as_of(
                 # display `ticker` — those diverge for crypto (_row_ticker in positions.py
                 # renders a CoinGecko id like "bitcoin" as "BTC" for display only). Looking
                 # up by `ticker` here silently dropped every crypto row from this band.
-                price = as_of_prices.get(row.get("price_source_id"))
+                price = _rows_path_price(row, as_of, as_of_prices, position_starts)
                 if price is None:
                     continue
                 val = row_base_value(row, base, price=price)
@@ -5032,8 +5065,15 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
     owned_asset_rows = OwnedAssetsStore().all()
     market_since = PriceHistoryStore().earliest_date()
 
-    # No transactions yet but accounts exist → single current-snapshot point.
-    if not candidate_dates:
+    # Lots carry their own purchase dates, with or without a ledger transaction (an import
+    # can write dated lots alone): the history starts at the older of the two (issue #231).
+    lot_start = ph.earliest_lot_date()
+    position_starts = ph.position_start_dates(
+        inception=min(candidate_dates)[:10] if candidate_dates else None
+    )
+
+    # No transactions or dated lots yet but accounts exist → single current-snapshot point.
+    if not candidate_dates and not lot_start:
         as_of = today.isoformat()
         as_of_prices = PriceHistoryStore().as_of_maps([as_of])[as_of]
         tracked = bool(market_since and as_of >= market_since)
@@ -5069,7 +5109,8 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
         )
         return [{"date": as_of, "market_tracked": tracked, **bd}]
 
-    oldest = date.fromisoformat(min(candidate_dates)[:10])
+    txn_oldest = min(candidate_dates)[:10] if candidate_dates else None
+    oldest = date.fromisoformat(min(d for d in (txn_oldest, lot_start) if d))
     oldest_iso = oldest.isoformat()
     y, m = oldest.year, oldest.month
 
@@ -5093,7 +5134,10 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
     # ONE primitive call for all month-end dates — O(events + months), not O(months × events).
     # Pass inception explicitly: the primitive already knows the oldest account/txn date (oldest_iso)
     # and we avoid an unnecessary AccountStore/TransactionStore read inside portfolio_value_series.
-    pv = ph.portfolio_value_series(oldest_iso, today.isoformat(), "monthly", inception=oldest_iso)
+    # Undated (opening) lots stay pinned to the first transaction, as everywhere else.
+    pv = ph.portfolio_value_series(
+        oldest_iso, today.isoformat(), "monthly", inception=txn_oldest or oldest_iso
+    )
     overlays: dict[str, dict[str, float]] = {pt["date"]: pt["classes"] for pt in pv["series"]}
     # Whole-window flag from the primitive (it has no per-date currency breakdown to give a
     # tighter one) — same convention `returns.py`/`daily_total_value.py` already propagate.
@@ -5133,6 +5177,7 @@ def net_worth_history(all_txns: list[dict] | None = None) -> list[dict]:
             rates=rates,
             market_fx_approximate=overlay_fx_approximate if tracked else False,
             untracked=untracked,
+            position_starts=position_starts,
         )
         result.append({"date": as_of, "market_tracked": tracked, **bd})
     return _from_first_tracked_point(result)
@@ -5210,6 +5255,7 @@ def net_worth_on(as_of: str) -> dict:
         balances=account_balances_over_dates(accts, [as_of], txns, cutoffs)[as_of],
         rates=rates,
         market_fx_approximate=fx_approx,
+        position_starts=ph.position_start_dates(inception=oldest),
     )
     return {"date": as_of, "market_tracked": tracked, "base_currency": base, **bd}
 

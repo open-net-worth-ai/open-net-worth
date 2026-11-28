@@ -7,6 +7,7 @@ import { PROFILE_KEY } from '../../../hooks/serverState'
 import { fetchBenchmarkRoster, fetchReturnsWithRisk } from '../../../api/portfolio'
 import type {
   BenchmarkRosterItem,
+  FallbackPriced,
   PortfolioReturns,
   ReturnPeriod,
   ReturnSeriesPoint,
@@ -98,6 +99,8 @@ export interface PerformanceViewModel {
   // Clamped-window label
   windowLabel: string
   isClamped: boolean
+  /** Which holdings were valued at a manual mark or at cost on days with no price. */
+  fallbackNote: string | null
 
   // Risk metrics (null = not enough data)
   risk: PerfRiskMetrics | null
@@ -224,6 +227,7 @@ export function usePerformanceView(): PerformanceViewModel {
 
   const windowLabel = data?.label ?? ''
   const isClamped = windowLabel.startsWith('Since')
+  const fallbackNote = fallbackPricedNote(data?.data_quality.fallback_priced ?? [])
 
   // Return stat cards (matches prototype: TWR, MWR, Period gain)
   const returnCards: PerfStatCard[] = data
@@ -315,6 +319,19 @@ export function usePerformanceView(): PerformanceViewModel {
     benchSymbol,
     windowLabel,
     isClamped,
+    fallbackNote,
     risk,
   }
+}
+
+/** One sentence naming the holdings valued without a recorded price, or null. */
+export function fallbackPricedNote(rows: FallbackPriced[]): string | null {
+  if (rows.length === 0) return null
+  const parts = rows.map((r) => {
+    const label = r.symbol || r.name
+    return r.source === 'cost'
+      ? `${label} is valued at what you paid from ${r.from} to ${r.to}`
+      : `${label} is valued at its manual price`
+  })
+  return `Some holdings have no price history for part of this range: ${parts.join('; ')}.`
 }

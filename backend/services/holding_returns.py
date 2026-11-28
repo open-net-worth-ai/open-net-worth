@@ -19,6 +19,7 @@ from backend.db.instrument_store import InstrumentStore
 from backend.db.lot_store import LotStore
 from backend.db.price_history_store import PriceHistoryStore
 from backend.db.realized_event_store import RealizedEventStore
+from backend.services import historical_marks as hm
 
 
 def holding_period_returns(
@@ -63,10 +64,25 @@ def holding_period_returns(
         )
         for day in (start, end)
     }
+    # Same fallback as the portfolio series (manual mark, else cost), so the holdings
+    # still add up to the portfolio's period gain.
+    costs = hm.cost_index(
+        lots,
+        inception=inception,
+        locked_position_ids=ph.resolve_locked_position_ids(),
+        disposals=disposals,
+        parked=ph.parked_vests() if parked else [],
+    )
     values = {
         day: {
             iid: ph.instrument_value_base(
-                instruments.get(iid), qty, price_history.get(day, {}), base, rates
+                instruments.get(iid),
+                qty,
+                price_history.get(day, {}),
+                base,
+                rates,
+                as_of=day,
+                costs=costs,
             )
             for iid, qty in held[day].items()
         }

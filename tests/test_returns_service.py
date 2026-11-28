@@ -858,6 +858,8 @@ def test_portfolio_returns_response_shape(patched):
         "has_unrecorded_risk",
         "fx_approximate",
         "tiers",
+        "fallback_priced",
+        "fallback_share",
     }
 
 

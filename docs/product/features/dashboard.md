@@ -161,7 +161,9 @@ stacked in its own colour family — green for income, red and amber for spendin
 split into Income and Expenses. **Spending trends** draws a dashed line at your average monthly
 spend over the complete months since your first transaction, so a book that starts with one
 imported month averages that month, not that month spread over months before the book existed.
-The **Net worth** chart starts at the first date you held anything.
+The **Net worth** chart starts at the first date you held anything: your first transaction, or
+your oldest holding's buy date when that is older. A holding you price by hand (a bond with a
+manual price, for example) counts at its manual price from its buy date on.
 
 **Cash flow** shows this month's money in and out. While this month has no income or spending
 yet, it shows the latest month that does and says so (*"September. Nothing yet in October."*).

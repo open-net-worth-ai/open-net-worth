@@ -32,6 +32,7 @@ from backend.db.position_store import PositionStore
 from backend.db.price_history_store import PriceHistoryStore
 from backend.db.realized_event_store import RealizedEventStore
 from backend.db.transaction_store import TransactionStore
+from backend.services import historical_marks as hm
 from backend.services._grain import _grain_dates
 
 _log = logging.getLogger(__name__)
@@ -70,6 +71,9 @@ def inception_date(
 ) -> str | None:
     """Earliest book date: the earliest non-deleted transaction date.
 
+    Undated (opening) lots are pinned here. Where a HISTORY starts is ``history_start``,
+    which also reaches back to the oldest dated lot.
+
     This is the portfolio value floor — the date from which holdings_as_of can make
     sensible claims. Mirrors the ``candidate_dates`` logic in net_worth_history().
     Returns an ISO 'YYYY-MM-DD' string, or None when the book is completely empty.
@@ -84,6 +88,47 @@ def inception_date(
 
     candidates = [d for t in txns if (d := (t.get("date") or "")[:10])]
     return min(candidates) if candidates else None
+
+
+def history_start() -> str | None:
+    """The first day a history can show: the earlier of ``inception_date`` and the oldest
+    dated lot (``earliest_lot_date``). Undated lots stay pinned to ``inception_date``."""
+    days = [d for d in (inception_date(), earliest_lot_date()) if d]
+    return min(days) if days else None
+
+
+def earliest_lot_date(lots: list[dict] | None = None) -> str | None:
+    """The earliest ``acquired_at`` of any lot outside an unvested position, or None.
+
+    A holding's history starts when it was bought, even when its lot has no ledger
+    transaction (an import that wrote dated lots alone, issue #231): without this the
+    book's history started at its first transaction and cut every older lot off."""
+    if lots is None:
+        lots = LotStore().all()
+    locked = resolve_locked_position_ids()
+    days = [
+        d
+        for lot in lots
+        if lot.get("position_id") not in locked and (d := (lot.get("acquired_at") or "")[:10])
+    ]
+    return min(days) if days else None
+
+
+def position_start_dates(
+    lots: list[dict] | None = None, *, inception: str | None = None
+) -> dict[str, str]:
+    """``{position_id: earliest dated acquired_at}`` — from when a holding valued on the
+    rows path (no lot reconstruction: bonds, property) is counted at its manual mark. With
+    ``inception``, key ``""`` holds it: the start of a position with no dated lot."""
+    if lots is None:
+        lots = LotStore().all()
+    out: dict[str, str] = {"": inception} if inception else {}
+    for lot in lots:
+        pid = lot.get("position_id") or ""
+        day = (lot.get("acquired_at") or "")[:10]
+        if pid and day and (pid not in out or day < out[pid]):
+            out[pid] = day
+    return out
 
 
 # ── Holdings reconstruction ─────────────────────────────────────────────────────
@@ -368,6 +413,8 @@ def portfolio_value_series(
               "has_unrecorded_risk": bool,
               "has_unknown_cost": bool,
               "fx_approximate": bool,
+              "fallback_priced": [{instrument_id, symbol, name, source, from, to}],
+              "fallback_share": float,
           }
         }
 
@@ -377,6 +424,9 @@ def portfolio_value_series(
     Prices are looked up via PriceHistoryStore.as_of_maps() (carry-forward latest ≤ date)
     keyed by the instrument's price_source_id. FX uses current cached rates; every series
     point is therefore ``fx_approximate=True`` when any contributing currency != base.
+    A holding with no price on/before a date (manually priced, or bought before its feed's
+    history starts) is valued at its manual mark, else the cost of its lots held by then,
+    and listed in ``fallback_priced`` (``historical_marks``).
 
     Injectable parameters for testing: ``inception``, ``lots``, ``disposals``,
     ``instruments`` (map instrument_id→record), ``price_history`` (pre-built as_of_maps
@@ -434,22 +484,43 @@ def portfolio_value_series(
         else:
             lot_has_undated[iid] = True
 
+    # A holding with no recorded price on a day is carried at its manual mark, else its
+    # cost — never zero (issue #231; services/historical_marks.py).
+    costs = hm.cost_index(
+        lots,
+        inception=inception,
+        locked_position_ids=resolve_locked_position_ids(),
+        disposals=disposals,
+        parked=parked_vests() if parked else [],
+    )
+    fallbacks = hm.FallbackLog()
+    peak_fallback_share = 0.0
+
     series: list[dict] = []
     for pt in h_series:
         d = pt["date"]
         holdings = pt["holdings"]
         as_of_prices = price_history.get(d, {})
         value_base = 0.0
+        fallback_base = 0.0
         classes: dict[str, float] = {}
 
         for iid, qty in holdings.items():
             inst = instruments.get(iid)
-            contrib = instrument_value_base(inst, qty, as_of_prices, base, rates)
-            if contrib is None:
+            valued = instrument_valuation(
+                inst, qty, as_of_prices, base, rates, as_of=d, costs=costs
+            )
+            if valued is None:
                 continue
+            contrib, source = valued
+            if source != hm.SOURCE_PRICE:
+                fallbacks.note(iid, source, d)
+                fallback_base += contrib
             band = _ASSET_CLASS_TO_BAND.get(inst.get("asset_class") or "")
             value_base += contrib
             classes[band] = classes.get(band, 0.0) + contrib
+        if value_base > 0:
+            peak_fallback_share = max(peak_fallback_share, fallback_base / value_base)
 
         series.append(
             {
@@ -505,29 +576,70 @@ def portfolio_value_series(
             "has_unrecorded_risk": has_unrecorded_risk,
             "has_unknown_cost": has_unknown_cost,
             "fx_approximate": fx_approximate,
+            # Holdings valued without a recorded price (manual mark or cost), with the
+            # days that happened, and the largest share of a point's value it reached.
+            "fallback_priced": fallbacks.entries(instruments),
+            "fallback_share": round(peak_fallback_share, 4),
         },
     }
 
 
 def instrument_value_base(
-    inst: dict | None, qty: float, as_of_prices: dict, base: str, rates: dict
+    inst: dict | None,
+    qty: float,
+    as_of_prices: dict,
+    base: str,
+    rates: dict,
+    *,
+    as_of: str | None = None,
+    costs: hm.CostIndex | None = None,
 ) -> float | None:
     """One instrument's market value in base on a date, or None when it doesn't count.
 
-    The ONE per-instrument fold behind the investment value series: an unknown instrument,
-    a band outside ``_MARKET_BANDS`` or a missing price contributes nothing. Per-holding
-    period returns use it too, so the holdings always add up to the portfolio."""
+    The ONE per-instrument fold behind the investment value series: an unknown instrument
+    or a band outside ``_MARKET_BANDS`` contributes nothing. Per-holding period returns use
+    it too, so the holdings always add up to the portfolio. With ``costs`` (and ``as_of``)
+    a holding with no recorded price falls back to its manual mark, then its cost
+    (``historical_marks``); without them a missing price contributes nothing."""
+    valued = instrument_valuation(inst, qty, as_of_prices, base, rates, as_of=as_of, costs=costs)
+    return None if valued is None else valued[0]
+
+
+def instrument_valuation(
+    inst: dict | None,
+    qty: float,
+    as_of_prices: dict,
+    base: str,
+    rates: dict,
+    *,
+    as_of: str | None = None,
+    costs: hm.CostIndex | None = None,
+) -> tuple[float, str] | None:
+    """``instrument_value_base`` plus where the value came from (``historical_marks``
+    SOURCE_PRICE / SOURCE_MANUAL / SOURCE_COST)."""
     if not inst:
         return None
     if _ASSET_CLASS_TO_BAND.get(inst.get("asset_class") or "") not in _MARKET_BANDS:
         return None
     pid = inst.get("price_source_id") or ""
     price = as_of_prices.get(pid) if pid else None
+    source = hm.SOURCE_PRICE
+    if price is None and costs is not None and as_of:
+        entries = costs.get(inst.get("id") or "")
+        last_buy = hm.last_acquired(entries)
+        price = hm.manual_mark(inst) if not last_buy or as_of >= last_buy else None
+        source = hm.SOURCE_MANUAL
+        if price is None:
+            value = hm.cost_value_base(entries, as_of, qty, base, rates)
+            if value is None:
+                price = hm.manual_mark(inst)  # no costed unit: the mark is all there is
+            else:
+                return value, hm.SOURCE_COST
     if price is None:
         return None
     qpu = float(inst.get("quote_per_unit") or 1.0) or 1.0
     quote_ccy = inst.get("quote_currency") or inst.get("currency") or base
-    return to_base(qty * float(price) * qpu, quote_ccy, base, rates=rates)
+    return to_base(qty * float(price) * qpu, quote_ccy, base, rates=rates), source
 
 
 def _load_rates_safe(loader) -> dict:

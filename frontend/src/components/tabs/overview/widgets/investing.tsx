@@ -673,6 +673,11 @@ const Performance: ComponentType<WidgetContentProps> = ({ instance, def, onPatch
   ) as ReturnPeriod
   const benchKey = usePreferredBenchmark()
   const { data, loading, error } = useReturnsData(period, benchKey)
+  const twrShown = data?.twr
+    ? data.annualized
+      ? data.twr.annualized
+      : data.twr.period_return
+    : null
 
   return (
     <WidgetShell
@@ -715,16 +720,10 @@ const Performance: ComponentType<WidgetContentProps> = ({ instance, def, onPatch
                 as="span"
                 size="base"
                 weight={600}
-                tone={
-                  data.twr && (data.annualized ? data.twr.annualized : data.twr.period_return) >= 0
-                    ? 'good'
-                    : 'bad'
-                }
+                tone={twrShown != null && twrShown >= 0 ? 'good' : 'bad'}
                 className="money"
               >
-                {data.twr
-                  ? fReturnPct(data.annualized ? data.twr.annualized : data.twr.period_return)
-                  : '—'}
+                {twrShown != null ? fReturnPct(twrShown) : '—'}
               </Text>
             </div>
             {data.comparison && data.comparison.benchmark_twr != null && (
