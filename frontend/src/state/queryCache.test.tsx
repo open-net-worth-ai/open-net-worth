@@ -5,6 +5,7 @@ import {
   QUERY_CACHE_GC_MS,
   clearQueryCache,
   getCachedQueryData,
+  invalidateQueryCache,
   queryCacheSize,
   setCachedQueryData,
   useQueryCache,
@@ -12,6 +13,99 @@ import {
 
 describe('useQueryCache', () => {
   beforeEach(() => clearQueryCache())
+
+  it('keeps an unselected dependent query suspended when a write invalidates its domain', async () => {
+    const disabled = vi.fn<() => Promise<string>>(() => {
+      throw new Error('No evidence selection')
+    })
+    const active = vi.fn<() => Promise<string>>().mockResolvedValue('workspace updated')
+    renderHook(() =>
+      useQueryCache('/api/trading/evidence/unselected', disabled, { enabled: false }),
+    )
+    const overview = renderHook(() => useQueryCache('/api/trading/overview', active))
+    await waitFor(() => expect(overview.result.current.data).toBe('workspace updated'))
+    act(() => expect(() => invalidateQueryCache('/api/trading')).not.toThrow())
+    await waitFor(() => expect(active).toHaveBeenCalledTimes(2))
+    expect(disabled).not.toHaveBeenCalled()
+  })
+
+  it('does not let a disabled subscriber replace an enabled subscriber’s fetcher', async () => {
+    const active = vi.fn<() => Promise<string>>().mockResolvedValue('valid result')
+    const disabled = vi.fn<() => Promise<string>>(() => {
+      throw new Error('Missing dependency')
+    })
+    const shared = renderHook(() => {
+      const enabled = useQueryCache('/api/trading/shared', active)
+      const suspended = useQueryCache('/api/trading/shared', disabled, { enabled: false })
+      return { enabled, suspended }
+    })
+    await waitFor(() => expect(shared.result.current.enabled.data).toBe('valid result'))
+    act(() => invalidateQueryCache('/api/trading'))
+    await waitFor(() => expect(active).toHaveBeenCalledTimes(2))
+    expect(shared.result.current.suspended.data).toBe('valid result')
+    expect(disabled).not.toHaveBeenCalled()
+  })
+
+  it('does not reuse a fetcher after its subscriber becomes disabled', async () => {
+    const active = vi.fn<() => Promise<string>>().mockResolvedValue('active')
+    const other = vi.fn<() => Promise<string>>().mockResolvedValue('other')
+    const first = renderHook(() => useQueryCache('/api/shared-disabled', active))
+    await waitFor(() => expect(first.result.current.data).toBe('active'))
+    const second = renderHook(
+      ({ enabled }) => useQueryCache('/api/shared-disabled', other, { enabled }),
+      { initialProps: { enabled: true } },
+    )
+    await waitFor(() => expect(other).toHaveBeenCalled())
+    second.rerender({ enabled: false })
+    const activeCalls = active.mock.calls.length
+    const otherCalls = other.mock.calls.length
+    act(() => invalidateQueryCache('/api/shared-disabled'))
+    await waitFor(() => expect(active).toHaveBeenCalledTimes(activeCalls + 1))
+    expect(other).toHaveBeenCalledTimes(otherCalls)
+  })
+
+  it('refreshes using the current closure of an active subscriber', async () => {
+    const fetcher = vi.fn(async (value: string) => value)
+    const rendered = renderHook(
+      ({ value }) => useQueryCache('/api/shared-latest', () => fetcher(value)),
+      { initialProps: { value: 'before' } },
+    )
+    await waitFor(() => expect(rendered.result.current.data).toBe('before'))
+    rendered.rerender({ value: 'after' })
+    act(() => invalidateQueryCache('/api/shared-latest'))
+    await waitFor(() => expect(rendered.result.current.data).toBe('after'))
+  })
+
+  it('stops automatic refresh when its last enabled subscriber is disabled', async () => {
+    const fetcher = vi.fn<() => Promise<string>>().mockResolvedValue('last good')
+    const rendered = renderHook(
+      ({ enabled }) => useQueryCache('/api/trading/current', fetcher, { enabled }),
+      { initialProps: { enabled: true } },
+    )
+    await waitFor(() => expect(rendered.result.current.data).toBe('last good'))
+    rendered.rerender({ enabled: false })
+    act(() => invalidateQueryCache('/api/trading'))
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(rendered.result.current.data).toBe('last good')
+    rendered.rerender({ enabled: true })
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
+  })
+
+  it('contains synchronous background read errors instead of failing the write invalidation', async () => {
+    const fetcher = vi
+      .fn<() => Promise<string>>()
+      .mockResolvedValueOnce('last good')
+      .mockImplementation(() => {
+        throw new Error('Invalid read dependency')
+      })
+    const rendered = renderHook(() => useQueryCache('/api/trading/refresh', fetcher))
+    await waitFor(() => expect(rendered.result.current.data).toBe('last good'))
+    act(() => expect(() => invalidateQueryCache('/api/trading')).not.toThrow())
+    await waitFor(() =>
+      expect(rendered.result.current.error).toEqual(new Error('Invalid read dependency')),
+    )
+    expect(rendered.result.current.data).toBe('last good')
+  })
 
   it('returns last-good data on a second mount while revalidating in the background', async () => {
     let resolveRefresh!: (value: string) => void
