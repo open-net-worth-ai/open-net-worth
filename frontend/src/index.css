@@ -1560,6 +1560,13 @@
   .tip-bubble--right {
     transform: translateY(-50%);
   }
+  .tip-bubble--multiline {
+    align-items: flex-start;
+    max-width: 280px;
+    white-space: pre-line;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+  }
   .tip-keys {
     display: inline-flex;
     gap: 3px;

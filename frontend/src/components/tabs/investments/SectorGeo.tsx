@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react'
 import type { PortfolioXray } from '../../../api/investments'
 import { querySource } from '../../../hooks/serverState/dataQuery'
+import { useFlag } from '../../../hooks/useFlag'
 import { useQueryCache } from '../../../state/queryCache'
 import type { BookRow, DerivedBook } from './useInvestmentsBook'
 
@@ -71,6 +72,11 @@ const SECTOR_COLOR: Record<string, string> = {
   Industrials: '#6b7280',
   Materials: '#bd7a1a',
   'Real Estate': '#d4537e',
+  'Communication Services': '#22b8cf',
+  'Consumer Discretionary': '#e0a032',
+  'Consumer Staples': '#c8921a',
+  'Health Care': '#9a7fd0',
+  Cash: '#6b8fa3',
   Utilities: '#2ba39a',
   'Broad market': '#5b6472',
   'Fixed income': '#2ba39a',
@@ -141,14 +147,34 @@ function exposureBreakdown(all: BookRow[], keyFn: (r: BookRow) => string) {
   return { rows, tot }
 }
 
-/** The X-ray's region split as this panel's rows, its unplaced share last. */
-function regionBreakdown(xray: PortfolioXray | null | undefined) {
+/** One X-ray axis as this panel's rows, its unplaced share last. */
+function xrayBreakdown(
+  xray: PortfolioXray | null | undefined,
+  axis: 'sector' | 'region',
+  lookthrough: boolean,
+) {
   if (!xray) return { rows: [] as { k: string; v: number; pct: number }[] }
-  const rows = xray.by_region.map((b) => ({ k: b.name, v: b.value_base, pct: b.pct }))
-  if (xray.region_unmapped_pct >= 0.5) {
-    rows.push({ k: UNMAPPED, v: xray.region_unmapped_base, pct: xray.region_unmapped_pct })
-  }
+  const buckets = axis === 'sector' ? xray.by_sector : xray.by_region
+  // A sliver (a fund's 0.4% cash) would draw as "0%"; it stays in the server's figures. Only
+  // with the flag on, where looked-through funds make slivers: off, every bucket draws as before.
+  const rows = buckets
+    .filter((b) => !lookthrough || b.pct >= 0.5)
+    .map((b) => ({ k: b.name, v: b.value_base, pct: b.pct }))
+  const unmappedPct = axis === 'sector' ? xray.sector_unmapped_pct : xray.region_unmapped_pct
+  const unmappedBase = axis === 'sector' ? xray.sector_unmapped_base : xray.region_unmapped_base
+  if (unmappedPct >= 0.5) rows.push({ k: UNMAPPED, v: unmappedBase, pct: unmappedPct })
   return { rows }
+}
+
+/** "62% looked through funds · 35% by each holding's own sector · 3% unmapped". */
+function coverageLine(xray: PortfolioXray | null | undefined): string | null {
+  const c = xray?.sector_coverage
+  if (!c) return null
+  return (
+    `${Math.round(c.looked_through)}% looked through funds · ` +
+    `${Math.round(c.classified)}% by each holding’s own sector · ` +
+    `${Math.round(c.unmapped)}% unmapped`
+  )
 }
 
 function useRegionXray() {
@@ -187,16 +213,27 @@ export function SectorGeo({ d }: Props) {
   const [view, setView] = useState<'sector' | 'geography'>('sector')
 
   const xray = useRegionXray()
-  const sectors = useMemo(() => exposureBreakdown(d.all, rowSector), [d.all])
-  const regions = useMemo(() => regionBreakdown(xray.data), [xray.data])
+  // Flag `fund_lookthrough` — this panel's one switch point. On: the Sector view is the X-ray's,
+  // funds looked through, its verdict the server's. Off (or not loaded yet): as before.
+  const lookthrough = useFlag('fund_lookthrough') === true
+  const sectors = useMemo(
+    () =>
+      lookthrough ? xrayBreakdown(xray.data, 'sector', true) : exposureBreakdown(d.all, rowSector),
+    [lookthrough, xray.data, d.all],
+  )
+  const regions = useMemo(
+    () => xrayBreakdown(xray.data, 'region', lookthrough),
+    [xray.data, lookthrough],
+  )
   const bd = view === 'sector' ? sectors : regions
-  const regionPending = view === 'geography' && !xray.data
+  const regionPending = (view === 'geography' || lookthrough) && !xray.data
 
   const colorMap = view === 'sector' ? SECTOR_COLOR : REGION_COLOR
   const max = Math.max(1, ...bd.rows.map((r) => r.pct))
 
   const tech = bd.rows.find((r) => r.k === 'Technology')
-  const techHi = view === 'sector' && tech && tech.pct >= 30
+  const techHi = view === 'sector' && !lookthrough && tech && tech.pct >= 30
+  const sectorFlag = view === 'sector' && lookthrough ? xray.data?.sector_flag : null
   const top = bd.rows.find((r) => r.k !== UNMAPPED)
   const regionHi = view === 'geography' && top && top.pct >= 70
 
@@ -216,7 +253,7 @@ export function SectorGeo({ d }: Props) {
     >
       {regionPending && (
         <div className="mk-lots-note">
-          {xray.error ? 'Couldn’t load the region breakdown.' : 'Loading regions…'}
+          {xray.error ? 'Couldn’t load the breakdown.' : 'Loading…'}
         </div>
       )}
       <div className="sec-list">
@@ -248,6 +285,16 @@ export function SectorGeo({ d }: Props) {
           </span>
         </div>
       )}
+      {sectorFlag && (
+        <div className="mk-flag">
+          <span className="mk-stress-mark">▲</span>
+          <span>
+            {sectorFlag.name} is <b className="money">{Math.round(sectorFlag.pct)}%</b> of your
+            book, counting what your funds hold — a deeper concentration than any single ticker
+            shows.
+          </span>
+        </div>
+      )}
       {regionHi && (
         <div className="mk-flag">
           <span className="mk-stress-mark">▲</span>
@@ -259,9 +306,11 @@ export function SectorGeo({ d }: Props) {
         </div>
       )}
       <div className="mk-lots-note">
-        {view === 'sector'
-          ? 'Grouped by each holding’s own sector. ETFs counted at fund level.'
-          : 'A fund with a saved look-through is spread across its regions; anything else is placed by its listing. Unmapped is what can’t be placed.'}
+        {view === 'sector' && lookthrough
+          ? coverageLine(xray.data)
+          : view === 'sector'
+            ? 'Grouped by each holding’s own sector. ETFs counted at fund level.'
+            : 'A fund with a saved look-through is spread across its regions; anything else is placed by its listing. Unmapped is what can’t be placed.'}
       </div>
     </Card>
   )

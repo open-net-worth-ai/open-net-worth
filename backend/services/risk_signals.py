@@ -69,32 +69,79 @@ def _single_name(projected: list[dict], grand: float, guideline: float, base: st
     """The Investments concentration authority, verbatim — same merge-by-name, same invested
     denominator, same breach rule, and the guideline the user set on Investments → Risk (NOT the
     tolerance table), so this story and the Risk card always agree."""
+    from backend.services.concentration_lookthrough import fund_holdings
+
     first_row = {investments_book.book_symbol(p): p for p in reversed(projected)}
     out = []
-    for c in investments_book.concentration_by_name(projected, grand, guideline):
+    ranked = investments_book.concentration_by_name(
+        projected, grand, guideline, fund_holdings=fund_holdings()
+    )
+    for c in ranked:
         if not c["hot"]:
             continue
         row = first_row.get(c["name"], {})
-        label = row.get("label") or c["name"]
+        label = row.get("label") or c.get("label") or c["name"]
         pct = round(c["pct"], 2)
         out.append(
             finding(
                 "single_name",
                 label,
-                row.get("ticker") or "",
+                row.get("ticker") or (c["name"] if c.get("via_funds") else ""),
                 "high" if pct > guideline * 1.5 else "medium",
                 pct,
                 guideline,
-                f"{label} is {pct:.1f}% of your investments, at or above your "
-                f"{guideline:.0f}% single-name guideline (Investments → Risk).",
+                _single_name_headline(c, label, pct, guideline, grand),
                 f"A 20% drop in {label} reduces your investments by "
                 f"approx {base} {round(c['value'] * 0.2):,}.",
-                f"Review {label} position size and consider trimming below {guideline:.0f}%, "
-                "or change the guideline on Investments → Risk.",
+                _single_name_action(c, label, guideline),
                 c["instrument_ids"],
             )
         )
     return out
+
+
+def _single_name_headline(c: dict, label: str, pct: float, guideline: float, grand: float) -> str:
+    """With funds looked through, says how much is held directly and how much inside funds —
+    and "at least" when funds were counted from their top holdings only."""
+    at_least = "at least " if c.get("at_least") else ""
+    text = (
+        f"{label} is {at_least}{pct:.1f}% of your investments, at or above your "
+        f"{guideline:.0f}% single-name guideline (Investments → Risk)."
+    )
+    via = c.get("via_funds") or []
+    if via and grand:
+        funds = ", ".join(sorted({f["symbol"] for f in via}))
+        direct_pct = (c.get("direct") or 0.0) / grand * 100
+        via_pct = pct - direct_pct
+        held = f"{direct_pct:.1f}% held directly, " if c.get("direct") else ""
+        text += f" That is {held}{via_pct:.1f}% inside your funds ({funds})."
+    return text
+
+
+def _single_name_action(c: dict, label: str, guideline: float) -> str:
+    if c.get("via_funds") and not c.get("direct"):
+        return (
+            f"You hold {label} only through your funds, so there is no position of it to trim: "
+            "review how much your funds overlap, or change the guideline on Investments → Risk."
+        )
+    return (
+        f"Review {label} position size and consider trimming below {guideline:.0f}%, "
+        "or change the guideline on Investments → Risk."
+    )
+
+
+def _sector_groups(projected: list[dict]) -> dict[str, tuple[float, list[str]]]:
+    """Sector → (base value, ids). Flag `fund_lookthrough` on: the X-ray's spread, funds looked
+    through (one answer to "how much technology"). Off: each holding's own sector, as before."""
+    from backend.services.feature_flags import enabled
+
+    if not enabled("fund_lookthrough"):
+        return grouped(projected, lambda p: (p.get("sector") or "").strip())
+    from backend.db.instrument_store import InstrumentStore
+    from backend.services import xray_lookthrough
+
+    insts = {i["id"]: i for i in InstrumentStore().all()}
+    return xray_lookthrough.equity_sector_groups(projected, insts)
 
 
 def _class_and_sector(projected: list[dict], grand: float, thresholds: dict) -> list[dict]:
@@ -120,7 +167,7 @@ def _class_and_sector(projected: list[dict], grand: float, thresholds: dict) -> 
                 )
             )
     thr = thresholds["sector_pct"]
-    for sec, (bv, iids) in grouped(projected, lambda p: (p.get("sector") or "").strip()).items():
+    for sec, (bv, iids) in _sector_groups(projected).items():
         pct = share_pct(bv, grand)
         if pct > thr:
             out.append(

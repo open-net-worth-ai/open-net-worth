@@ -16,6 +16,8 @@ interface TooltipProps {
   /** Show only while the control's text is cut off (its content overflows) — for a truncated
    *  cell whose full text the tip reveals. */
   onlyWhenClipped?: boolean
+  /** The label's `\n`s break lines — for a short list (a figure's parts) rather than a name. */
+  multiline?: boolean
   children: ReactElement
 }
 
@@ -28,6 +30,7 @@ export function Tooltip({
   shortcut,
   side = 'bottom',
   onlyWhenClipped,
+  multiline,
   children,
 }: TooltipProps) {
   const [open, setOpen] = useState(false)
@@ -97,7 +100,7 @@ export function Tooltip({
           ref={bubble}
           id={id}
           role="tooltip"
-          className={`tip-bubble tip-bubble--${side}`}
+          className={`tip-bubble tip-bubble--${side}${multiline ? ' tip-bubble--multiline' : ''}`}
           style={pos ? { top: pos.top, left: pos.left } : { visibility: 'hidden' }}
         >
           <span>{label}</span>

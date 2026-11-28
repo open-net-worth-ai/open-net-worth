@@ -114,6 +114,14 @@ def portfolio_xray(rows: list[dict] | None = None, base: str | None = None) -> d
     # Look-through map per instrument (one store read).
     insts = {i["id"]: i for i in InstrumentStore().all()}
 
+    # Flag `fund_lookthrough` — the X-ray's one switch point. Off: the code below, unchanged.
+    from backend.services.feature_flags import enabled
+
+    if enabled("fund_lookthrough"):
+        from backend.services import xray_lookthrough
+
+        return xray_lookthrough.portfolio_xray(rows, base, insts)
+
     total_base = 0.0
     by_sector: dict[str, float] = {}
     by_region: dict[str, float] = {}

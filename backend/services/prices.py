@@ -203,7 +203,23 @@ def _backfill_dividend_rates() -> None:
 
 
 def enrich_instrument_sectors() -> dict:
-    """Backfill `sector` onto yahoo-priced instruments that don't have one yet."""
+    """Backfill `sector` onto yahoo-priced instruments that don't have one yet, then (flag
+    `fund_lookthrough` on) refresh what each fund holds — `fund_lookthrough.refresh` is that
+    flag's enrichment seam and returns None while it is off."""
+    result = _enrich_sector_strings()
+    from backend.services import fund_lookthrough
+
+    try:
+        lookthrough = fund_lookthrough.refresh()
+    except Exception:
+        _log.info("fund look-through refresh failed", exc_info=True)
+        lookthrough = None
+    if lookthrough is not None:
+        result = {**result, "lookthrough": lookthrough}
+    return result
+
+
+def _enrich_sector_strings() -> dict:
     from backend.db.instrument_store import InstrumentStore
 
     store = InstrumentStore()
@@ -213,6 +229,10 @@ def enrich_instrument_sectors() -> dict:
         if (i.get("price_source") or "").lower() == "yahoo"
         and not i.get("sector")
         and i.get("price_source_id")
+        # Every fund answers with no sector; the frontend fires this on each load, so a miss is
+        # re-asked only after _SECTOR_MISS_TTL — the same rule `ensure_sector` follows.
+        and time.time() - _SECTOR_MISSES.get(i["price_source_id"], float("-inf"))
+        >= _SECTOR_MISS_TTL
     ]
     if not targets:
         return {"checked": 0, "updated": 0}
@@ -228,6 +248,8 @@ def enrich_instrument_sectors() -> dict:
         if sector:
             store.update_by_id(inst["id"], {"sector": sector})
             updated += 1
+        else:
+            _SECTOR_MISSES[inst["price_source_id"]] = time.time()
     _log.info("sector enrich: checked %d, updated %d", len(targets), updated)
     return {"checked": len(targets), "updated": updated}
 

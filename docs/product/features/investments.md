@@ -131,6 +131,29 @@ its price history and it becomes your benchmark, listed at the top as **Your ben
 Your portfolio and the benchmark are both valued at today's exchange rates on every past day, so
 neither line includes currency moves, and the comparison is like for like.
 
+### Seeing inside your funds (experimental)
+
+Turn on **See inside funds** under **Settings → Developer → Experimental** and the app reads what
+each of your funds holds from its price source: its sectors, its mix of stocks, bonds and cash,
+and its 10 biggest holdings. It refreshes them about once a month.
+
+- **Sector & geography → Sector** spreads each fund across its sectors, so a book that is mostly
+  technology through ETFs says so. A line under the bars says how much of your book was looked
+  through, how much is placed by each holding's own sector, and how much couldn't be placed.
+- **Concentration & risk** counts a company you hold inside your funds toward that company: shares
+  of a company you own directly plus that company inside an index fund are one figure. A name that
+  includes fund holdings is marked ⊕, and a line under its bar shows the split — for example
+  "19.6% direct · 3.6% via ACMI · 2.6% via ACMQ", or "all via funds: …" for a company you don't
+  hold yourself. The line names the two largest funds and adds up the rest ("+3 more 5.2%");
+  hover the name or the line to see every fund. The Portfolio brief names the funds too
+  ("…counting what ACMI, ACMQ and 3 other funds hold of it"). Because only each fund's top 10
+  holdings are known, these figures are a minimum ("at least").
+- A look-through you saved yourself (for example by asking Lucius) always wins over what the
+  price source says.
+- Leveraged and inverse funds aren't looked through: what they hold doesn't say which way they
+  move. Regions aren't fetched; a fund's regions come from a look-through you save, or from where
+  it is listed.
+
 ## Options
 
 1. Open **Investments → Options** and click **Record option**.

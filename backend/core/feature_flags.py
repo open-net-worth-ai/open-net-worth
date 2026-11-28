@@ -323,6 +323,22 @@ FLAGS: tuple[Flag, ...] = (
         remove_by=date(2027, 2, 28),
     ),
     Flag(
+        name="fund_lookthrough",
+        title="See inside funds",
+        description=(
+            "Reads what each fund holds from the price source (its sectors, its stock, bond "
+            "and cash mix, its top 10 holdings) and counts it in Sector & geography, the "
+            "sector risk warning and single-company concentration, so a book that is mostly "
+            "technology, or one company, through ETFs says so. A look-through you saved yourself "
+            "always wins. Off: a fund with no saved look-through is counted by its own "
+            "classification, as before."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 23),
+        remove_by=date(2027, 3, 31),
+    ),
+    Flag(
         name="screen_query_batch",
         title="Load a screen's figures in one request",
         description=(

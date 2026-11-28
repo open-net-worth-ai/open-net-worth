@@ -35,6 +35,16 @@ export interface PortfolioXray {
   looked_through_pct: number
   mapped_instruments: number
   total_instruments: number
+  // Flag `fund_lookthrough` only: how each axis was placed, and the server's sector verdict.
+  sector_coverage?: XrayCoverage
+  region_coverage?: XrayCoverage
+  sector_flag?: { name: string; pct: number; threshold_pct: number } | null
+}
+
+export interface XrayCoverage {
+  looked_through: number
+  classified: number
+  unmapped: number
 }
 
 export interface Constituent {
