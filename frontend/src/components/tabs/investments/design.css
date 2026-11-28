@@ -3231,6 +3231,13 @@
 .mk-chart-wrap {
   position: relative;
   width: 100%;
+  /* A sideways drag scrubs the crosshair; an upward or downward one still scrolls. */
+  touch-action: pan-y;
+  border-radius: 6px;
+}
+.mk-chart-wrap:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .mk-chart-axis {
   position: absolute;
@@ -3329,6 +3336,11 @@
 }
 .mk-chart-tip-r b.neg {
   color: var(--bad);
+}
+.mk-chart-tip-gap {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
 }
 .mk-legend {
   display: flex;

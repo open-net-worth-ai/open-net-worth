@@ -5,7 +5,9 @@ Writes go through ``ledger.update_transaction`` — the ledger's one edit choke 
 or the Lucius turn) undoes it. Nothing here writes a store directly.
 
 ``apply_rule`` runs only the given Rule's actions on the rows it is handed, with no condition
-re-check (the owner ticked them in a preview). ``run_rules`` re-runs every active Rule, in order,
+re-check (the owner ticked them in a preview). ``apply_rule_to_matches`` is the same write over
+EVERY row the Rule matches today, found again here rather than sent by the client, so it reaches
+past the preview's first page. ``run_rules`` re-runs every active Rule, in order,
 on the rows. Both keep the create-time guards: a category already on a row is replaced only by a
 Rule with "Replace a category already set"; a row that is already split is never re-split; a
 Starting Balance row is never touched. A row a Rule cannot act on is reported in ``skipped``.
@@ -16,7 +18,7 @@ from __future__ import annotations
 from typing import Callable
 
 from backend.core.audit_context import rules_applied
-from backend.core.errors import NotFoundError, OpenNetWorthError, ValidationError
+from backend.core.errors import ConflictError, NotFoundError, OpenNetWorthError, ValidationError
 from backend.db.automation_store import AutomationStore
 from backend.db.engine import locked_unit_of_work
 from backend.db.tables import transactions as txns_tbl
@@ -36,6 +38,7 @@ from .transaction_events import (
 )
 
 MAX_TRANSACTIONS = 500
+MAX_ALL_MATCHES = 5000
 _AFTER_FIELDS = ("category", "tags", "description", "memo", "payee_id", "splits")
 
 
@@ -111,24 +114,35 @@ def _protected(row: dict | None, opening: set[str]) -> str | None:
 
 def preview_rule_matches(body: object, limit: int = 50) -> dict:
     """The live transactions the (unsaved) Rule matches, newest first, each with its before →
-    after. ``total`` counts every match; ``matches`` is the first ``limit``."""
+    after. ``total`` counts every match; ``changeable`` those the Rule would actually change
+    (what "Apply to all" writes); ``matches`` is the first ``limit``."""
     from backend.services import ledger, payee_registry
 
     rule = rule_from_body(body)
     finalize = _finalize()
     accounts = {a["id"]: a.get("name") or a["id"] for a in ledger.accounts.all()}
     payees = payee_registry.payee_names()
-    opening = _opening_ids()
     exists = _exists()
-    rows = [r for r in ledger.transactions.all() if _protected(r, opening) is None]
-    rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
-    matched = [r for r in rows if match_transaction_automation(rule, r)]
+    matched = _matching_rows(rule)
     matches = []
-    for row in matched[:limit]:
+    changeable = 0
+    for index, row in enumerate(matched):
         outcome = apply_actions(row, rule, finalize=finalize, exists=exists)
         after = _diff(row, outcome.row)
-        matches.append(_match_row(row, after, outcome.skipped, accounts, payees))
-    return {"total": len(matched), "matches": matches}
+        changeable += bool(after) and not outcome.skipped
+        if index < limit:
+            matches.append(_match_row(row, after, outcome.skipped, accounts, payees))
+    return {"total": len(matched), "changeable": changeable, "matches": matches}
+
+
+def _matching_rows(rule: dict) -> list[dict]:
+    """Every live, non-opening transaction the Rule matches, newest first."""
+    from backend.services import ledger
+
+    opening = _opening_ids()
+    rows = [r for r in ledger.transactions.all() if _protected(r, opening) is None]
+    rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
+    return [r for r in rows if match_transaction_automation(rule, r)]
 
 
 def _match_row(row: dict, after: dict, skipped: str | None, accounts: dict, payees: dict) -> dict:
@@ -196,6 +210,32 @@ def rules_plan() -> Callable[[dict], tuple[dict, str | None, list[dict]]]:
 def apply_rule(body: object, transaction_ids: object) -> dict:
     """Apply ONE Rule's actions to the given transactions."""
     return _write(_check_ids(transaction_ids), rule_plan(body))
+
+
+def apply_rule_to_matches(
+    body: object, exclude_ids: object = None, expected_total: int | None = None
+) -> dict:
+    """Apply ONE Rule's actions to every transaction it matches today, minus ``exclude_ids``
+    (rows the owner unticked in the preview). ``expected_total`` is the preview's ``total``: if
+    the matches moved since, nothing is written, so the owner never approves a count they did
+    not see."""
+    rule = rule_from_body(body)
+    matched = [str(r["id"]) for r in _matching_rows(rule)]
+    if expected_total is not None and len(matched) != expected_total:
+        raise ConflictError(
+            f"The rule now matches {len(matched)} transactions, not {expected_total} — "
+            "check the preview again."
+        )
+    excluded = {str(i) for i in (exclude_ids or [])}
+    ids = [i for i in matched if i not in excluded]
+    if not ids:
+        return {"applied": 0, "unchanged": 0, "skipped": []}
+    if len(ids) > MAX_ALL_MATCHES:
+        raise ValidationError(
+            f"The rule matches {len(ids)} transactions; at most {MAX_ALL_MATCHES} at a time — "
+            "narrow its conditions (an account or a date) and apply in parts."
+        )
+    return _write(ids, rule_plan(body))
 
 
 def run_rules(transaction_ids: object) -> dict:

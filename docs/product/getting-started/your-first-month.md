@@ -98,6 +98,27 @@ brokerage gains $340.00 overnight and you pay $200.00 off the card, both show on
 next time you look — no "recalculate" button. [Net worth](../concepts/net-worth.md) explains
 exactly what counts.
 
+## Setup suggestions in the corner
+
+Until you've set them up, a small card in the bottom-left corner (on a phone, just above the tab
+bar) suggests the things that make
+Lucius useful away from the app: [Telegram](../connectors/telegram.md), connecting your email
+([Gmail](../connectors/email-ingestion.md)), a daily briefing, an email digest (once email is
+connected), and weekly and monthly reports. Each button opens the setup screen or the ready-made
+Automation for it. If Telegram or email stops working, the card says so and offers to fix it.
+
+It is meant to be easy to ignore:
+
+- None show in your first 3 days, while Lucius is still helping you set up your book — except a
+  card saying Telegram or email has stopped working.
+- It waits its turn behind other guides: if a screen's introduction or tour has already shown
+  during a visit, no card appears until your next visit, and it never shows over an open
+  dialog. On a phone it stays off the Lucius screen, where you type.
+- Only one card shows at a time, and a card disappears as soon as that thing is set up.
+- After you close a card or follow one, no card shows for 3 days.
+- A card you close comes back once, two weeks later. Close it again and it's gone for good.
+- What you've closed is remembered on the server, so it stays closed on every device.
+
 ## Where to go from here
 
 - [Envelopes and budgeting](../concepts/envelopes-and-budgeting.md) — the full picture behind

@@ -167,6 +167,9 @@ export function ToolActivity({ items, sessionId }: { items: ActionItem[]; sessio
               key={`think-${i}`}
               text={row.item.content}
               streaming={row.item.streaming}
+              // A thought the reader opened stays on screen: the group must not fold it away
+              // when the turn ends. Their own click on the bar still wins.
+              onUserToggle={(opened) => opened && setChoice((c) => c ?? false)}
             />
           ) : (
             <ToolRow

@@ -185,8 +185,10 @@ included. See [Mentioning things in chat](mentions.md#screen-awareness--lucius-s
 
 ## What you see while he works
 
-While Lucius works, his thinking shows as he writes it; once the reply is done it folds into a
-short preview you can open. Each step he takes shows as its own row, named after what it does
+While Lucius works, his thinking shows as one line that follows his newest words as he writes
+them; tap it to read the whole thought as it grows. A thought you open stays open, even after the
+reply is done. Charts and drawings grow into place as he draws them, without shrinking back
+first. Each step he takes shows as its own row, named after what it does
 (*"Get net worth"*, *"Delete envelope"*), and you can open a row for its details.
 
 A code block in a reply, such as a terminal command, has a **Copy** button in its corner: it shows

@@ -827,3 +827,27 @@ describe('pulling the phone sheet down', () => {
     mockMobile(false)
   })
 })
+
+describe('ModelPicker — Open Net Worth AI privacy badge', () => {
+  afterEach(cleanup)
+  const ONW: ModelOption[] = [
+    { id: 'claude-haiku-5.5', provider_key: 'onw_ai', provider_label: 'Open Net Worth AI' },
+    { id: 'gemini-3.8-flash', provider_key: 'onw_ai', provider_label: 'Open Net Worth AI' },
+    { id: 'gemini-3.8-flash', provider_key: 'openrouter', provider_label: 'OpenRouter' },
+  ]
+
+  it('badges only the Open Net Worth AI group and notes Google keeps 30 days only there', () => {
+    render(
+      <ModelPicker
+        label="Chat model"
+        models={ONW}
+        value=""
+        defaultLabel="Default"
+        onChange={vi.fn()}
+      />,
+    )
+    openPanel()
+    expect(screen.getAllByText('Zero retention · No training')).toHaveLength(1)
+    expect(screen.getAllByText('Google keeps 30 days')).toHaveLength(1)
+  })
+})

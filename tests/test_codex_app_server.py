@@ -223,6 +223,9 @@ for raw in sys.stdin:
     elif method == "turn/interrupt":
         record("turn/interrupt", msg.get("params") or {})
         send({"jsonrpc": "2.0", "id": mid, "result": {}})
+    elif method == "thread/unsubscribe":
+        record("thread/unsubscribe", msg.get("params") or {})
+        send({"jsonrpc": "2.0", "id": mid, "result": {"status": "unsubscribed"}})
     elif method == "turn/start":
         record("turn/start", msg.get("params") or {})
         send({"jsonrpc": "2.0", "id": mid, "result": {"turn": {"id": "turn-1"}}})
@@ -584,6 +587,20 @@ async def test_the_process_is_reused_across_turns(tmp_path):
         pids.append(client._proc.pid)
     await client.aclose()
     assert len(set(pids)) == 1, f"a new process per turn defeats the purpose: {pids}"
+
+
+async def test_every_finished_thread_is_unsubscribed_so_the_child_can_unload_it(tmp_path):
+    """The app-server keeps a thread loaded until its last subscriber leaves. A thread is
+    never resumed once its turn closes, so a client that never left grew forever (~2 MB a
+    turn, measured in the published image)."""
+    cli, record = _fake_server(tmp_path, [_delta("ok"), _usage(), _completed()])
+    client = cas.client_for(cli)
+    for _ in range(3):
+        async for _ev in client.run_turn(instructions="s", transcript="t", model="m", effort="low"):
+            pass
+    await asyncio.sleep(0.2)  # the unsubscribe is fire-and-forget
+    await client.aclose()
+    assert _received_all(record, "thread/unsubscribe") == [{"threadId": THREAD_ID}] * 3
 
 
 async def test_a_dead_server_is_respawned_on_the_next_turn(tmp_path):

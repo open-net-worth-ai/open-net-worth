@@ -15,17 +15,28 @@ import { ChevronDown, LuciusMark } from '../../../ui/icons'
 import { previewText } from './previewText'
 
 /** The row itself, for use INSIDE an existing `.msg-toolact__rail`. */
-export function ThinkingRow({ text, streaming }: { text: string; streaming?: boolean }) {
-  // Open while it is being WRITTEN, folded once it is finished — unless you say otherwise.
+export function ThinkingRow({
+  text,
+  streaming,
+  onUserToggle,
+}: {
+  text: string
+  streaming?: boolean
+  /** Told when the READER opens or folds it, so the step group around it never folds a
+   *  thought they chose to read when the turn ends. */
+  onUserToggle?: (open: boolean) => void
+}) {
+  // ONE line, always, until you tap it — streaming included. While it is being written the
+  // line shows the newest words as they arrive; tap it to read the whole thought live.
   //
-  // Reasoning arriving two clamped lines at a time is unreadable and reads as broken: the
-  // text visibly changes under a preview that never grows (owner report, 2026-08-23). Once
-  // the turn is done it is history, and history belongs out of the way.
+  // It used to open itself while streaming and fold when the thought ended, so each thought
+  // pushed the reply down by up to 260px and then snapped it back up — mid-turn, right as a
+  // chart was drawing in (owner report, 2026-11-24). A row whose height never changes on its
+  // own cannot jump.
   //
-  // `null` means "nobody has decided", so a click at any point wins permanently — including
-  // folding it mid-stream, which then stays folded when the turn ends.
+  // `null` means "nobody has decided", so a click at any point wins permanently.
   const [choice, setChoice] = useState<boolean | null>(null)
-  const open = choice ?? Boolean(streaming)
+  const open = choice ?? false
   const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -37,8 +48,8 @@ export function ThinkingRow({ text, streaming }: { text: string; streaming?: boo
     }
   }, [text, streaming, open])
 
-  // The row is a two-line preview only while collapsed WITH reasoning to preview; open, and
-  // before any text has arrived, it is a one-line header and aligns like every other row.
+  // Folded, the row is one line of the reasoning; before any text arrives (or open) it is the
+  // plain header and aligns like every other row.
   const showPreview = !open && Boolean(text)
 
   return (
@@ -47,9 +58,12 @@ export function ThinkingRow({ text, streaming }: { text: string; streaming?: boo
     >
       <button
         type="button"
-        className={`msg-toolact__head${showPreview ? ' msg-toolact__head--preview' : ''}`}
+        className="msg-toolact__head"
         aria-expanded={open}
-        onClick={() => setChoice(!open)}
+        onClick={() => {
+          setChoice(!open)
+          onUserToggle?.(!open)
+        }}
       >
         <span className="msg-toolact__icon">
           {/* LuciusMark is the app's Lucius mark ("Ask Lucius about…") — the reasoning is
@@ -64,9 +78,15 @@ export function ThinkingRow({ text, streaming }: { text: string; streaming?: boo
             <span className="msg-toolact__text">{streaming ? 'Thinking…' : 'Thought process'}</span>
           ) : (
             /* Never pre-shortened here: a truncation done in JS would bake a different
-               sentence into the DOM. CSS line-clamp does it, and the full text is one
-               click away. */
-            <span className="msg-toolact__think-preview">{previewText(text)}</span>
+               sentence into the DOM. CSS clips it, and the full text is one click away. */
+            <span
+              className={`msg-toolact__think-preview${streaming ? ' msg-toolact__think-preview--live' : ''}`}
+            >
+              {/* Live: the line is pinned to its END, so the newest words stay in view and the
+                  older ones slide off the left. Done: it reads from the start, ellipsis at
+                  the end. */}
+              <span className="msg-toolact__think-line">{previewText(text)}</span>
+            </span>
           )}
         </span>
         <ChevronDown size={12} strokeWidth={1.5} className="msg-toolact__caret" aria-hidden />

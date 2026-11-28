@@ -8,6 +8,8 @@ export interface SetupStatus {
   restore_pending?: boolean
   /** Opaque identity of the book on the server; it changes when the data is reset or replaced. */
   book_id?: string
+  /** When first run finished; null for a book set up before the stamp existed. */
+  onboarding_completed_at?: string | null
 }
 
 const fetchSetupStatus = () =>

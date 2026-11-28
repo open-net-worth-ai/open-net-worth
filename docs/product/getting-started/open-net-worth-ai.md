@@ -61,7 +61,11 @@ hour at a time. The first scheduled run after that goes ahead.
 
 Requests pass through our relay to the model provider and back. The relay doesn't store your
 messages or the answers, and they are never used for training. Requests only go to model
-providers that keep nothing (zero-retention routing).
+providers that keep nothing (zero-retention routing), and never to hosts in China.
+
+Settings and the model picker mark Open Net Worth AI with a **Zero retention · No training**
+badge. Gemini models carry a "Google keeps 30 days" note: Google may keep prompts up to 30 days
+to check for abuse.
 
 ## Related
 

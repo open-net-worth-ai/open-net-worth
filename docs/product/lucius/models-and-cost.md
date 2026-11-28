@@ -109,6 +109,13 @@ recent ones stay word for word, so it keeps working and doesn't get more expensi
 message. There's nothing to set. This is separate from [Memory](memory.md), which carries facts
 *between* conversations.
 
+**Experimental — compact by size** (Settings → Developer → Experimental, **Compact Lucius
+conversations by size, not message count**): Lucius keeps the whole conversation word for word
+until it fills a large share of the model's context window (about half, at most ~160K tokens),
+then summarizes the oldest part in one go. A long chat of short messages is no longer compacted
+every few turns, and no earlier message is ever dropped without the summary covering it. The
+last few exchanges are always kept word for word.
+
 ## See what it costs
 
 - **Per reply:** under each reply, the tokens, price and model that answered. Turn it off with

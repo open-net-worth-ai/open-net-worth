@@ -573,31 +573,36 @@
   .msg-toolact__row--think .msg-toolact__icon {
     color: var(--lucius);
   }
-  /* Top-align ONLY while the two-line preview is showing. Applying it to every thinking row
-     left the sparkle hanging above its own single-line header, a couple of px out of line
-     with the centred icons on the rail below it (owner report, 2026-08-22). */
-  .msg-toolact__head--preview {
-    align-items: flex-start;
-  }
-  .msg-toolact__head--preview .msg-toolact__icon {
-    align-self: flex-start;
-    margin-top: 1px;
-  }
-  /* Reasoning is prose, so the row is allowed to be two lines tall — a single clipped line
-     ending mid-word reads as a rendering bug rather than a preview. */
-  .msg-toolact__head--preview .msg-toolact__label--think {
-    align-items: flex-start;
+  /* Reasoning folds to ONE line, streaming or done, so the row never changes height on its
+     own (owner report, 2026-11-24: a thought opening, then folding, shoved the reply around). */
+  /* Lets the one-line preview shrink below its text's width, so it clips instead of widening
+     the row. */
+  .msg-toolact__label--think {
+    min-width: 0;
+    overflow: hidden;
   }
   .msg-toolact__think-preview {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
+    display: flex;
     overflow: hidden;
     color: var(--muted);
-    line-height: 1.45;
-    white-space: normal;
     min-width: 0;
+  }
+  .msg-toolact__think-line {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  /* Live: pinned to the end, so the newest words stay in view; the start fades off the left. */
+  .msg-toolact__think-preview--live {
+    justify-content: flex-end;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 32px);
+    mask-image: linear-gradient(to right, transparent, #000 32px);
+  }
+  .msg-toolact__think-preview--live .msg-toolact__think-line {
+    overflow: visible;
+    text-overflow: clip;
+    flex-shrink: 0;
   }
   .msg-toolact__think-body {
     font-size: var(--toolact-text);
@@ -3036,6 +3041,14 @@
     height: 160px;
     border: 0;
     background: transparent;
+    /* Eases each height report, so a drawing growing as it streams in glides instead of
+       stepping. */
+    transition: height 0.18s ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ivis-frame {
+      transition: none;
+    }
   }
 } /* end @layer legacy */
 

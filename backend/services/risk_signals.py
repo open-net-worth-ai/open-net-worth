@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
+from backend.core.ids import new_id
 from backend.services import investments_book
 from backend.services.classification import classify_instrument
 from backend.services.fx_cache import load_fx_cache
@@ -323,9 +324,7 @@ def emit_risk_signals(store=None) -> int:
             updated = {**existing, **story, "updated_at": now}
             apply_story_change(updated)
         else:
-            import uuid
-
-            story["id"] = str(uuid.uuid4())
+            story["id"] = new_id("story")
             story["created_at"] = now
             apply_story_change(story)
         upserted += 1

@@ -484,6 +484,523 @@
     gap: 2px;
     padding-bottom: max(var(--space-3), var(--safe-b));
   }
+  /* Setup nudge (components/setupNudges) — a card floating over the page beside the rail
+     (left is set inline from the rail's width), on every screen. Title, subtitle, stacked
+     pill buttons and a round ×; rounded, no border, a shade off the page. Which case shows,
+     and how often, is setupNudges.ts; this only draws it. */
+  .setup-nudge {
+    position: fixed;
+    bottom: 16px;
+    z-index: calc(var(--z-sticky) + 1);
+    width: 340px;
+    max-width: calc(100vw - 32px);
+    padding: 18px 18px 16px;
+    border-radius: 24px;
+    background: var(--bg-2);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+    display: flex;
+    flex-direction: column;
+  }
+  /* On a phone: full width just above the tab bar, a shorter picture with its scene scaled down
+     so both phones still show whole — the card should cover a third of the screen, not half. */
+  .setup-nudge--mobile {
+    left: 12px;
+    right: 12px;
+    bottom: var(--mobile-tabbar-clearance, 16px);
+    width: auto;
+    max-width: none;
+    padding: 14px 14px 12px;
+    border-radius: 22px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.22);
+  }
+  .setup-nudge--mobile .setup-nudge-preview {
+    height: 128px;
+    margin-bottom: 12px;
+  }
+  .setup-nudge--mobile .setup-nudge-scene {
+    transform: scale(0.72);
+    transform-origin: 50% 100%;
+  }
+  .setup-nudge-scene {
+    position: absolute;
+    inset: 0;
+  }
+  /* The picture at the top: a coloured scene with two phones, one per case (NudgePreview.tsx).
+     Each case sets its own hue; the phones' screens use the theme so both themes read. */
+  .setup-nudge-preview {
+    --nudge-hue: #3b86dd;
+    position: relative;
+    /* Muse's picture ratio (~1.72 : 1) at this card's width. */
+    height: 184px;
+    margin: -6px -6px 14px;
+    border-radius: 18px;
+    overflow: hidden;
+    background:
+      radial-gradient(
+        circle at 20% 0%,
+        color-mix(in srgb, var(--nudge-hue) 42%, transparent),
+        transparent 65%
+      ),
+      radial-gradient(
+        circle at 100% 100%,
+        color-mix(in srgb, var(--nudge-hue) 30%, transparent),
+        transparent 60%
+      ),
+      color-mix(in srgb, var(--nudge-hue) 12%, var(--bg-2));
+  }
+  .setup-nudge-preview--gmail {
+    --nudge-hue: #e0584b;
+  }
+  .setup-nudge-preview--daily-briefing {
+    --nudge-hue: #f08a3c;
+  }
+  .setup-nudge-preview--reports {
+    --nudge-hue: #2fa36b;
+  }
+  .setup-nudge-preview--mail-digest {
+    --nudge-hue: #8a63d2;
+  }
+  .setup-nudge-preview--telegram-error,
+  .setup-nudge-preview--email-error {
+    --nudge-hue: #8a8f98;
+  }
+  .setup-nudge-preview--telegram-error .setup-nudge-phone,
+  .setup-nudge-preview--email-error .setup-nudge-phone {
+    filter: saturate(0.4);
+  }
+  .setup-nudge-phone {
+    position: absolute;
+    bottom: 0;
+    padding: 10px 9px 0;
+    /* A bezel a shade off the screen, like a real phone — not a bright outline. */
+    border: 5px solid color-mix(in srgb, var(--ink) 16%, var(--bg));
+    border-bottom: 0;
+    border-radius: 22px 22px 0 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow: hidden;
+    font-size: 9px;
+    color: var(--ink);
+  }
+  .setup-nudge-phone--back {
+    left: 12px;
+    width: 46%;
+    height: 141px;
+    gap: 6px;
+  }
+  .setup-nudge-phone--front {
+    right: 6px;
+    width: 64%;
+    height: 166px;
+    box-shadow: -6px 0 18px rgba(0, 0, 0, 0.16);
+  }
+  .setup-nudge-list-t,
+  .setup-nudge-card-t {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .setup-nudge-list-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--muted);
+  }
+  .setup-nudge-list-dot {
+    flex: none;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--nudge-hue) 30%, transparent);
+    color: var(--ink);
+  }
+  .setup-nudge-list-l {
+    white-space: nowrap;
+  }
+  .setup-nudge-list-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+  }
+  .setup-nudge-unread {
+    margin-left: auto;
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--nudge-hue);
+  }
+  .setup-nudge-clock {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .setup-nudge-clock-d {
+    font-size: 8px;
+    color: var(--muted);
+  }
+  .setup-nudge-clock-t {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+  .setup-nudge-banner {
+    display: flex;
+    gap: 5px;
+    padding: 5px 6px;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+  }
+  .setup-nudge-banner-ic {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+    display: grid;
+    place-items: center;
+    background: var(--nudge-hue);
+    color: #fff;
+  }
+  .setup-nudge-banner--warn .setup-nudge-banner-ic {
+    background: #d9534f;
+  }
+  .setup-nudge-banner-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .setup-nudge-banner-t {
+    font-weight: 600;
+  }
+  .setup-nudge-banner-x {
+    color: var(--muted);
+    line-height: 1.3;
+  }
+  .setup-nudge-mailcard {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 6px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--muted);
+  }
+  .setup-nudge-flow {
+    align-self: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--ink);
+    color: var(--bg);
+  }
+  .setup-nudge-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 6px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--nudge-hue) 14%, transparent);
+  }
+  .setup-nudge-row-l {
+    font-weight: 600;
+  }
+  .setup-nudge-row-v {
+    margin-left: auto;
+  }
+  .setup-nudge-chip {
+    padding: 1px 5px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--ink) 9%, transparent);
+    color: var(--muted);
+    font-size: 8px;
+  }
+  .setup-nudge-ok {
+    display: grid;
+    place-items: center;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #2fa36b;
+    color: #fff;
+  }
+  .setup-nudge-sun {
+    position: absolute;
+    left: 50%;
+    top: 14px;
+    width: 120px;
+    height: 120px;
+    margin-left: -60px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #ffd27a 0%, #f08a3c 55%, transparent 72%);
+    opacity: 0.85;
+  }
+  .setup-nudge-stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .setup-nudge-stat b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .setup-nudge-up {
+    color: #2fa36b !important;
+  }
+  .setup-nudge-cal {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+  .setup-nudge-cal span {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+  }
+  .setup-nudge-cal .setup-nudge-cal-on {
+    background: var(--nudge-hue);
+  }
+  .setup-nudge-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 40px;
+  }
+  .setup-nudge-bars span {
+    flex: 1;
+    border-radius: 2px 2px 0 0;
+    background: color-mix(in srgb, var(--nudge-hue) 35%, transparent);
+  }
+  .setup-nudge-bars .setup-nudge-bar-hi {
+    background: var(--nudge-hue);
+  }
+  .setup-nudge-check {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 6px;
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+  }
+  .setup-nudge-check svg {
+    color: #2fa36b;
+  }
+  .setup-nudge-check--warn svg {
+    color: #d9534f;
+  }
+  /* Charts (nudgeCharts.tsx) — all drawn in the scene's hue. */
+  .setup-nudge-spark {
+    width: 100%;
+    height: 34px;
+    display: block;
+  }
+  .setup-nudge-spark-a {
+    fill: color-mix(in srgb, var(--nudge-hue) 22%, transparent);
+  }
+  .setup-nudge-spark-l {
+    fill: none;
+    stroke: var(--nudge-hue);
+    stroke-width: 1.6;
+    vector-effect: non-scaling-stroke;
+  }
+  .setup-nudge-spark-d {
+    fill: var(--nudge-hue);
+  }
+  .setup-nudge-donut {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .setup-nudge-donut svg {
+    flex: none;
+    transform: rotate(-90deg);
+  }
+  .setup-nudge-donut-s {
+    fill: none;
+    stroke-width: 7;
+  }
+  .setup-nudge-donut-s--0,
+  .setup-nudge-donut-k--0 {
+    stroke: var(--nudge-hue);
+    background: var(--nudge-hue);
+  }
+  .setup-nudge-donut-s--1,
+  .setup-nudge-donut-k--1 {
+    stroke: color-mix(in srgb, var(--nudge-hue) 65%, transparent);
+    background: color-mix(in srgb, var(--nudge-hue) 65%, transparent);
+  }
+  .setup-nudge-donut-s--2,
+  .setup-nudge-donut-k--2 {
+    stroke: color-mix(in srgb, var(--nudge-hue) 40%, transparent);
+    background: color-mix(in srgb, var(--nudge-hue) 40%, transparent);
+  }
+  .setup-nudge-donut-s--3,
+  .setup-nudge-donut-k--3 {
+    stroke: color-mix(in srgb, var(--ink) 15%, transparent);
+    background: color-mix(in srgb, var(--ink) 15%, transparent);
+  }
+  .setup-nudge-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 8px;
+    color: var(--muted);
+  }
+  .setup-nudge-legend span {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .setup-nudge-donut-k {
+    width: 6px;
+    height: 6px;
+    border-radius: 2px;
+  }
+  .setup-nudge-prog {
+    margin-top: 2px;
+  }
+  .setup-nudge-prog-h {
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+  .setup-nudge-prog-h b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .setup-nudge-prog-t {
+    height: 6px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    overflow: hidden;
+  }
+  .setup-nudge-prog-t span {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: var(--nudge-hue);
+  }
+  .setup-nudge-funnel {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .setup-nudge-funnel-r {
+    position: relative;
+    height: 14px;
+    display: flex;
+    align-items: center;
+  }
+  .setup-nudge-funnel-b {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--nudge-hue) 25%, transparent);
+  }
+  .setup-nudge-funnel-b--hi {
+    background: var(--nudge-hue);
+  }
+  .setup-nudge-funnel-l {
+    position: relative;
+    padding-left: 5px;
+    font-size: 8px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .setup-nudge-msg {
+    align-self: flex-start;
+    max-width: 92%;
+    padding: 5px 7px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+  }
+  .setup-nudge-msg--chart {
+    align-self: stretch;
+    max-width: none;
+    padding: 5px;
+  }
+  .setup-nudge-msg--failed {
+    opacity: 0.45;
+    outline: 1px dashed #d9534f;
+  }
+  .setup-nudge-msg--me {
+    align-self: flex-end;
+    background: var(--nudge-hue);
+    color: #fff;
+  }
+  .setup-nudge-stat--plain {
+    border-bottom: 0;
+  }
+  .setup-nudge-t {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .setup-nudge-b {
+    margin: 4px 0 0;
+    font-size: var(--text-sm);
+    line-height: 1.45;
+    color: var(--muted);
+  }
+  .setup-nudge-acts {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .setup-nudge-btn {
+    height: 36px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    color: var(--ink);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .setup-nudge-x {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 1;
+    width: 28px;
+    height: 28px;
+    /* The app's button padding (6px 14px) would push the mark out of a 28px circle. */
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    /* Dark glass, white mark: reads on every scene colour and never merges with a phone. */
+    background: rgba(0, 0, 0, 0.5);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+  @media (hover: hover) {
+    .setup-nudge-btn:hover {
+      background: color-mix(in srgb, var(--ink) 13%, transparent);
+    }
+    .setup-nudge-x:hover {
+      background: rgba(0, 0, 0, 0.7);
+    }
+  }
   .sidebar-toggle {
     background: none;
     border: none;
@@ -7842,6 +8359,12 @@ body.hide-amounts .mask * {
   .ui-badge--muted {
     background: var(--surface2);
     color: var(--muted);
+  }
+  .zr-badge {
+    gap: var(--space-1);
+    white-space: nowrap;
+    text-transform: none;
+    letter-spacing: 0;
   }
 
   /* ── SegmentedControl ── (token-driven mirror of .intel-wl-tabs/.intel-wl-tab) */
@@ -20004,6 +20527,14 @@ body.hide-amounts .mask * {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+.mp-group--zr {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.mp-group--zr .zr-badge {
+  margin-left: auto;
 }
 .mp-opt {
   display: flex;

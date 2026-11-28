@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -3758,7 +3759,7 @@ def _source_dicts_output(evidence: list[dict], limit: int = 5) -> list[dict]:
 
 
 def test_update_signal_stamps_id_and_sources_on_new_entry():
-    """A new timeline entry `_update_signal` inserts carries a uuid4-hex `id` and `sources` built
+    """A new timeline entry `_update_signal` inserts carries a short `tle_` id and `sources` built
     from the evidence list actually passed in — not just {date, title, summary} (the pre-ADR
     shape that shipped the ONWAI incident with zero recorded sources)."""
     import backend.monitoring.analyst as analyst_mod
@@ -3780,7 +3781,7 @@ def test_update_signal_stamps_id_and_sources_on_new_entry():
     )
 
     entry = updated["timeline"][0]
-    assert isinstance(entry["id"], str) and len(entry["id"]) == 32
+    assert re.fullmatch(r"tle_[0-9a-f]{12}", entry["id"])
     assert entry["sources"] == [
         {"url": "https://reuters.com/a", "title": "Apple headline", "domain": "reuters.com"}
     ]
@@ -3833,7 +3834,7 @@ def test_news_spike_create_first_entry_carries_id_and_sources(tmp_path, monkeypa
 
     sig = _read_signal_with_timeline("news-inst-nvda")
     entry = sig["timeline"][0]
-    assert isinstance(entry["id"], str) and len(entry["id"]) == 32
+    assert re.fullmatch(r"tle_[0-9a-f]{12}", entry["id"])
     assert entry["sources"] == [
         {
             "url": "https://example.com/nvda",
@@ -3869,7 +3870,7 @@ def test_topic_spike_create_first_entry_carries_id_and_sources(tmp_path, monkeyp
 
     sig = _read_signal_with_timeline("news-topic-wli-onwai")
     entry = sig["timeline"][0]
-    assert isinstance(entry["id"], str) and len(entry["id"]) == 32
+    assert re.fullmatch(r"tle_[0-9a-f]{12}", entry["id"])
     assert entry["sources"] == [
         {
             "url": "https://example.com/onwai",

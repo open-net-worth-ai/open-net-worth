@@ -22,9 +22,9 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
-import uuid
 from datetime import datetime
 
+from backend.core.ids import new_id
 from backend.monitoring import ai_opinion
 from backend.monitoring import watch_analyst_prompt as wp
 
@@ -192,7 +192,7 @@ def _persist(
         **ai_opinion.persisted(result, level),
     }
     entry = {
-        "id": uuid.uuid4().hex,
+        "id": new_id("tle"),
         "date": now,
         "title": explained["what_happened"],
         "summary": f"{explained['why']} {explained['what_it_means']}".strip(),

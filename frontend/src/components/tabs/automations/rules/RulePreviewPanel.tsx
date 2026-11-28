@@ -1,9 +1,11 @@
 // "Matches N transactions": what the Rule, as it is being edited, would do to the book today —
 // each existing match with its before → after, ticked to be applied now. Preview and apply both
-// take the unsaved rule, so a rule can be tried on history before it is saved.
+// take the unsaved rule, so a rule can be tried on history before it is saved. Past the first
+// page, "Apply to all N" applies it to every match the server finds, minus the unticked rows.
 import { useEffect, useState } from 'react'
 import {
   applyRule,
+  applyRuleToAll,
   previewRule,
   type RuleApplyResult,
   type RuleBody,
@@ -29,8 +31,8 @@ function money(match: RuleMatch): string {
 }
 
 type Settled =
-  | { key: string; matches: RuleMatch[]; total: number; error?: undefined }
-  | { key: string; error: string; matches?: undefined; total?: undefined }
+  | { key: string; matches: RuleMatch[]; total: number; changeable: number; error?: undefined }
+  | { key: string; error: string; matches?: undefined; total?: undefined; changeable?: undefined }
 
 export function RulePreviewPanel({
   body,
@@ -61,7 +63,12 @@ export function RulePreviewPanel({
       void previewRule(JSON.parse(key.slice(key.indexOf('|') + 1)) as RuleBody, SHOWN)
         .then((response) => {
           if (!current) return
-          setSettled({ key, matches: response.matches, total: response.total })
+          setSettled({
+            key,
+            matches: response.matches,
+            total: response.total,
+            changeable: response.changeable,
+          })
           setPicked(
             new Set(
               response.matches
@@ -88,20 +95,25 @@ export function RulePreviewPanel({
   const loading = !idle && settled?.key !== key
   const matches = idle ? [] : (settled?.matches ?? [])
   const total = idle ? undefined : settled?.total
+  const changeable = idle ? 0 : (settled?.changeable ?? 0)
   const error = idle ? undefined : settled?.error
 
-  const apply = async () => {
+  const apply = async (all: boolean) => {
     if (!body) return
     setApplying(true)
     setApplyError(null)
     try {
-      const applied = await applyRule(body, [...picked])
+      const applied = all
+        ? await applyRuleToAll(body, excluded, total ?? 0)
+        : await applyRule(body, [...picked])
       setUndone(false)
       setResult(applied)
       onApplied?.(applied)
       setReload((n) => n + 1)
     } catch (error) {
       setApplyError(error instanceof Error ? error.message : 'The rule could not be applied.')
+      // The book may have moved (the server refuses a stale "all" count): show it as it is now.
+      if (all) setReload((n) => n + 1)
     } finally {
       setApplying(false)
     }
@@ -131,6 +143,12 @@ export function RulePreviewPanel({
       return next
     })
   const selectable = matches.filter((m) => m.after && !m.skipped_reason)
+  // The shown rows left unticked (or that can't change); every unseen match goes in. Counts
+  // follow `changeable`, so a row the Rule would skip or leave as it is never inflates them.
+  const excluded = matches.filter((m) => !picked.has(m.transaction_id)).map((m) => m.transaction_id)
+  const unpicked = selectable.filter((m) => !picked.has(m.transaction_id)).length
+  const hidden = changeable > selectable.length
+  const allCount = changeable - unpicked
 
   return (
     <section className="rl-preview" aria-label="Matching transactions" aria-busy={loading}>
@@ -147,9 +165,14 @@ export function RulePreviewPanel({
             size="sm"
             loading={applying}
             disabled={picked.size === 0}
-            onClick={() => void apply()}
+            onClick={() => void apply(false)}
           >
             Apply to {picked.size}
+          </Button>
+        )}
+        {hidden && allCount > 0 && (
+          <Button size="sm" variant="primary" loading={applying} onClick={() => void apply(true)}>
+            Apply to all {allCount.toLocaleString()}
           </Button>
         )}
       </header>
@@ -214,7 +237,8 @@ export function RulePreviewPanel({
           </table>
           {total !== undefined && total > matches.length && (
             <p className="a3-muted rl-more">
-              Showing the newest {matches.length} of {total.toLocaleString()}.
+              Showing the newest {matches.length} of {total.toLocaleString()}. Apply to all also
+              changes the ones not shown; Undo reverses it in one step.
             </p>
           )}
         </div>
