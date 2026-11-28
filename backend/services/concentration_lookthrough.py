@@ -26,7 +26,9 @@ from typing import Callable
 from backend.services import fund_lookthrough
 from backend.services.classification import FUND_SUBCLASSES
 
-_FUND_NAME = re.compile(r"\b(ETF|ETFS|FUND|UCITS|INDEX|SICAV|PORTFOLIO|ISHARES|SPDR)\b", re.I)
+# Words only a fund's name carries. "Index" and "Portfolio" are left out: operating companies
+# use them, and a false match silently drops a real company from concentration.
+_FUND_NAME = re.compile(r"\b(ETF|ETFS|FUND|FUNDS|UCITS|SICAV|ISHARES|SPDR)\b", re.I)
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -85,6 +87,9 @@ def through_funds(
     """Name → what the book's funds hold of it. A name already held directly keeps that name
     (its book symbol), so the two add up in one entry."""
     direct = {normalize_symbol(symbol_of(r)): symbol_of(r) for r in rows if not is_fund(r)}
+    # A name held only through funds is keyed by its normalised symbol too, shown as the first
+    # spelling seen — two funds listing ACME.B and ACME-B must add up to one ACME, not two halves.
+    via_only: dict[str, str] = {}
     out: dict[str, _Via] = {}
     for r in rows:
         if not is_fund(r):
@@ -94,7 +99,7 @@ def through_funds(
             if _is_fund_holding(h, fh):
                 continue
             key = normalize_symbol(h["symbol"])
-            name = direct.get(key, h["symbol"])
+            name = direct.get(key) or via_only.setdefault(key, h["symbol"])
             via = out.setdefault(name, _Via(label=h.get("name") or h["symbol"]))
             slice_value = fund_value * float(h["weight"])
             via.value += slice_value

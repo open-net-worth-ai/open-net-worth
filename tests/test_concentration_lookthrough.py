@@ -96,6 +96,31 @@ def test_share_class_spelling_lands_on_the_held_name():
     assert "BRK-B" not in got
 
 
+def test_two_spellings_of_a_name_held_only_through_funds_add_up_to_one_name():
+    fh = cl.FundHoldings(
+        by_instrument={
+            "i_ACMI": [{"symbol": "ACMB.B", "name": "ACME Class B", "weight": 0.04}],
+            "i_ACMQ": [{"symbol": "ACMB-B", "name": "ACME Class B", "weight": 0.04}],
+        },
+        fund_symbols=frozenset({"ACMI", "ACMQ"}),
+    )
+    rows = [_fund("ACMI", 5000), _fund("ACMQ", 5000)]
+    got = _by_name(book.concentration_by_name(rows, GRAND, 3.0, fund_holdings=fh))
+    assert "ACMB-B" not in got  # one name, shown as the first spelling seen
+    assert got["ACMB.B"]["value"] == pytest.approx(400) and got["ACMB.B"]["hot"]
+    assert {f["symbol"] for f in got["ACMB.B"]["via_funds"]} == {"ACMI", "ACMQ"}
+
+
+@pytest.mark.parametrize("name", ["ACME Index Corp", "ACME Portfolio Holdings"])
+def test_a_company_whose_name_says_index_or_portfolio_is_still_counted(name):
+    fh = cl.FundHoldings(
+        by_instrument={"i_ACMI": [{"symbol": "ACMP", "name": name, "weight": 0.05}]},
+        fund_symbols=frozenset({"ACMI"}),
+    )
+    got = _by_name(book.concentration_by_name([_fund("ACMI", 5000)], GRAND, 20.0, fund_holdings=fh))
+    assert got["ACMP"]["value"] == pytest.approx(250)
+
+
 def test_a_name_held_only_through_funds_can_breach_and_says_so():
     rows = [_fund("ACMI", 5000), _fund("ACMQ", 5000)]
     got = _by_name(book.concentration_by_name(rows, GRAND, 5.0, fund_holdings=FH))

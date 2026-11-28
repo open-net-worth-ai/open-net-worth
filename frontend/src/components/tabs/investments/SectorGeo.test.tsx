@@ -68,7 +68,7 @@ describe('SectorGeo — Region reads the server look-through (#210)', () => {
     const { container } = render(<SectorGeo d={D} />)
     fireEvent.click(screen.getByRole('button', { name: 'Region' }))
 
-    await screen.findByText('North America')
+    await screen.findAllByText('North America')
     expect(querySource).toHaveBeenCalledWith('portfolio_xray', {}, '/api/portfolio/xray')
     expect(regionRows(container)).toEqual([
       'North America60%',
@@ -92,6 +92,33 @@ describe('SectorGeo — Region reads the server look-through (#210)', () => {
     await screen.findByText('Unmapped')
     expect(regionRows(container)).toEqual(['United States20%', 'Unmapped80%'])
     expect(container.querySelector('.mk-flag')).toBeNull()
+  })
+})
+
+describe('SectorGeo — a region under 0.5%', () => {
+  const sliver = xray({
+    by_region: [
+      { name: 'North America', value_base: 9_970, pct: 99.7 },
+      { name: 'Pacific', value_base: 30, pct: 0.3 },
+    ],
+  })
+
+  it('off: still draws, exactly as before the flag', async () => {
+    querySource.mockResolvedValue(sliver)
+    const { container } = render(<SectorGeo d={D} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Region' }))
+    await screen.findByText('Pacific')
+    expect(regionRows(container)).toEqual(['North America100%', 'Pacific0%'])
+  })
+
+  it('on: is left out of the bars (a looked-through fund makes slivers)', async () => {
+    restoreFlags()
+    restoreFlags = overrideFlagsForTests({ fund_lookthrough: true })
+    querySource.mockResolvedValue(sliver)
+    const { container } = render(<SectorGeo d={D} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Region' }))
+    await screen.findAllByText('North America')
+    expect(regionRows(container)).toEqual(['North America100%'])
   })
 })
 

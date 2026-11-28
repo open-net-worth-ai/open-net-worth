@@ -22,6 +22,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from backend.core.untrusted import sanitize_untrusted
 from backend.db.instrument_store import InstrumentStore
 from backend.services.classification import FUND_SUBCLASSES
 from backend.services.sector_names import canonical_sector
@@ -30,6 +31,11 @@ _log = logging.getLogger(__name__)
 
 SOURCE = "yahoo"
 REFRESH_AFTER = timedelta(days=30)
+# A fund whose fetch FAILED keeps its last good part and is re-asked only after this: the
+# frontend fires the enrichment on every load, so without it each page load re-asks Yahoo for
+# every failing fund. In-process, like `prices._SECTOR_MISSES`.
+FAILED_RETRY_AFTER = timedelta(hours=12)
+_FETCH_FAILURES: dict[str, datetime] = {}
 _WEIGHT_SLACK = 0.02
 _MAX_HOLDINGS = 10
 _NAME_MAX = 80
@@ -53,7 +59,10 @@ def _fraction(value: Any) -> float | None:
 
 
 def _clean_text(value: Any, cap: int) -> str:
-    return _CONTROL.sub("", str(value or "")).strip()[:cap]
+    """Yahoo's text reaches prompts (risk findings, the portfolio brief): the shared untrusted-text
+    sanitiser first (NFKC, fence confusables, control characters), then one line, capped."""
+    text = sanitize_untrusted(str(value or ""), max_len=cap * 4)
+    return " ".join(_CONTROL.sub(" ", text).split())[:cap]
 
 
 def _clean_symbol(value: Any) -> str:
@@ -208,6 +217,9 @@ def _targets(now: datetime) -> list[dict]:
         and (i.get("asset_subclass") or "").lower() in FUND_SUBCLASSES
         and i.get("price_source_id")
         and _is_due(i, now)
+        and now
+        - _FETCH_FAILURES.get(i["price_source_id"], datetime.min.replace(tzinfo=timezone.utc))
+        >= FAILED_RETRY_AFTER
     ]
 
 
@@ -229,7 +241,9 @@ def refresh() -> dict | None:
     for inst in targets:
         raw = raws.get(inst["price_source_id"])
         if raw is None:
+            _FETCH_FAILURES[inst["price_source_id"]] = now
             continue
+        _FETCH_FAILURES.pop(inst["price_source_id"], None)
         if apply_lookthrough(inst["id"], parse(raw, now=now)) is not None:
             updated += 1
     _log.info("fund look-through: checked %d, updated %d", len(targets), updated)

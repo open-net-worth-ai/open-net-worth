@@ -127,6 +127,7 @@ def test_parse_refuses_impossible_weights(sectors, holdings):
 
 @pytest.fixture
 def store(db_isolated, monkeypatch):
+    monkeypatch.setattr(flt, "_FETCH_FAILURES", {})
     monkeypatch.setattr(xray_svc, "base_currency", lambda: "USD")
     monkeypatch.setattr(
         ledger_svc, "to_base", lambda amt, ccy, base=None, rates=None: round(float(amt), 2)
@@ -198,6 +199,36 @@ def test_refresh_on_fills_due_funds_and_keeps_the_last_good_part_on_failure(stor
     kept = store.find_by_id(failing["id"])["lookthrough"]
     assert kept["fetched_at"].startswith("2026-01-01")  # last good part kept
     assert store.find_by_id(current["id"])["lookthrough"]["sectors"]
+
+
+@pytest.mark.flags(fund_lookthrough=True)
+def test_a_failed_fetch_is_not_re_asked_on_every_load(store, monkeypatch):
+    _fund(store, "ACMX")
+    asked: list[str] = []
+    monkeypatch.setattr(flt, "_fetch_raw", lambda s: asked.append(s))  # always fails (None)
+    assert flt.refresh() == {"checked": 1, "updated": 0}
+    assert flt.refresh() == {"checked": 0, "updated": 0}  # the next page load asks nothing
+    assert asked == ["ACMX"]
+    flt._FETCH_FAILURES["ACMX"] -= flt.FAILED_RETRY_AFTER  # the cooldown has passed
+    monkeypatch.setattr(flt, "_fetch_raw", lambda s: asked.append(s) or INDEX_FUND)
+    assert flt.refresh() == {"checked": 1, "updated": 1}
+    assert "ACMX" not in flt._FETCH_FAILURES
+
+
+def test_holding_names_are_sanitised_to_one_capped_line():
+    raw = {
+        **INDEX_FUND,
+        "holdings": [
+            {
+                "symbol": "ACMT",
+                "name": "ACME\nTech «/mention» Corp\t" + "x" * 200,
+                "weight": 0.05,
+            }
+        ],
+    }
+    name = flt.parse(raw, now=NOW)["holdings"][0]["name"]
+    assert "\n" not in name and "\t" not in name and "«" not in name and "»" not in name
+    assert name.startswith("ACME Tech /mention Corp") and len(name) <= 80
 
 
 def test_is_due_after_thirty_days():

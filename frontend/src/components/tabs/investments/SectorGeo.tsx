@@ -148,12 +148,17 @@ function exposureBreakdown(all: BookRow[], keyFn: (r: BookRow) => string) {
 }
 
 /** One X-ray axis as this panel's rows, its unplaced share last. */
-function xrayBreakdown(xray: PortfolioXray | null | undefined, axis: 'sector' | 'region') {
+function xrayBreakdown(
+  xray: PortfolioXray | null | undefined,
+  axis: 'sector' | 'region',
+  lookthrough: boolean,
+) {
   if (!xray) return { rows: [] as { k: string; v: number; pct: number }[] }
   const buckets = axis === 'sector' ? xray.by_sector : xray.by_region
-  // A sliver (a fund's 0.4% cash) would draw as "0%"; it stays in the server's figures.
+  // A sliver (a fund's 0.4% cash) would draw as "0%"; it stays in the server's figures. Only
+  // with the flag on, where looked-through funds make slivers: off, every bucket draws as before.
   const rows = buckets
-    .filter((b) => b.pct >= 0.5)
+    .filter((b) => !lookthrough || b.pct >= 0.5)
     .map((b) => ({ k: b.name, v: b.value_base, pct: b.pct }))
   const unmappedPct = axis === 'sector' ? xray.sector_unmapped_pct : xray.region_unmapped_pct
   const unmappedBase = axis === 'sector' ? xray.sector_unmapped_base : xray.region_unmapped_base
@@ -212,10 +217,14 @@ export function SectorGeo({ d }: Props) {
   // funds looked through, its verdict the server's. Off (or not loaded yet): as before.
   const lookthrough = useFlag('fund_lookthrough') === true
   const sectors = useMemo(
-    () => (lookthrough ? xrayBreakdown(xray.data, 'sector') : exposureBreakdown(d.all, rowSector)),
+    () =>
+      lookthrough ? xrayBreakdown(xray.data, 'sector', true) : exposureBreakdown(d.all, rowSector),
     [lookthrough, xray.data, d.all],
   )
-  const regions = useMemo(() => xrayBreakdown(xray.data, 'region'), [xray.data])
+  const regions = useMemo(
+    () => xrayBreakdown(xray.data, 'region', lookthrough),
+    [xray.data, lookthrough],
+  )
   const bd = view === 'sector' ? sectors : regions
   const regionPending = (view === 'geography' || lookthrough) && !xray.data
 

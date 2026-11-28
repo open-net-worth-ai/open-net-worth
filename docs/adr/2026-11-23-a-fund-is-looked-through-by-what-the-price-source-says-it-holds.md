@@ -60,8 +60,8 @@ flag turned on → off → on can never resurrect stale manual data. The instrum
 - A fund whose `category` starts with "Trading" (leveraged/inverse) or whose asset classes
   include a negative share is NOT looked through: `skipped` says why. Any fetched weight < 0 or
   > 1, or a sum > 1.02, refuses the part with a reason rather than storing it.
-- `holdings` names and symbols are cleaned (control characters stripped, length capped): they
-  reach prompts. Yahoo gives no ISIN, so none is stored. No `as_of`: Yahoo does not say.
+- `holdings` names and symbols are cleaned through `core.untrusted.sanitize_untrusted` (NFKC,
+  fence confusables, control characters), then kept to one capped line: they reach prompts. Yahoo gives no ISIN, so none is stored. No `as_of`: Yahoo does not say.
 - Regions get no fetched part — no free source exists. Region stays manual-or-classified.
 
 ### 2. Precedence, per axis
@@ -87,7 +87,7 @@ write and fires no `/api/events`.
 
 The enrichment the frontend already POSTs on load (`/api/instruments/enrich-sectors`) also
 refreshes fund look-through, flag on only: yahoo-priced fund wrappers whose part is missing or
-older than 30 days. A failed fetch keeps the last good part. Separately (no flag: a plain bug), a
+older than 30 days. A failed fetch keeps the last good part, and that fund is re-asked only after 12 hours (in-process, like the sector misses below), not on every page load. Separately (no flag: a plain bug), a
 ticker with no `info["sector"]` is remembered for the process so a fund is not re-asked on every
 page load.
 
@@ -99,7 +99,9 @@ page load.
 weight and are unchanged. Each entry carries `direct`, `via_funds` and the funds'
 `instrument_ids`; a name held only through funds never says "trim this position". Identity: a
 holding lands on the held instrument's book symbol when its normalised symbol matches (ACME.B ≡
-ACME-B) on the same listing; a holding that is itself a fund is dropped (a fund of funds); two share classes
+ACME-B) on the same listing; a holding that is itself a fund is dropped (a fund of funds: a held fund's symbol, or a name
+with a fund-only word such as ETF, Fund or UCITS, never "Index" or "Portfolio", which companies use);
+a name held only through funds is keyed by the same normalised symbol; two share classes
 stay two names. One disclosure covers the book: "funds counted from their top 10 holdings". This
 phase ships only with a parity test across every caller.
 
