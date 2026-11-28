@@ -34,6 +34,7 @@ const site = process.env.SITE_URL || 'https://docs.opennetworth.ai';
 // (wordmark, theme switch, social links). Same content, same components, same custom.css.
 const EMBED = process.env.EMBED_IN_APP === '1';
 const base = process.env.SITE_BASE || (EMBED ? '/docs/' : '/');
+const ogImage = new URL(`${base.replace(/\/$/, '')}/og.png`, site).href;
 
 // Google Analytics 4 is for the PUBLIC site only. The embed ships inside the app, which promises
 // "no analytics, no usage tracking" (docs/product/operations/security-and-privacy.md), so it never
@@ -105,6 +106,19 @@ export default defineConfig({
         { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.googleapis.com' } },
         { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: true } },
         { tag: 'link', attrs: { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap' } },
+        // Link previews: Starlight sets twitter:card to summary_large_image but ships no image,
+        // so a shared docs link showed an empty card. One site-wide image (public/og.png,
+        // 1200x630), addressed on the origin this build is for. Not in the embed: the in-app
+        // copy is never shared as a link.
+        ...(EMBED
+          ? []
+          : [
+              { tag: 'meta', attrs: { property: 'og:image', content: ogImage } },
+              { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+              { tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+              { tag: 'meta', attrs: { property: 'og:image:alt', content: 'Open Net Worth documentation' } },
+              { tag: 'meta', attrs: { name: 'twitter:image', content: ogImage } },
+            ]),
       ],
       components: {
         PageTitle: './src/components/PageTitle.astro',
