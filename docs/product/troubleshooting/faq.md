@@ -76,7 +76,7 @@ See [I lost my password](lost-password.md).
 ## I have a question this didn't answer
 
 Ask Lucius — he can read this whole help center. If something's broken, use
-[Report a problem](reporting-a-problem.md).
+[Send feedback](reporting-a-problem.md).
 
 ## Related
 

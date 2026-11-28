@@ -28,7 +28,7 @@ particularly heavy report. Here's how to tell which, and what to do.
    holds up a page.
 3. **Still slow? Note which screen.** "The Commitments tab takes 4 seconds" is something that can
    be fixed; "the app is slow" usually isn't. Send it with
-   [Report a problem](../troubleshooting/reporting-a-problem.md) and tick the box to include
+   [Send feedback](../troubleshooting/reporting-a-problem.md) and tick the box to include
    recent log lines — they carry the timings described below.
 
 ### Seeing the timings yourself

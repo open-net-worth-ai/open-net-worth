@@ -33,8 +33,8 @@ logs; the book's log is on the server.
   (up to 500 lines, filtered by level or a search word) with secrets masked. This works in chat,
   not in scheduled Automations.
 - **Open the file** in any text editor, or follow it live: `tail -f ~/.open-net-worth/logs/app.log`.
-- **Send it with a problem report:** tick **Include recent logs** in
-  [Report a problem](../troubleshooting/reporting-a-problem.md) to attach the last 200 lines,
+- **Send it with your feedback:** tick **Include recent logs** in
+  [Send feedback](../troubleshooting/reporting-a-problem.md) to attach the last 200 lines,
   masked.
 
 ## What's in it
