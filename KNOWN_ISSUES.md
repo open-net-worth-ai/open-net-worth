@@ -125,6 +125,13 @@ accumulates whatever literals earlier queries contained.
 **Owner decision 2026-08-28: known and accepted, left as-is.** Recorded so it stays a
 deliberate choice rather than becoming an oversight.
 
+**Narrowed 2026-11-13 (issue #91):** `_is_loopback` now answers False for any request carrying
+`Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host` or `X-Real-IP`, so a proxy that sends one
+(Caddy and `tailscale serve` by default, nginx with the usual `proxy_set_header` lines) no longer
+makes its audience the operator. Reading the header's presence is safe where reading its value
+is not: a forged one can only remove trust. What remains below is a same-host proxy that sends
+none of them (nginx's bare `proxy_pass`).
+
 `require_auth` lets a request through with no credentials when the TCP peer is loopback
 (`backend/api/_deps.py`), and `AUTH_TRUST_LOOPBACK` defaults `True`
 (`backend/core/config.py`). The intent is stated in the config comment — *"so the local

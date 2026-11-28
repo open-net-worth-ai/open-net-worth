@@ -367,8 +367,10 @@ self-hosted password manager, not a public web app.
 - **A password only gates non-localhost requests.** It is not, by itself, what stands between
   your data and the network.
 - **Behind a reverse proxy, loopback trust stops working as intended.** A same-host proxy
-  (nginx, Caddy, a tunnel) makes every remote request arrive from `127.0.0.1`, so it is trusted.
-  Set `AUTH_TRUST_LOOPBACK=false` before putting this behind one.
+  (nginx, Caddy, a tunnel) makes every remote request arrive from `127.0.0.1`. A request
+  carrying a forwarding header (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`,
+  `X-Forwarded-Host`) is never trusted, but a proxy that sends none of them still is — so set
+  `AUTH_TRUST_LOOPBACK=false` before putting this behind one.
 - **Before exposing it anywhere** — a LAN, a tunnel, a public domain — set a strong password
   (Settings → Security), turn off loopback trust, and put it behind HTTPS. The app does not
   terminate TLS itself.
