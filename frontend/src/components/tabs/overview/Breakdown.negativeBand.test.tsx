@@ -8,20 +8,20 @@
 // bar. The fix clamps a segment's rendered width to zero instead of letting
 // a negative percent leak into the DOM.
 
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BreakdownBody } from './Breakdown'
 import type { BreakdownRow } from './Breakdown'
 
 // OvChart constructs a real Chart.js chart against a canvas jsdom can't
 // rasterize (see charts.test.tsx) — mock the constructor and capture the
-// config it was built with so the pie/bar tooltip test below can invoke the
-// tooltip label callback directly, the same way charts.test.tsx does.
+// config it was built with so the tests can invoke the tooltip callbacks.
 const configs = vi.hoisted(() => [] as { options?: Record<string, unknown> }[])
 
 vi.mock('chart.js', () => {
   class FakeChart {
     static register = vi.fn()
+    static instances = {}
     update = vi.fn()
     resize = vi.fn()
     destroy = vi.fn()
@@ -90,7 +90,7 @@ describe('Breakdown chart tooltips', () => {
   // 2026-07-31-overview-aggregates-are-server-computed). Give a row a `pct`
   // that deliberately disagrees with the local division and assert the
   // tooltip prints the server's figure.
-  const rows: BreakdownRow[] = [
+  const rows: [BreakdownRow, BreakdownRow] = [
     { key: 'a', label: 'A', value: 50, color: '#111', pct: 90 },
     { key: 'b', label: 'B', value: 50, color: '#222', pct: 10 },
   ]
@@ -111,18 +111,45 @@ describe('Breakdown chart tooltips', () => {
     expect(label!({ dataIndex: 0 })).not.toContain('50.00%')
   })
 
-  it('donut tooltip prints the server pct, not value/total*100', () => {
-    render(<BreakdownBody rows={rows} total={100} viz="pie" />)
+  it('portals the full donut tooltip above the chart and dismisses it on mouseout', async () => {
+    const label = 'A merchant with a name wider than the donut chart'
+    const { container } = render(
+      <BreakdownBody rows={[rows[0], { ...rows[1], label }]} total={100} viz="pie" />,
+    )
+    const plugins = configs.at(-1)!.options?.plugins as {
+      tooltip: {
+        enabled: boolean
+        external: (context: {
+          chart: { canvas: HTMLCanvasElement }
+          tooltip: {
+            opacity: number
+            caretX: number
+            caretY: number
+            dataPoints: { dataIndex: number }[]
+          }
+        }) => void
+      }
+    }
+    const { tooltip } = plugins
+    expect(tooltip.enabled).toBe(false)
+    const chart = { canvas: container.querySelector('canvas')! }
+    const point = { caretX: 100, caretY: 50, dataPoints: [{ dataIndex: 1 }] }
+    act(() => tooltip.external({ chart, tooltip: { ...point, opacity: 1 } }))
 
-    const config = configs[configs.length - 1]
-    expect(config).toBeTruthy()
-    const plugins = config!.options?.plugins as
-      | { tooltip?: { callbacks?: { label?: (ctx: { dataIndex: number }) => string } } }
-      | undefined
-    const label = plugins?.tooltip?.callbacks?.label
-    expect(label).toBeTruthy()
+    const popup = screen.getByRole('tooltip')
+    expect(popup.parentElement).toBe(document.body)
+    expect(popup.textContent).toContain(label)
+    expect(popup.textContent).toContain('10.00%')
+    expect(popup.textContent).not.toContain('50.00%')
 
-    expect(label!({ dataIndex: 1 })).toContain('10.00%')
-    expect(label!({ dataIndex: 1 })).not.toContain('50.00%')
+    try {
+      await act(async () => document.body.classList.add('hide-amounts'))
+      expect(popup.textContent).toBe(label + ': *** (***)')
+    } finally {
+      await act(async () => document.body.classList.remove('hide-amounts'))
+    }
+
+    act(() => tooltip.external({ chart, tooltip: { ...point, opacity: 0 } }))
+    expect(screen.queryByRole('tooltip')).toBeNull()
   })
 })
