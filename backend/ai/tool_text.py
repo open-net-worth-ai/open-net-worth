@@ -43,6 +43,18 @@ _RESIDUE_TAG_RE = re.compile(
 )
 
 
+# A whole block in the harness's own voice that the MODEL wrote — markup it has seen around
+# tool calls and imitates as text. Live (claude_cli:haiku, 2026-11-22/24): a reply that was
+# `<parse_error>\nInvalid JSON in tool call: …</parse_error>` (an error no layer of this app
+# emits) and one that was `<reasoning_effort>8</reasoning_effort>` twice. Shown as the reply
+# and copied into the run's summary, the invented error read as the app failing. Only a CLOSED
+# pair of these exact names, bounded in length, so the cut is that one block and nothing else.
+_IMITATED_HARNESS_BLOCK_RE = re.compile(
+    r"<\s*(parse_error|reasoning_effort)\s*>[\s\S]{0,4000}?<\s*/\s*\1\s*>",
+    re.IGNORECASE,
+)
+
+
 # A message the HARNESS wrote, not the owner. It rides `role: "user"` because that is the
 # only role every transport has — Anthropic grew a real `system` message role (Opus 5 / 4.8 /
 # Fable 5 / Mythos 5, not Sonnet 5), but the CLI transports flatten to a text transcript and
@@ -280,6 +292,9 @@ def strip_tool_syntax(text: str) -> str:
     if not text:
         return text
     text = _drop_unclosed_edge_fence(text).lstrip("\ufffd")
+    imitated = bool(_IMITATED_HARNESS_BLOCK_RE.search(text))
+    if imitated:
+        text = _IMITATED_HARNESS_BLOCK_RE.sub("", text)
     spans = [(m.start(), m.end()) for m in _RESIDUE_TAG_RE.finditer(text)]
     spans.extend(_embedded_call_spans(text))
     if spans:
@@ -294,7 +309,8 @@ def strip_tool_syntax(text: str) -> str:
         tail = _FENCE_AFTER_RE.sub("", text[end:])
         text = head + " " + tail
     elif not (
-        _ROLE_MARKER_RE.search(text)
+        imitated
+        or _ROLE_MARKER_RE.search(text)
         or _FORMAT_NARRATION_RE.search(text)
         or _RESIDUE_LINE_RE.search(text)
     ):

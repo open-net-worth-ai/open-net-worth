@@ -77,6 +77,15 @@ Book it now. Nobody is watching this turn, so do not ask clarifying questions:
   time or card number.
 - A one-time code, a promotion, a statement or balance notice, or anything that
   is not money moving: write nothing and say so.
+- Book only money that HAS moved (spent, charged, paid, received, transferred).
+  A message about a payment that has not happened is not money moving: write
+  nothing and say so. That covers any wording, from any bank or app, that asks the
+  owner to act before the payment can go through (approve, confirm, authenticate,
+  verify, "is this you?", tap or open to proceed) and any payment it says was
+  declined, failed, cancelled or blocked. When the payment does complete, the app
+  sends a separate alert, and that alert is the one to book. A card charge the
+  bank says is authorised or pending HAS moved: book it — many banks send no
+  second alert when it settles.
 - If you genuinely cannot tell what moved, write nothing and say why.
 
 Then reply with ONE short line stating what you booked (amount, payee, account,

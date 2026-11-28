@@ -266,8 +266,11 @@ so Lucius can always say why a transaction looks the way it does.
 Rules apply when a transaction is created, from any source (typed, imported, synced, logged by
 Lucius). Editing a transaction never re-runs them. To use a Rule on transactions you already have,
 preview what it matches and **Apply** (an **Undo** appears right after), or select transactions in
-the Ledger and **Run rules**. Both are one change you can undo, and they never touch a Starting
-Balance or re-split a split.
+the Ledger and **Run rules**. The preview shows the newest 50 matches; when there are more,
+**Apply to all N** applies the Rule to every match in your book, leaving out any row you unticked
+(up to 5,000 at a time; narrow the conditions for more). If your book changed since the preview,
+it asks you to check the preview again instead of applying. All of these are one change you can
+undo, and they never touch a Starting Balance or re-split a split.
 
 Under the list, **Start from a template** has the rules most books need: clean up a payee, a
 subscription, your salary, rent or a fixed bill, split a shared purchase, coffee and snacks, bank

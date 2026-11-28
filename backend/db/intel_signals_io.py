@@ -19,7 +19,7 @@ transactions/splits pair, both load-bearing:
 2. **Entries already carry their own business-identity id.** A ``transaction_splits``/
    ``transaction_external_refs`` row has no id of its own in the source payload, so
    ``money_io._child_id`` derives one deterministically. A timeline entry already has a
-   stable ``uuid4().hex`` id (minted by the writer, e.g. ``analyst.py``, at creation —
+   stable ``new_id("tle")`` id (minted by the writer, e.g. ``analyst.py``, at creation —
    referenced across turns by ``duplicate_of_id``/``contradicts``/``supersedes``), so this
    module reuses it verbatim and mints one only when genuinely absent (mirroring the split
    migration's own ``_entry_row_values`` fallback, ``202608301500_intel_stories_split.py``).
@@ -45,10 +45,9 @@ violation this module introduces.
 
 from __future__ import annotations
 
-from uuid import uuid4
-
 from sqlalchemy import Connection, insert, select
 
+from backend.core.ids import new_id
 from backend.core.io import fire_db_write_hook
 from backend.db.tables import intel_stories, signal_timeline_entries
 
@@ -102,7 +101,7 @@ def _entry_row(signal_id: str, entry: dict) -> dict:
     """The ``signal_timeline_entries`` row for one ``timeline[]`` element. ``seq`` is
     DB-assigned — never supplied here (see this module's own docstring for why)."""
     entry = dict(entry)
-    entry_id = entry.get("id") or uuid4().hex
+    entry_id = entry.get("id") or new_id("tle")
     entry["id"] = entry_id
     row: dict = {
         "id": entry_id,

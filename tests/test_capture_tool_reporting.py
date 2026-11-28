@@ -276,3 +276,22 @@ def test_a_captured_trade_books_its_cash_through_the_trade():
     assert "acquire_lots with funding_account_id" in _PROMPT
     assert "dispose_lots with proceeds_account_id" in _PROMPT
     assert "never add_transactions for it" in _PROMPT
+
+
+def test_a_payment_approval_prompt_is_not_booked():
+    """Found 2026-11-24: a bank's "You're making a payment … tap to proceed" approval prompt
+    was booked, then the "txn completed" alert 21 s later booked the same charge again — both
+    from one app, so the same-emitter veto (rightly) never compared them. The prompt is not
+    money moving; only the completion alert is."""
+    from backend.ai.capture import _PROMPT
+
+    prompt = " ".join(_PROMPT.split())
+    assert "Book only money that HAS moved" in prompt
+    assert "any wording, from any bank or app" in prompt
+    for word in ("approve", "confirm", "authenticate", "verify", "tap or open to proceed"):
+        assert word in prompt
+    assert "declined, failed, cancelled or blocked" in prompt
+    assert "that alert is the one to book" in prompt
+    # A bank that alerts only at authorisation sends nothing at settlement, so skipping a
+    # pending charge would lose the purchase for good.
+    assert "authorised or pending HAS moved: book it" in prompt

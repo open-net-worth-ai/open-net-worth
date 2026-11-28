@@ -24,7 +24,7 @@ vi.mock('../../hooks/useChatSuggestionsEnabled', async (orig) => ({
   useChatThinkingGrouped: () => ({ grouped: grouped.value, loaded: true }),
 }))
 
-function bubble(blocks: MessageBlock[], thinking?: string, streaming = false) {
+function bubbleEl(blocks: MessageBlock[], thinking?: string, streaming = false) {
   const message: Message = {
     id: 'sess-1',
     role: 'assistant',
@@ -33,7 +33,10 @@ function bubble(blocks: MessageBlock[], thinking?: string, streaming = false) {
     ...(streaming && { streaming: true }),
     ...(thinking !== undefined && { thinking }),
   }
-  return render(<MessageBubble message={message} onSendMessage={noop} />)
+  return <MessageBubble message={message} onSendMessage={noop} />
+}
+function bubble(blocks: MessageBlock[], thinking?: string, streaming = false) {
+  return render(bubbleEl(blocks, thinking, streaming))
 }
 
 const toolBlock = (id: string): MessageBlock => ({
@@ -123,34 +126,43 @@ describe('thinking renders in position', () => {
   })
 })
 
-describe('a thought still being written stays open', () => {
+describe('a thought is one line until the reader opens it', () => {
   const two = (): MessageBlock[] => [
     { type: 'thinking', content: 'Finished thought.' },
     toolBlock('t1'),
     { type: 'thinking', content: 'Still being written, and quite long.' },
   ]
 
-  it('opens the LAST thought while the turn streams, and only that one', () => {
-    // Reasoning arriving two clamped lines at a time is unreadable and reads as broken —
-    // the text visibly changes under a preview that never grows (owner, 2026-08-23).
+  it('never opens itself while the turn streams: the live one is a single moving line', () => {
+    // A thought that opened while written and folded when done shoved the reply around
+    // mid-turn (owner report, 2026-11-24). One line never changes height on its own.
     const { container } = bubble(two(), undefined, true)
     const rows = container.querySelectorAll('.msg-toolact__row--think')
     expect(rows).toHaveLength(2)
-    expect(rows[0]?.className).not.toContain('msg-toolact__row--open')
-    expect(rows[1]?.className).toContain('msg-toolact__row--open')
+    expect(container.querySelectorAll('.msg-toolact__row--open')).toHaveLength(0)
+    const live = rows[1]?.querySelector('.msg-toolact__think-preview--live')
+    expect(live?.textContent).toBe('Still being written, and quite long.')
+    expect(rows[0]?.querySelector('.msg-toolact__think-preview--live')).toBeNull()
   })
 
-  it('folds once the turn is done — finished reasoning is history', () => {
+  it('stays folded once the turn is done', () => {
     const { container } = bubble(two(), undefined, false)
     const open = container.querySelectorAll('.msg-toolact__row--think.msg-toolact__row--open')
     expect(open).toHaveLength(0)
   })
 
-  it('a click wins over both, including folding it mid-stream', () => {
-    const { container } = bubble(two(), undefined, true)
+  it('a tap opens it mid-stream, and it stays open when the turn ends', () => {
+    const blocks = two()
+    const { container, rerender } = bubble(blocks, undefined, true)
     const heads = container.querySelectorAll('.msg-toolact__row--think .msg-toolact__head')
     fireEvent.click(heads[1] as HTMLElement)
-    const rows = container.querySelectorAll('.msg-toolact__row--think')
-    expect(rows[1]?.className).not.toContain('msg-toolact__row--open')
+    expect(container.querySelectorAll('.msg-toolact__row--think')[1]?.className).toContain(
+      'msg-toolact__row--open',
+    )
+    rerender(bubbleEl(blocks, undefined, false))
+    expect(container.querySelector('.msg-toolact__rail')?.hasAttribute('hidden')).toBe(false)
+    expect(container.querySelectorAll('.msg-toolact__row--think')[1]?.className).toContain(
+      'msg-toolact__row--open',
+    )
   })
 })

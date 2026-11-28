@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from backend.core.ids import new_id
 from backend.core.llm_seam import (
     BatchOutputSchema,
     BatchPending,
@@ -490,7 +491,7 @@ def _existing_stories_block(stories: list[dict]) -> str:
 
 def _timeline_event(new_event_data: dict) -> dict:
     return {
-        "id": str(uuid.uuid4()),
+        "id": new_id("tle"),
         "date": new_event_data.get("date", user_today().isoformat()),
         "title": new_event_data.get("title", ""),
         "summary": new_event_data.get("summary", ""),
@@ -672,7 +673,7 @@ def _persist_story(
         logger.info("intel_agent: updated story — %s [%s]", s["label"], s["status"])
     else:
         new_story: dict = {
-            "id": str(uuid.uuid4()),
+            "id": new_id("story"),
             "type": story_type,
             "label": s["label"],
             "ticker": s.get("ticker", ""),

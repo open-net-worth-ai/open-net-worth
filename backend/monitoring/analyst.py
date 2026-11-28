@@ -181,7 +181,6 @@ import functools
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 from pydantic import BaseModel, Field, TypeAdapter, field_validator, model_validator
 
@@ -189,6 +188,7 @@ import backend.services.alert_feed as alert_feed
 import backend.services.claims as _claims_svc
 import backend.services.evidence as _evidence_svc
 from backend.ai.structured import complete_model
+from backend.core.ids import new_id
 from backend.core.urls import registrable_domain
 from backend.db.intel_stories_store import IntelStoriesStore
 from backend.db.pending_analysis_store import PendingAnalysisStore
@@ -1482,7 +1482,7 @@ def _update_signal(
     if materiality not in _SILENT_MATERIALITY:
         entry_sources = source_dicts(evidence)
         entry = {
-            "id": uuid4().hex,
+            "id": new_id("tle"),
             "date": now,
             "title": entry_title(parsed, _TIMELINE_TITLES.get(materiality, "Update")),
             "summary": why,
@@ -2579,7 +2579,7 @@ def _create_news_spike_signal(
         "action_items": actions,
         "timeline": [
             {
-                "id": uuid4().hex,
+                "id": new_id("tle"),
                 "date": now,
                 "title": entry_title(parsed, _TIMELINE_TITLES["new"]),
                 "summary": why,

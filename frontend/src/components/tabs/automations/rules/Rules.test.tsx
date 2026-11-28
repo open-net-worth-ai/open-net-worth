@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   reorderRules: vi.fn(),
   previewRule: vi.fn(),
   applyRule: vi.fn(),
+  applyRuleToAll: vi.fn(),
   createRule: vi.fn(),
   updateRule: vi.fn(),
   undoRuleApply: vi.fn(),
@@ -255,6 +256,7 @@ describe('Rule editor', () => {
   it('builds the contract payload (match any, a split) and shows the preview', async () => {
     api.previewRule.mockResolvedValue({
       total: 2,
+      changeable: 1,
       matches: [
         {
           transaction_id: 't1',
@@ -337,6 +339,8 @@ describe('Rule editor', () => {
     await waitFor(() => expect(api.undoRuleApply).toHaveBeenCalledWith('cp_1'))
     expect(await screen.findByText(/Undone/)).toBeTruthy()
 
+    expect(screen.queryByRole('button', { name: /Apply to all/ })).toBeNull()
+
     fireEvent.click(screen.getByRole('button', { name: 'Create rule' }))
     await waitFor(() => expect(api.createRule).toHaveBeenCalledTimes(1))
     expect(api.createRule).toHaveBeenCalledWith({
@@ -381,6 +385,58 @@ describe('Automations Rules tab', () => {
       showing: 2,
       total: 2,
     })
+  })
+
+  it('applies to every match past the shown page, leaving out the unticked rows', async () => {
+    const match = (id: string) => ({
+      transaction_id: id,
+      date: '2026-11-02',
+      description: 'ACME',
+      memo: '',
+      payee_id: 'pay_acme',
+      payee_name: 'Acme',
+      account_id: 'acc_card',
+      account_name: 'Card',
+      amount: 10,
+      currency: 'USD',
+      kind: 'expense',
+      category: null,
+      tags: [],
+      splits: [],
+      after: {
+        category: 'cat_a',
+        tags: [],
+        description: 'ACME',
+        memo: '',
+        payee_id: 'pay_acme',
+        splits: [],
+      },
+      skipped_reason: null,
+    })
+    api.previewRule.mockResolvedValue({
+      total: 120,
+      changeable: 120,
+      matches: [match('t1'), match('t2')],
+    })
+    api.applyRuleToAll.mockResolvedValue({
+      applied: 119,
+      unchanged: 0,
+      skipped: [],
+      checkpoint_id: 'cp_9',
+    })
+    render(<Harness initial={[]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /new rule/i })[0]!)
+    await addPayeeAndCategory()
+    pick('automation-condition-0-value', 'Acme')
+    await waitFor(() => pick('rule-category', 'Groceries'))
+
+    expect(await screen.findByText('Matches 120 transactions', {}, { timeout: 3000 })).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Apply to Acme' })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to all 119' }))
+    await waitFor(() =>
+      expect(api.applyRuleToAll).toHaveBeenCalledWith(expect.anything(), ['t1'], 120),
+    )
+    expect(await screen.findByText(/Applied to 119 transactions/)).toBeTruthy()
   })
 
   it('shows the tab only with the flag on', async () => {

@@ -250,7 +250,8 @@ class _ScriptedProvider:
     ``on_round`` runs before each answer, so a test can model the model COMPLYING with a
     correction — the compliance that matters is a tool call, and a scripted text provider
     has no other way to express one. A text given as ``("thinking", …)`` is streamed as a
-    thinking delta instead — a round that reasons and then stops without saying anything.
+    thinking delta instead — a round that reasons and then stops without saying anything;
+    ``("tool", name, input)`` makes a real tool call.
     """
 
     def __init__(self, *texts, on_round=None):
@@ -263,6 +264,10 @@ class _ScriptedProvider:
             self.on_round(self.calls)
         text = self.texts[min(self.calls, len(self.texts) - 1)]
         self.calls += 1
+        if isinstance(text, tuple) and text[0] == "tool":
+            yield {"type": "tool_use", "id": f"tu_{self.calls}", "name": text[1], "input": text[2]}
+            yield {"type": "done", "stop_reason": "tool_use"}
+            return
         if isinstance(text, tuple):
             yield {"type": "thinking_delta", "text": text[1]}
         elif text:
@@ -410,3 +415,59 @@ async def test_a_model_that_never_complies_still_ends(monkeypatch):
 
     assert provider.calls == MAX_COMPLETION_NUDGES + 1
     assert len([e for e in events if e.get("type") == "turn_done"]) == 1
+
+
+async def test_a_successful_tool_call_restores_the_nudge_budget(monkeypatch):
+    """run_56316dc07068 (claude_cli:haiku, Daily briefing, 2026-11-24): a blank round, a
+    recovery that made real calls, then blank rounds at the send step. The budget was per
+    TURN, so the recovered stall had already spent half of it and the briefing never went
+    out. The bound is on stalls IN A ROW: here the model stalls the full MAX after its
+    recovery and still gets to finish."""
+    stall_streak = [""] * MAX_COMPLETION_NUDGES
+
+    def _comply(round_index: int) -> None:
+        if round_index == 2 + MAX_COMPLETION_NUDGES:
+            run_plan.update_task("1", "completed")
+
+    provider = _ScriptedProvider(
+        "",
+        ("tool", "calculate", {"expression": "1+1"}),
+        *stall_streak,
+        "Sent.",
+        on_round=_comply,
+    )
+    monkeypatch.setattr(assistant, "get_provider", lambda *a, **k: provider)
+
+    sid = "test-nudge-reset"
+    _cleanup(sid)
+    token = run_plan.begin()
+    try:
+        run_plan.add_tasks([{"subject": "Send the briefing"}])
+        events = await _drain(assistant.run(sid, [{"role": "user", "content": "go"}], "s"))
+        tasks = run_plan.get_tasks()
+    finally:
+        run_plan.reset(token)
+        _cleanup(sid)
+
+    assert provider.calls == 3 + MAX_COMPLETION_NUDGES
+    assert tasks[0]["status"] == "completed"
+    assert len([e for e in events if e.get("type") == "turn_done"]) == 1
+
+
+async def test_stalls_in_a_row_are_still_bounded_after_a_recovery(monkeypatch):
+    """The reset is earned by a successful call, not by time: after one, a model that then
+    never complies stops after MAX_COMPLETION_NUDGES consecutive corrections."""
+    provider = _ScriptedProvider(("tool", "calculate", {"expression": "1+1"}), "")
+    monkeypatch.setattr(assistant, "get_provider", lambda *a, **k: provider)
+
+    sid = "test-nudge-reset-bound"
+    _cleanup(sid)
+    token = run_plan.begin()
+    try:
+        run_plan.add_tasks([{"subject": "Send the briefing"}])
+        await _drain(assistant.run(sid, [{"role": "user", "content": "go"}], "s"))
+    finally:
+        run_plan.reset(token)
+        _cleanup(sid)
+
+    assert provider.calls == 1 + MAX_COMPLETION_NUDGES + 1

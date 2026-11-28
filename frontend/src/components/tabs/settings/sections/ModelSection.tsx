@@ -42,6 +42,7 @@ import type { SectionProps } from '../ds'
 import { TurnTimeLimitPanel } from './TurnTimeLimitPanel'
 import { OnwAiCredit } from './OnwAiCredit'
 import { ONW_AI_KEY } from './onwAiStatus'
+import { ZeroRetentionBadge } from '../../../shared/ZeroRetentionBadge'
 
 // ── shapes ───────────────────────────────────────────────────────────────────
 interface CatalogEntry {
@@ -312,7 +313,10 @@ function ProviderRow({
     <div className="rd-prov">
       <div className="rd-prov-head">
         <div className="rd-prov-main">
-          <div className="rd-prov-name">{cfg.label || entry.label}</div>
+          <div className={'rd-prov-name' + (entry.key === ONW_AI_KEY ? ' rd-prov-name--zr' : '')}>
+            {cfg.label || entry.label}
+            {entry.key === ONW_AI_KEY && <ZeroRetentionBadge />}
+          </div>
           <div className="rd-prov-meta">
             {/* display_base_url covers the pinned-transport case: Anthropic stores base_url:""
                 because its transport owns the host, so the row said nothing about where it

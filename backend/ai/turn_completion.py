@@ -30,7 +30,7 @@ Deliberately NOT a retry of the model's own reasoning. It states the mechanical 
 model got wrong — the call did not run, the list is not finished — and lets it proceed.
 
 Bounded, because the failing models are the ones least likely to comply: after
-``MAX_COMPLETION_NUDGES`` corrections the turn ends and the run is reported failed exactly
+``MAX_COMPLETION_NUDGES`` consecutive corrections (no successful tool call between them) the turn ends and the run is reported failed exactly
 as it is today. An Automation round here carries ~400k tokens of context, so an unbounded
 "are you sure?" loop would be a real bill.
 """
@@ -39,9 +39,13 @@ from __future__ import annotations
 
 from backend.ai.tool_text import looks_like_unexecuted_tool_call, strip_tool_syntax
 
-# Two: enough for a model that mis-formats a call to see the correction and fix it, few
-# enough that a model which simply will not comply cannot bill for a third full context.
-MAX_COMPLETION_NUDGES = 2
+# Three IN A ROW — the count resets whenever a tool call succeeds (assistant.py), so the
+# bound is on a model that keeps stalling, not on a long run that stalled twice and recovered
+# in between. Live 2026-11-24 (claude_cli:haiku, Daily briefing): the first nudge was spent
+# on a stall it recovered from, the second on a stall at the send step, and the run failed
+# with the briefing unsent. Still bounded: a model that simply will not comply costs at most
+# three extra full contexts.
+MAX_COMPLETION_NUDGES = 3
 
 _UNEXECUTED_CALL_NUDGE = (
     "Your last message contained a tool call written as text. It DID NOT RUN — no tool was "

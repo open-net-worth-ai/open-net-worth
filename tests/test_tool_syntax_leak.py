@@ -297,3 +297,34 @@ def test_an_unclosed_fence_the_reply_opens_on_is_dropped():
 )
 def test_real_code_fences_are_left_alone(text):
     assert strip_tool_syntax(text) == text
+
+
+# ── a block the model wrote in the harness's voice ───────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "leaked",
+    [
+        # Verbatim from run_56316dc07068 (claude_cli:haiku, 2026-11-24) — the whole reply,
+        # and so the whole run summary the card showed.
+        "<parse_error>\n\n</parse_error>",
+        # run_baa2da20c7fd (2026-11-22): an invented error no layer of this app emits.
+        '<parse_error>\nInvalid JSON in tool call: unterminated string in "input" object.'
+        ' Partial input: {"message": "Good afternoon.\n</parse_error>',
+        "\n<reasoning_effort>8</reasoning_effort>\n\n\n<reasoning_effort>8</reasoning_effort>",
+    ],
+)
+def test_an_imitated_harness_block_is_not_a_reply(leaked):
+
+    assert strip_tool_syntax(leaked) == ""
+    text = RoundText()
+    text.add(leaked)
+    assert text.clean() == ""
+
+
+def test_an_imitated_harness_block_is_cut_alone():
+    """Only the closed pair goes — the prose on either side stays."""
+    assert (
+        strip_tool_syntax("Sent the briefing.\n<parse_error>\n</parse_error>\nAll done.")
+        == "Sent the briefing.\n\nAll done."
+    )

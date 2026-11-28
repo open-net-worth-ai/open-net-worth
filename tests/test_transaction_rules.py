@@ -438,6 +438,54 @@ def test_preview_lists_matches_with_before_and_after(book):
     assert match["after"]["category"] == book["cats"]["Gym"]
 
 
+def _gym_rule_body(book):
+    return {
+        "trigger": {"kind": "event", "event": "txn", "when": {"conditions": [_payee_is(book)]}},
+        "execution": {
+            "kind": "transaction_transform",
+            "set": {"category": "Gym"},
+            "override_existing": True,
+        },
+    }
+
+
+@rules_on
+def test_apply_to_all_matches_reaches_past_the_preview_page_and_honours_exclusions(book):
+    rows = [_txn(book, 20 + i, day=f"2026-10-{i + 1:02d}") for i in range(6)]
+    other = _txn(book, 20, description="SOMETHING ELSE", payee_id=None)
+    body = _gym_rule_body(book)
+    preview = rule_apply.preview_rule_matches(body, 2)
+    assert preview["total"] == 6 and preview["changeable"] == 6 and len(preview["matches"]) == 2
+    excluded = rows[0]["id"]
+
+    result = rule_apply.apply_rule_to_matches(body, [excluded], expected_total=6)
+
+    assert result["applied"] == 5 and result["skipped"] == []
+    gym = book["cats"]["Gym"]
+    assert svc.transactions.find_by_id(excluded)["category"] != gym
+    assert all(svc.transactions.find_by_id(r["id"])["category"] == gym for r in rows[1:])
+    assert svc.transactions.find_by_id(other["id"])["category"] != gym
+    after = rule_apply.preview_rule_matches(body, 2)
+    assert after["total"] == 6 and after["changeable"] == 1  # only the excluded row is left
+
+
+@rules_on
+def test_apply_to_all_matches_refuses_when_the_count_moved_since_the_preview(book):
+    row = _txn(book, 20)
+    with pytest.raises(ConflictError, match="check the preview again"):
+        rule_apply.apply_rule_to_matches(_gym_rule_body(book), [], expected_total=2)
+    assert svc.transactions.find_by_id(row["id"])["category"] == book["cats"]["Food"]
+
+
+@rules_on
+def test_apply_to_all_matches_caps_one_write(book, monkeypatch):
+    _txn(book, 20)
+    _txn(book, 21)
+    monkeypatch.setattr(rule_apply, "MAX_ALL_MATCHES", 1)
+    with pytest.raises(ValidationError, match="narrow its conditions"):
+        rule_apply.apply_rule_to_matches(_gym_rule_body(book))
+
+
 @rules_on
 def test_preview_reads_the_starting_balances_once_not_per_transaction(book, monkeypatch):
     # Reading them per row re-loaded every account for each transaction: 25s on a 3,000-row book.
@@ -560,6 +608,7 @@ def test_routes_are_404_while_the_flag_is_off(client, book):
         client.post("/api/automations/rules/run", json={"transaction_ids": ["a"]}).status_code
         == 404
     )
+    assert client.post("/api/automations/rules/apply-all", json=body).status_code == 404
 
 
 @rules_on
@@ -601,6 +650,22 @@ def test_routes_create_preview_apply_run_and_undo(client, book):
     assert reordered.status_code == 200 and len(reordered.json()["automations"]) == 1
     too_many = client.post("/api/automations/rules/run", json={"transaction_ids": ["x"] * 501})
     assert too_many.status_code == 422
+
+
+@rules_on
+def test_apply_all_route_checkpoints_and_reports_a_moved_count(client, book):
+    row = _txn(book, 20)
+    rule = _gym_rule_body(book)
+    moved = client.post(
+        "/api/automations/rules/apply-all", json={"rule": rule, "expected_total": 3}
+    )
+    assert moved.status_code == 409, moved.text
+    applied = client.post(
+        "/api/automations/rules/apply-all", json={"rule": rule, "expected_total": 1}
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["applied"] == 1 and applied.json()["checkpoint_id"]
+    assert svc.transactions.find_by_id(row["id"])["category"] == book["cats"]["Gym"]
 
 
 # ── category delete / merge follows a Rule's split lines ───────────────────────────────

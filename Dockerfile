@@ -135,6 +135,10 @@ ENV PORT=8080
 # Claude Code keeps its settings in ~/.claude.json, OUTSIDE ~/.claude, so a new container lost them
 # on every update ("Claude configuration file not found"). Keep them inside the saved folder.
 ENV CLAUDE_CONFIG_DIR=/home/onw/.claude
+# glibc gives every thread that allocates its own malloc arena (up to 8 per core) and rarely
+# hands freed memory back, so a threaded Python server only ever grows. Two arenas keep it
+# flat; the GIL already serializes Python's own allocations, so nothing measurable is lost.
+ENV MALLOC_ARENA_MAX=2
 
 EXPOSE 8080
 

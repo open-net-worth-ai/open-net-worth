@@ -8353,6 +8353,12 @@ body.hide-amounts .mask * {
     background: var(--surface2);
     color: var(--muted);
   }
+  .zr-badge {
+    gap: var(--space-1);
+    white-space: nowrap;
+    text-transform: none;
+    letter-spacing: 0;
+  }
 
   /* ── SegmentedControl ── (token-driven mirror of .intel-wl-tabs/.intel-wl-tab) */
   .ui-segmented {
@@ -20514,6 +20520,14 @@ body.hide-amounts .mask * {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+.mp-group--zr {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.mp-group--zr .zr-badge {
+  margin-left: auto;
 }
 .mp-opt {
   display: flex;

@@ -4,6 +4,8 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import { useSheetDragToDismiss } from '../../hooks/useSheetDragToDismiss'
 import { X, ChevronLeft, ChevronRight, ChevronDown, Check } from '../../ui/icons'
 import { providerLabelFor, type ModelOption } from '../../api/models'
+import { ZeroRetentionBadge } from '../shared/ZeroRetentionBadge'
+import { isZeroRetentionProvider, zeroRetentionCaveat } from '../shared/zeroRetention'
 
 // The ONE model chooser. Every surface that lets a human pick a model uses it: the chat
 // side panel, the Lucius dock, Settings → Task models (×13), Settings → Preferred models,
@@ -76,6 +78,7 @@ export function resolveModelSelection(ref: string, models: ModelOption[]): Model
 
 interface ModelGroup {
   label: string
+  providerKey?: string
   models: ModelOption[]
 }
 
@@ -90,7 +93,7 @@ export function groupModels(models: ModelOption[]): ModelGroup[] {
     const label = m.provider_label ?? m.provider_key ?? 'Other'
     let group = byLabel.get(label)
     if (!group) {
-      group = { label, models: [] }
+      group = { label, providerKey: m.provider_key ?? undefined, models: [] }
       byLabel.set(label, group)
       groups.push(group)
     }
@@ -244,6 +247,7 @@ export function ModelPicker(props: ModelPickerProps) {
       ref: string
       model?: ModelOption
       group?: string
+      zeroRetention?: boolean
       text: string
       /** Provider shown ON the row — only where the group header does not already say it. */
       provider?: string
@@ -270,7 +274,12 @@ export function ModelPicker(props: ModelPickerProps) {
         return ref.includes(needle) || (m.provider_label ?? '').toLowerCase().includes(needle)
       })
       if (!hits.length) continue
-      out.push({ ref: `__group__${group.label}`, group: group.label, text: group.label })
+      out.push({
+        ref: `__group__${group.label}`,
+        group: group.label,
+        text: group.label,
+        zeroRetention: isZeroRetentionProvider(group.providerKey),
+      })
       const inPreferred = group.label === 'Preferred'
       for (const m of hits) {
         out.push({
@@ -457,8 +466,9 @@ export function ModelPicker(props: ModelPickerProps) {
         {rows.length === 0 && <div className="mp-empty">No model matches “{q}”.</div>}
         {rows.map((row, i) =>
           row.group ? (
-            <div className="mp-group" key={row.ref}>
+            <div className={'mp-group' + (row.zeroRetention ? ' mp-group--zr' : '')} key={row.ref}>
               {row.group}
+              {row.zeroRetention && <ZeroRetentionBadge />}
             </div>
           ) : (
             <button
@@ -485,6 +495,10 @@ export function ModelPicker(props: ModelPickerProps) {
                   OpenRouter one, billed three different ways. Repeating the provider under a
                   provider header would be pure noise on ~300 rows. */}
               {row.provider && <em className="mp-opt-prov">{row.provider}</em>}
+              {isZeroRetentionProvider(row.model?.provider_key) &&
+                zeroRetentionCaveat(row.model.id) && (
+                  <em className="mp-opt-note">{zeroRetentionCaveat(row.model.id)}</em>
+                )}
               {row.model && annotate?.(row.model) && (
                 <em className="mp-opt-note">{annotate(row.model)}</em>
               )}

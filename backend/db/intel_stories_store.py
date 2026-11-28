@@ -99,7 +99,7 @@ _ENTRY_DEFAULTS: dict[str, Any] = {
 def _entry_insert_values(signal_id: str, entry: dict) -> dict:
     """Column dict for one ``signal_timeline_entries`` row. ``seq`` is DB-assigned
     (autoincrement rowid alias) — never supplied here. ``id`` is the caller-minted
-    ``uuid4().hex`` business identity (analyst.py's existing convention, unchanged);
+    ``new_id("tle")`` business identity;
     this function does not mint one."""
     row: dict = {
         "id": entry.get("id"),
@@ -330,8 +330,7 @@ class IntelStoriesStore:
         self, signal_id: str, entry: dict, *, conn: Connection | None = None
     ) -> dict:
         """Insert one new timeline entry row. ``entry`` must already carry its own
-        ``id`` (``uuid4().hex``, minted by the caller — analyst.py's existing
-        convention, unchanged); this method does not mint one. The row's DB-assigned
+        ``id`` (``new_id("tle")``, minted by the caller); this method does not mint one. The row's DB-assigned
         ``seq`` is not known until after the INSERT, so the checkpoint before-image
         fires AFTER it (still inside the same open transaction — atomicity only
         requires ONE transaction, not a literal statement order; see
@@ -350,7 +349,7 @@ class IntelStoriesStore:
         """Flip ONE entry's ``superseded`` flag (ADR
         2026-08-28-sourced-and-corroborated-intel-signal-updates: a later entry
         CONFIRMED-reversed this one). Scoped to ``signal_id`` — entry ids are globally
-        unique (``uuid4().hex``) but this mirrors ``_find_timeline_entry``'s own
+        unique (``new_id("tle")``) but this mirrors ``_find_timeline_entry``'s own
         one-signal-at-a-time scope (RFC §2.2), never a bare cross-signal id lookup.
         Returns False if no such entry exists under this signal."""
         with self._use_conn(conn) as c:
